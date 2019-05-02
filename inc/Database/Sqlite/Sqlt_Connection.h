@@ -29,6 +29,13 @@ namespace IASLib
 {
     class CSQLiteDatabase;
 
+    typedef int (open_func_type)(const char *, sqlite3 **);
+    typedef void (free_func_type)( void * );
+    typedef int  (busy_func_type)(sqlite3*, int ms);
+    typedef int  (close_func_type)(sqlite3 *);
+    typedef const char *(error_msg_func_type)(sqlite3*);
+    typedef int (exec_func_type)(sqlite3*,const char *,sqlite3_callback,void *,char ** );
+
     class CSQLiteConnection : public CConnection
     {
         protected:
@@ -39,7 +46,7 @@ namespace IASLib
             int                     m_nLastErrorCode;
             CSQLiteDatabase       *m_pDatabase;
             bool                    m_bValid;
-            
+
         public:
                                     CSQLiteConnection( const char *strDBName, const char *strName, CSQLiteDatabase * );
             virtual                ~CSQLiteConnection( void );
@@ -71,13 +78,12 @@ namespace IASLib
 
 		    virtual int				GetDBType( void ) { return DB_SQLITE; }
         private:
-            int  (*m_fnSqlOpen)( const char *, sqlite3 ** );
-            void (*m_fnSqlFree)( void * );
-            int  (*m_fnSqlBusyTime)(sqlite3*, int ms);
-            int  (*m_fnSqlClose)(sqlite3 *);
-            const char *(*m_fnSqlErrMsg)(sqlite3*);
-            int (*m_fnSqlExec)(sqlite3*,const char *,sqlite3_callback,void *,char ** );
-
+            open_func_type         *m_fnSqlOpen;
+            free_func_type         *m_fnSqlFree;
+            busy_func_type         *m_fnSqlBusyTime;
+            close_func_type        *m_fnSqlClose;
+            error_msg_func_type    *m_fnSqlErrMsg;
+            exec_func_type         *m_fnSqlExec;
     };
 } // namespace IASLib
 

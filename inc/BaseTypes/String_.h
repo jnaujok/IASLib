@@ -22,11 +22,15 @@
 #include "StringStub.h"
 
 #ifdef IASLIB_STD_STREAM_SUPPORT__
-#if ( _MSC_VER >= 1300 )
-#include <ostream>
-#include <istream>
+#ifdef IASLIB_WIN32__
+    #if ( _MSC_VER >= 1300 )
+    #include <ostream>
+    #include <istream>
+    #else
+    #include <iostream.h>
+    #endif
 #else
-#include <iostream.h>
+    #include <iostream>
 #endif
 #endif
 
@@ -52,12 +56,12 @@ namespace IASLib
                         CString( const IASLibChar__ *strSource, size_t nLength );
 
                             /// Fixed Buffer String Constructor - Takes a char * as
-                            /// the fixed location of a data buffer. The length of 
+                            /// the fixed location of a data buffer. The length of
                             /// the string, and the overall size of the buffer.
                         CString( IASLibChar__ *strSource, int nLength, int nSize );
 
                             /// Fixed Buffer String Constructor - Takes a char * as
-                            /// the fixed location of a data buffer. The length of 
+                            /// the fixed location of a data buffer. The length of
                             /// the string, and the overall size of the buffer.
                         CString( IASLibChar__ *strSource, size_t nLength, size_t nSize );
 
@@ -171,7 +175,7 @@ namespace IASLib
 
                             // Get a sub-string of the string
             CString     Substring( size_t nStartIndex, int nLength = -1 ) const;
-    
+
                             // Check if a string is all digits
             bool        IsDigits( void );
 
@@ -180,7 +184,7 @@ namespace IASLib
 
                             // Convert a string to lower case
             void        ToLowerCase( void );
-                        
+
                             // Convert a string to/from Hexadecimal (used in Oracle)
             void        ToHex( void );
             void        FromHex( void );
@@ -212,7 +216,7 @@ namespace IASLib
                             // Input a string from a stream derived object.
             friend std::istream &operator >>( std::istream &oInputStream, CString &strTarget );
 #endif
-          
+
             void        Unescape( void );
             void        Escape( void );
             void        Replace( const IASLibChar__ chReplace, const IASLibChar__ chTo );

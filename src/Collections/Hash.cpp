@@ -83,14 +83,78 @@ namespace IASLib
         {
             bRetVal = true;
         }
-        
+
         return bRetVal;
     }
 
     IMPLEMENT_OBJECT( CHash, CObject );
 
+    CHash::CHash( HASH_SIZE eSize )
+    {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Lock();
+#endif
+        switch ( eSize )
+        {
+            case TINY:
+                m_strSize = "TINY";
+                m_nArraySize = 37;
+                m_nHashKey = 67;
+                break;
+
+            case SMALL:
+                m_strSize = "SMALL";
+                m_nArraySize = 107;
+                m_nHashKey = 191;
+                break;
+
+            case NORMAL:
+                m_strSize = "NORMAL";
+                m_nArraySize = 347;
+                m_nHashKey = 421;
+                break;
+
+            case LARGE:
+                m_strSize = "LARGE";
+                m_nArraySize = 1019;
+                m_nHashKey = 1607;
+                break;
+
+            case HUGE:
+                m_strSize = "HUGE";
+                m_nArraySize = 20333;
+                m_nHashKey = 32713;
+                break;
+
+            case GARGANTUAN:
+                m_strSize = "GARGANTUAN";
+                m_nArraySize = 509623;
+                m_nHashKey = 834299;
+                break;
+
+            default:
+                m_strSize = "NORMAL";
+                m_nArraySize = 347;
+                m_nHashKey = 421;
+                break;
+        }
+        m_aHashTable = new CHashBucket *[ m_nArraySize ];
+        for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
+            m_aHashTable[ nCount ] = NULL;
+
+        m_nElements = 0;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Unlock();
+#endif
+    }
+
     CHash::CHash( const char *strSize )
     {
+        if ( strSize == NULL )
+        {
+            strSize = "NORMAL";
+        }
+
 #ifdef IASLIB_MULTI_THREADED__
         m_mutexProtect.Lock();
 #endif
@@ -129,13 +193,21 @@ namespace IASLib
                     }
                     else
                     {
-                        m_nArraySize = 107;
-                        m_nHashKey = 191;
+                        if ( m_strSize == "SMALL" )
+                        {
+                            m_nArraySize = 107;
+                            m_nHashKey = 191;
+                        }
+                        else // TINY
+                        {
+                            m_nArraySize = 37;
+                            m_nHashKey = 67;
+                        }
                     }
                 }
             }
         }
-        
+
         m_aHashTable = new CHashBucket *[ m_nArraySize ];
         for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
             m_aHashTable[ nCount ] = NULL;

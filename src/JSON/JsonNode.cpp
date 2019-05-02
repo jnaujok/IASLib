@@ -1,7 +1,7 @@
 /**
  * JSON Node Class Implementation
  *
- *  This abstract base class is the root type of all JSON nodes in a JSON 
+ *  This abstract base class is the root type of all JSON nodes in a JSON
  * tree. All derived classes must implement the base interface.
  *
  *	Author: Jeffrey R. Naujok
@@ -81,18 +81,18 @@ double CJsonNode::doubleValue()
     return asDouble();
 }
 
-CIterator *CJsonNode::fieldNames() 
-{ 
-    return NULL; 
+CIterator *CJsonNode::fieldNames()
+{
+    return NULL;
 }
 
 CIterator *CJsonNode::fields()
 {
     return NULL;
 }
-            
+
 /**
- * Method for finding a JSON Object that contains specified field, within this 
+ * Method for finding a JSON Object that contains specified field, within this
  * node or its descendants.
  */
 CJsonNode *CJsonNode::findParent(CString fieldName)
@@ -101,15 +101,10 @@ CJsonNode *CJsonNode::findParent(CString fieldName)
 }
 
 /**
- * Method for finding a JSON Object that contains specified field, within this 
+ * Method for finding a JSON Object that contains specified field, within this
  * node or its descendants.
  */
 CArray *CJsonNode::findParents(CString fieldName)
-{
-    return NULL;
-}
-
-CArray *CJsonNode::findParents(CString fieldName, CArray *foundSoFar)
 {
     return NULL;
 }
@@ -120,18 +115,8 @@ CArray *CJsonNode::findValues(CString fieldName)
     return NULL;
 }
 
-CArray *CJsonNode::findValues(CString fieldName, CArray *foundSoFar)
-{
-    return NULL;
-}
-
 // Similar to findValues(java.lang.String), but will additionally convert values into Strings, calling asText().
 CStringArray *CJsonNode::findValuesAsText(CString fieldName)
-{
-    return NULL;
-}
-
-CStringArray *CJsonNode::findValuesAsText(CString fieldName, CStringArray *foundSoFar)
 {
     return NULL;
 }

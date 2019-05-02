@@ -42,10 +42,11 @@ namespace IASLib
      *      The maximum number of connections that can be waiting on
      *      this socket without being "accepted".
      */
-    CServerSocket::CServerSocket( int nPort, int nMaxBacklog ) : CSocket( nPort )
+    CServerSocket::CServerSocket( int nPort, int nMaxBacklog, bool bSecure ) : CSocket( nPort )
     {
         if ( m_hSocket != NULL_SOCKET )
             listen( m_hSocket, nMaxBacklog );
+        m_bSecure = bSecure;
     }
 
     /**
@@ -73,7 +74,7 @@ namespace IASLib
      *
      * This method waits for a connection to be made from a client
      * to a server socket. It returns a new <code>CSocket</code>
-     * object that contains the new connection to the client 
+     * object that contains the new connection to the client
      * computer.
      */
     CSocket *CServerSocket::Accept( void )
@@ -92,13 +93,13 @@ namespace IASLib
         {
             throw( new CSocketException( errno ) );
         }
-        
+
         if ( ( hSocket != INVALID_SOCKET ) && ( hSocket != SOCKET_ERROR ) )
             pRetVal = new CSocket( hSocket, "New Socket", pSockAddr );
 
         delete pnAddrLen;
         delete pSockAddr;
- 
+
         return pRetVal;
     }
 } // namespace IASLib

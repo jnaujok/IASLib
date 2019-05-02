@@ -47,7 +47,7 @@ namespace IASLib
             long            m_lFileSize;
             long            m_lCurrentPos;
         public:
-	                         CFile();
+	                        CFile();
                             CFile( const char *strFileName, int nMode );
 	        virtual         ~CFile();
 

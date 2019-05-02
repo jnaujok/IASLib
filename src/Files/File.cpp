@@ -1,4 +1,4 @@
-/*
+/**
  * File Class
  *
  *      This class provides an object to wrap standard file I/O processes
@@ -245,7 +245,7 @@ namespace IASLib
                 // actually written instead of getting either
                 // 1 record or zero records.
             int nWriteSize = (int)fwrite( pchBuffer, 1, nBufferSize, m_fpFile );
-            
+
             if ( m_lCurrentPos != -1 )
             {
                 m_lCurrentPos += (long)nWriteSize;
@@ -305,11 +305,11 @@ namespace IASLib
                 case BEGIN:
                     fseek( m_fpFile, nPos, SEEK_SET );
                     break;
-                
+
                 case CURRENT:
                     fseek( m_fpFile, nPos, SEEK_CUR );
                     break;
-                
+
                 case END:
                     fseek( m_fpFile, nPos, SEEK_END );
                     break;

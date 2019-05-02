@@ -22,7 +22,7 @@
 
 namespace IASLib
 {
-    class CClientSocket : public CSocket  
+    class CClientSocket : public CSocket
     {
         public:
 	                    CClientSocket( const char *strConnectTo, int nPort );

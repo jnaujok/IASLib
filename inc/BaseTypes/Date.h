@@ -77,6 +77,9 @@ namespace IASLib
     #define DATE_FORMAT_SYBASE      7
     #define DATE_FORMAT_SQLITE		8
     #define DATE_FORMAT_ORACLE      9
+    #define DATE_FORMAT_YYYYMMDD    10
+    #define DATE_FORMAT_ISO_9601    11
+    #define DATE_FORMAT_ISO_9601_MS 12
 
     #define DB_UNKNOWN				0
     #define DB_ORACLE				1
@@ -102,7 +105,9 @@ namespace IASLib
                 DF_SYBASE               = 0x0007,
                 DF_SQLITE		        = 0x0008,
                 DF_ORACLE               = 0x0009,
-                DF_YYYYMMDD             = 0x000A
+                DF_YYYYMMDD             = 0x000A,
+                DF_ISO_9601             = 0x000B,
+                DF_ISO_9601_MS          = 0x000C
 		    };
 
                                 CDate();

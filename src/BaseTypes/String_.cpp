@@ -36,12 +36,16 @@
 #endif
 
 #ifdef IASLIB_STD_STREAM_SUPPORT__
-#if ( _MSC_VER >= 1300 )
-#include <ostream>
-#include <istream>
-#else
-#include <iostream.h>
-#endif
+    #ifdef IASLIB_WIN32__
+        #if ( _MSC_VER >= 1300 )
+            #include <ostream>
+            #include <istream>
+        #else
+            #include <iostream.h>
+        #endif
+    #else
+        #include <iostream>
+    #endif
 #endif
 
 #if ( _MSC_VER >= 1300 )
@@ -197,14 +201,14 @@ namespace IASLib
     }
 
         // String Constructor - Takes a fixed memory buffer
-        //  with a maximum size and creates a non-movable 
+        //  with a maximum size and creates a non-movable
         //  fixed StringStub that points at it. The fixed
-        //  CString violates a lot of the rules for other 
+        //  CString violates a lot of the rules for other
         //  string types, in that no matter how many people
         //  have a copy, it never spawns a new string stub
         //  and everyone points at the same string. So if
         //  it changes, everyone's copy changes.
-        //  Note: if you pass NULL, then this constructor 
+        //  Note: if you pass NULL, then this constructor
         //  will create a fixed stub of the size specified.
     CString::CString( IASLibChar__ *strSource, int nLength, int nSize )
     {
@@ -1496,7 +1500,7 @@ namespace IASLib
     std::istream  &operator >>( std::istream &oInputStream, CString &strTarget )
     {
         int nCount;
-        long nInputLength;
+        unsigned long nInputLength;
 
         oInputStream >> nInputLength;
 

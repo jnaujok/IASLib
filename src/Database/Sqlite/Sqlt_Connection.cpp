@@ -28,15 +28,16 @@ namespace IASLib
 {
     IMPLEMENT_OBJECT( CSQLiteConnection, CConnection );
 
-    CSQLiteConnection::CSQLiteConnection( const char *strDBName, const char *strName, CSQLiteDatabase *pDatabase ) 
+
+    CSQLiteConnection::CSQLiteConnection( const char *strDBName, const char *strName, CSQLiteDatabase *pDatabase )
         : CConnection( strName )
     {
-        m_fnSqlOpen     = (int(__cdecl *)(const char *,sqlite3 **))CSQLiteDatabase::GetFunction( "sqlite3_open" );
-        m_fnSqlFree     = (void(__cdecl *)(void *))CSQLiteDatabase::GetFunction( "sqlite3_freemem" );
-        m_fnSqlBusyTime = (int(__cdecl *)(sqlite3 *,int)) CSQLiteDatabase::GetFunction( "sqlite3_busy_timeout" );
-        m_fnSqlClose    = (int(__cdecl *)(sqlite3 *))CSQLiteDatabase::GetFunction( "sqlite3_close" );
-        m_fnSqlErrMsg   = (const char *(__cdecl *)(sqlite3 *))CSQLiteDatabase::GetFunction( "sqlite3_errmsg" );
-        m_fnSqlExec     = (int(__cdecl *)(sqlite3 *,const char *,sqlite3_callback,void *,char **))CSQLiteDatabase::GetFunction( "sqlite3_exec" );
+        m_fnSqlOpen     = (open_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_open" );
+        m_fnSqlFree     = (free_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_freemem" );
+        m_fnSqlBusyTime = (busy_func_type *) CSQLiteDatabase::GetFunction( "sqlite3_busy_timeout" );
+        m_fnSqlClose    = (close_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_close" );
+        m_fnSqlErrMsg   = (error_msg_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_errmsg" );
+        m_fnSqlExec     = (exec_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_exec" );
 
         m_bConnected = false;
         m_bValid = false;
@@ -79,7 +80,7 @@ namespace IASLib
             m_bInTransaction = true;
             m_strTransactionBuffer = "BEGIN;\n";
         }
-      
+
         return m_bInTransaction;
     }
 
@@ -268,7 +269,7 @@ namespace IASLib
 
     void CSQLiteConnection::SetTimeout( int nTimeMS )
     {
-        (*m_fnSqlBusyTime)( m_pSLDatabase, nTimeMS ); 
+        (*m_fnSqlBusyTime)( m_pSLDatabase, nTimeMS );
     }
 } // namespace IASLib
 

@@ -624,7 +624,15 @@ static CMutex g_mutexSingleThread;
                 strRetVal.Format( "%04d%02d%02d", nYear, nMonth, nDay );
                 break;
 
-            default:    
+            case CDate::DF_ISO_9601:
+                strRetVal.Format( "%04d-%02d-%02d %02d:%02d:%02d", nYear, nMonth, nDay, nHour, nMinute, nSecond );
+                break;
+
+            case CDate::DF_ISO_9601_MS:
+                strRetVal.Format( "%04d%02d%02d %02d:%02d:%02d.%03s", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
+                break;
+
+            default:
                 strRetVal = "Unknown Format";
                 break;
         }

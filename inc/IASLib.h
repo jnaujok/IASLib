@@ -217,7 +217,7 @@
 //#include "NetworkServices/SMTPMail.h"
 
 //*************
-//  RESOURCES 
+//  RESOURCES
 //*************
 
 #include "Resources/Resource.h"
@@ -231,6 +231,7 @@
 //***********
 #include "Sockets/ClientSocket.h"
 #include "Sockets/ServerSocket.h"
+#include "Sockets/SecureSocket.h"
 #include "Sockets/Socket.h"
 
 //*********

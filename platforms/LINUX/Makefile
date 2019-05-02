@@ -2,17 +2,17 @@
 #
 # AIX Makefile for the Irene Adler Software Library (IBM/AIX Platforms only)
 #
-#	To use this makefile, you need to set the following environment 
+#	To use this makefile, you need to set the following environment
 # variables:
 #
 #	SYBASE		Set to the Sybase installation directory.
 #       ORACLE_HOME     Set to the Oracle installation directory.
 #
 #	Please note that this make file sets the "SYBPLATFORM" variable to
-# the correct setting for an AIX server. 
+# the correct setting for an AIX server.
 #
 #	The calling syntax for this makefile is:
-#	
+#
 #    make -f makefile_aix [target]
 #
 #   $AUTHOR$
@@ -20,7 +20,7 @@
 #
 #############################################################################
 
-SYBPLATFORM = linux 
+SYBPLATFORM = linux
 
 #############################################################################
 #
@@ -97,9 +97,9 @@ ALLINCS = -I$(BASEINC) -I$(XCPTINC) -I$(COLINC)  -I$(CONFINC) -I$(DBINC)   \
 #
 #############################################################################
 
-TEST_PROGS = 
+TEST_PROGS =
 ALL_LIBS   = $(LIBSDIR)/libIASLib.a
-ALL_APPS   = 
+ALL_APPS   =
 
 #
 # Modify the following line to use debug/nondebug libraries
@@ -128,8 +128,13 @@ LIBPATH   = $(LIBDIR) -lm -ldl
 #
 #DEFS 	= -DDEBUG -D__DEBUG__ -D$(SYBPLATFORM)=1 -DGENLIB_SUN_
 # non-debug version
-DEFS    = -Dlinux -DIASLIB_LINUX__ -DIASLIB_NETWORKING__ -DIASLIB_MULTI_THREADED__ \
-          -DIASLIB_PTHREAD__ -DIASLIB_STATS__ -DIASLIB_RTTI__
+DEFS    = -Dlinux \
+		  -DIASLIB_LINUX__ \
+		  -DIASLIB_NETWORKING__ \
+		  -DIASLIB_MULTI_THREADED__ -DIASLIB_PTHREAD__ \
+		  -DIASLIB_RTTI__ \
+		  -DIASLIB_DATABASE__ -DIASLIB_DB_SQLITE__ \
+		  -DIASLIB_STD_STREAM_SUPPORT__
 
 #
 # Specify the compile-time options.
@@ -142,8 +147,8 @@ OPTIONS = -O3
 #
 # Define the compiler command and compile flags.
 #
-# `sybopts.sh_sun compile` echoes a platform-specific command to invoke the C 
-# compiler. You can replace this invocation with the comand to invoke your 
+# `sybopts.sh_sun compile` echoes a platform-specific command to invoke the C
+# compiler. You can replace this invocation with the comand to invoke your
 # preferred compiler if you like.
 #
 COMPILE = g++ $(OPTIONS) $(INCLUDE) $(DEFS)
@@ -289,7 +294,7 @@ ALL_OBJS    = $(BASEOBJECTS) $(COLOBJECTS)  $(CONFOBJECTS) $(XCPTOBJECTS) \
 			  $(SOCKOBJECTS) $(STATOBJECTS) $(STUSOBJECTS) $(STRMOBJECTS) \
 			  $(THRDOBJECTS) $(XMLOBJECTS)
 
-# 
+#
 # 'make all' builds all of the components
 #
 all: $(ALL_OBJS) $(ALL_LIBS) $(ALL_APPS);
@@ -499,7 +504,7 @@ $(OBJDIR)/JsonNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/JsonNode.cpp;
 
 $(OBJDIR)/ObjectNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/ObjectNode.cpp;
 	$(COMPILE) -c $(JSONDIR)/ObjectNode.cpp -o $(OBJDIR)/ObjectNode.o
-	
+
 $(OBJDIR)/ArrayNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/JsonNode.cpp;
 	$(COMPILE) -c $(JSONDIR)/ArrayNode.cpp -o $(OBJDIR)/ArrayNode.o
 
@@ -512,7 +517,7 @@ $(OBJDIR)/ValueNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/ValueNode.cpp;
 
 $(OBJDIR)/Directory.o: $(BASEHEADERS) $(FILEHEADERS) $(FILEDIR)/Directory.cpp;
 	$(COMPILE) -c $(FILEDIR)/Directory.cpp -o $(OBJDIR)/Directory.o
-	
+
 $(OBJDIR)/DirectoryEntry.o: $(BASEHEADERS) $(FILEHEADERS) $(FILEDIR)/DirectoryEntry.cpp;
 	$(COMPILE) -c $(FILEDIR)/DirectoryEntry.cpp -o $(OBJDIR)/DirectoryEntry.o
 
@@ -615,22 +620,22 @@ $(OBJDIR)/ServerThread.o: $(BASEHEADERS) $(THRDHEADERS) $(THRDDIR)/ServerThread.
 
 $(OBJDIR)/XMLDocument.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLDocument.cpp;
 	$(COMPILE) -c $(XMLDIR)/XMLDocument.cpp -o $(OBJDIR)/XMLDocument.o
-	
+
 $(OBJDIR)/XMLChunk.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLChunk.cpp;
 	$(COMPILE) -c $(XMLDIR)/XMLChunk.cpp -o $(OBJDIR)/XMLChunk.o
-	
+
 $(OBJDIR)/XMLData.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLChunk.cpp;
 	$(COMPILE) -c $(XMLDIR)/XMLData.cpp -o $(OBJDIR)/XMLData.o
-	
+
 $(OBJDIR)/XMLElement.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLElement.cpp;
 	$(COMPILE) -c $(XMLDIR)/XMLElement.cpp -o $(OBJDIR)/XMLElement.o
-	
+
 $(OBJDIR)/XMLIndex.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLIndex.cpp;
 	$(COMPILE) -c $(XMLDIR)/XMLIndex.cpp -o $(OBJDIR)/XMLIndex.o
-	
+
 $(OBJDIR)/XMLProperty.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLProperty.cpp;
 	$(COMPILE) -c $(XMLDIR)/XMLProperty.cpp -o $(OBJDIR)/XMLProperty.o
-	
+
 #
 ## TEST PROGRAMS
 #
@@ -640,7 +645,7 @@ $(OBJDIR)/XMLProperty.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLProperty.cpp;
 ## Clean Commands
 #
 
-clean: 
+clean:
 	rm $(ALL_LIBS) $(ALL_APPS) $(ALL_OBJS)
 
 

@@ -2,7 +2,7 @@
  *  Socket Class
  *
  *      This base class provides platform independent support for TCP/IP
- * sockets. This is the base class for both the server and client socket 
+ * sockets. This is the base class for both the server and client socket
  * classes.
  *
  *	Author: Jeffrey R. Naujok
@@ -10,7 +10,7 @@
  *	Log:
  *	  $LOG$
  *
- * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
@@ -30,7 +30,7 @@
 #endif
     #include <unistd.h>
     #include <netdb.h>
-    #include <arpa/inet.h> 
+    #include <arpa/inet.h>
     #define INVALID_SOCKET -1
     #define SOCKET_ERROR -1
     typedef int SOCKET;
@@ -48,7 +48,7 @@ namespace IASLib
             static bool     m_bInitialized;     // Used to assure WSA is initialized in Windoze
             static WSADATA  m_wsaData;          // Data used by Winsock.
     #endif
-            SOCKET          m_hSocket;     
+            SOCKET          m_hSocket;
             int             m_nPort;
             unsigned long   m_addrIPAddress;
             int             m_nLocalPort;
@@ -64,17 +64,18 @@ namespace IASLib
 
                             DEFINE_OBJECT( CSocket )
 
-            bool            IsConnected( void ) { return (m_hSocket != NULL_SOCKET ) ? true:false; }
-            unsigned char   Read( void );
-            int             Read( char *pchBuffer, int nBufferSize );
-            int             Send( unsigned char chSend );
-            int             Send( const char *pchBuffer, int nBufferSize );
-            int             GetPort( void ) { return m_nPort; }
-            unsigned long   GetAddress( void ) { return m_addrIPAddress; }
-            const char     *GetAddressString( bool bRemoteAddress=true, bool bIncludePort=false );
-            void            Close( void );
-            void            SetNonBlocking( bool bDontBlock );
-            bool            HasData( void );
+            virtual bool            IsConnected( void ) { return (m_hSocket != NULL_SOCKET ) ? true:false; }
+            virtual bool            IsHandshakeComplete( void ) { return IsConnected(); }
+            virtual unsigned char   Read( void );
+            virtual int             Read( char *pchBuffer, int nBufferSize );
+            virtual int             Send( unsigned char chSend );
+            virtual int             Send( const char *pchBuffer, int nBufferSize );
+            virtual int             GetPort( void ) { return m_nPort; }
+            virtual unsigned long   GetAddress( void ) { return m_addrIPAddress; }
+            virtual const char     *GetAddressString( bool bRemoteAddress=true, bool bIncludePort=false );
+            virtual void            Close( void );
+            virtual void            SetNonBlocking( bool bDontBlock );
+            virtual bool            HasData( void );
 
             static unsigned short Htons( unsigned short ushValue ) { return htons( ushValue ); }
             static unsigned long  Htonl( unsigned long ulValue ) { return htonl( ulValue ); }

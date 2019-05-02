@@ -38,6 +38,17 @@ namespace IASLib
 {
     class CHash : public CCollection
     {
+        public:
+            enum HASH_SIZE
+            {
+                TINY, // < 100 objects
+                SMALL, // < 500 objects
+                NORMAL, // < 2,500 objects
+                LARGE, //  < 10,000 objects
+                HUGE, // < 100,000 objects
+                GARGANTUAN // > 100,000 objects. Performance will degrade with more than about 5M objects
+            };
+
         protected:
             CString         m_strSize;
             size_t          m_nArraySize;
@@ -47,7 +58,8 @@ namespace IASLib
             CMutex          m_mutexProtect;
 #endif
         public:
-                            CHash( const char *strSize );
+                            CHash( HASH_SIZE eSize = NORMAL );
+                            CHash( const char *strSize = NULL );
 #ifdef IASLIB_DATABASE__
                             CHash( CCursor *pData, const char *strKey, const char *strData );
 #endif

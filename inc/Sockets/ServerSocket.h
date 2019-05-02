@@ -22,15 +22,19 @@
 
 namespace IASLib
 {
-    class CServerSocket : public CSocket  
+    class CServerSocket : public CSocket
     {
+        protected:
+            bool m_bSecure;
+
         public:
-	                    CServerSocket( int nPort, int nMaxBacklog = 16 );
+	                    CServerSocket( int nPort, int nMaxBacklog = 16, bool bSecure = false );
 	        virtual    ~CServerSocket( void );
 
                         DEFINE_OBJECT( CServerSocket )
 
-            CSocket    *Accept( void );
+            virtual CSocket    *Accept( void );
+            virtual bool        isSecure( void ) { return m_bSecure; }
     };
 }
 

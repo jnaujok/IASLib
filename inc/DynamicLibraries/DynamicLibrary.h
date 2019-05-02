@@ -2,7 +2,7 @@
  *  Dynamic Library Class
  *
  *      This class gives us access to dynamic libraries in a cross-
- * platform, architecture independent manor. This will allow us to 
+ * platform, architecture independent manor. This will allow us to
  * build applications which can use dynamic libraries without worrying
  * about the underlying mechanism.
  *
@@ -37,8 +37,9 @@
 #endif
 
 #ifdef IASLIB_LINUX__
-#include <dlfcn.h>
+    #include <dlfcn.h>
     typedef void *DYN_LIB_TYPE;
+    //#define __cdecl
 #endif
 
 namespace IASLib
@@ -47,7 +48,7 @@ namespace IASLib
     {
         protected:
             DYN_LIB_TYPE        m_LibHandle;
-            
+
         public:
 
                                 CDynamicLibrary( const char *strLibPath );

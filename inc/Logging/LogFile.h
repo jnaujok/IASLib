@@ -2,9 +2,9 @@
 **  Log File Class
 **
 **  Description:
-**      This class defines a log file that can be written to for 
+**      This class defines a log file that can be written to for
 ** tracking data. It can be accessed by multiple threads and can date
-** and time stamp each entry. It is also possible to set the default 
+** and time stamp each entry. It is also possible to set the default
 ** format for the log entry.
 **
 **  $AUTHOR$
@@ -15,7 +15,7 @@
 #ifndef IASLIB_LOGFILE_H__
 #define IASLIB_LOGFILE_H__
 
-#include "../BaseTypes/Object.h"
+#include "LogSink.h"
 #include "../Threading/Mutex.h"
 #include "../Files/File.h"
 #include "../BaseTypes/String_.h"
@@ -23,38 +23,27 @@
 
 namespace IASLib
 {
-    class CLogFile : public CObject
+    class CLogFile : public CLogSink
     {
         protected:
-            CFile       m_fileOutputFile;
+            CFile      *m_fileOutputFile;
             CMutex      m_mutexProtect;
             CString     m_strFileName;
-            CString     m_strLogFormat;
-            int         m_nDateFormat;
-            bool        m_bTimeStamp;
-            
+
         public:
+                        DEFINE_OBJECT( CLogFile );
                         CLogFile( const char *strFileName, bool bDeletePrevious = false );
             virtual    ~CLogFile( void );
 
-            void        SetTimeStamp( bool bActivated );
-            bool        IsTimeStamped( void ) { return m_bTimeStamp; }
+            virtual bool        Entry( ... );
+            virtual bool        Write( const char *strFormat, ... );
 
-            void        SetDateFormat( int nFormat );
-            int         GetDateFormat( void ) { return m_nDateFormat; }
+            virtual bool        Open( void );
+            virtual bool        Close( void );
 
-            void        SetLogFormat( const char *strLogFormat );
-            const char *GetLogFormat( void ) { return (const char *)m_strLogFormat; }
+            virtual bool        Clear( void );
 
-            bool        Entry( ... );
-            bool        Write( const char *strFormat, ... );
-
-            bool        Open( void );
-            bool        Close( void );
-
-            bool        Clear( void );
-
-            bool        IsOpen( void ) { return m_fileOutputFile.IsOpen(); }
+            virtual bool        IsOpen( void ) { return m_fileOutputFile->IsOpen(); }
     };
 } // namespace IASLib
 #endif // IASLIB_LOGFILE_H__

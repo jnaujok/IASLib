@@ -1,11 +1,11 @@
 /*
  *  Thread Class
  *
- *      This class encapsulates a thread. Creating an object of this 
- * class creates a new thread. The new object then begins execution at 
+ *      This class encapsulates a thread. Creating an object of this
+ * class creates a new thread. The new object then begins execution at
  * the virtual Run method of the class. Note that this class isn't
  * really meant to be created directly, since the Run method of this
- * class simply exits the thread. 
+ * class simply exits the thread.
  *      The real power comes from inheriting from this object and over-
  * riding the Run method. This lets you create unique objects that run
  * as threads.
@@ -14,7 +14,7 @@
  *  Please Note: Not all systems are equal when it comes to threads, nor
  * is it possible to create such a similitude without sacrificing certain
  * functionality. To determine the functionality of a thread implementation,
- * simply use the "GetCapabilities" to determine if the thread will do 
+ * simply use the "GetCapabilities" to determine if the thread will do
  * what you want.
  *============================================================================
  *
@@ -30,25 +30,26 @@
 #ifdef IASLIB_MULTI_THREADED__
 
     #ifdef IASLIB_SUN__
-    #include <thread.h>
-    #include <sched.h>
-
-    #define THREAD_T thread_t
-    #endif
-
-    #ifdef IASLIB_DEC__
-    #include <pthread.h>
-    #define THREAD_T pthread_t
-    #endif
-
-    #ifdef IASLIB_WIN32__
-    #include <windows.h>
-    #define THREAD_T HANDLE
-    #endif
-
-    #ifdef IASLIB_PTHREAD__
-    #include <pthread.h>
-    #define THREAD_T pthread_t
+        #include <thread.h>
+        #include <sched.h>
+        #define THREAD_T thread_t
+    #else
+        #ifdef IASLIB_DEC__
+            #include <pthread.h>
+            #define THREAD_T pthread_t
+        #else
+            #ifdef IASLIB_WIN32__
+                #include <windows.h>
+                #define THREAD_T HANDLE
+            #else
+                #ifdef IASLIB_PTHREAD__
+                    #include <pthread.h>
+                    #define THREAD_T pthread_t
+                #else
+                    #error No Thread type defined, but multi-threading is active!
+                #endif
+            #endif
+        #endif
     #endif
 
     #include "../BaseTypes/Object.h"
