@@ -46,6 +46,7 @@
 #ifdef IASLIB_MULTI_THREADED__
 
 #include "Threading/ThreadPool.h"
+#include "Threading/PooledThread.h"
 
 namespace IASLib
 {
@@ -53,22 +54,15 @@ namespace IASLib
 
         CThreadPool::CThreadPool(int maximumThreads ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
         {
+            m_mutexArray.Lock();
             for ( int nX = 0; nX < maximumThreads; nX++ )
             {
                 m_aAvailableThreads.Append( new CPooledThread() );
             }
-            m_aAvailableThreads;
-        CArray m_aBusyThreads;
-        size_t m_nTotalThreads;
-        size_t m_nCurrentThreads;
-        size_t m_nPeakThreads;
-        CMutex m_mutexArray;
-        CQueue m_qTaskQueue;
-        CHash m_hashResults;
-        CHash m_hashTaskIds;
-
-
-
+            m_nTotalThreads = maximumThreads;
+            m_nCurrentThreads = 0;
+            m_nPeakThreads = 0;
+            m_mutexArray.Unlock();
         }
 
         CThreadPool::~CThreadPool(void)
@@ -87,12 +81,7 @@ namespace IASLib
 
         CObject *GetResults(const char *strIdentifier);
 
-        size_t GetActiveThreads(void) { return m_nCurrentThreads; }
-        size_t GetPeakThreads(void) { return m_nPeakThreads; }
-        size_t GetIdleThreads(void) { return m_nTotalThreads - m_nCurrentThreads; }
-        size_t GetQueueSize(void) { return m_qTaskQueue.Count(); }
-    };
+
 } // end of namespace IASLib
 
 #endif // IASLIB_MULTI_THREADED__
-#endif // IASLIB_THREADPOOL_H__

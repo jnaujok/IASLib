@@ -45,7 +45,7 @@
                 CThread                *GetThread( void ) { return m_ptThread; };
 
             protected:
-                void            ExitThread( int nExitCode );
+                void                    ExitThread( int nExitCode );
 
             private:
                 friend class CThreadPool;

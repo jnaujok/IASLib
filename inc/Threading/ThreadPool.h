@@ -86,6 +86,10 @@ class CThreadPool : public CObject
         size_t GetPeakThreads(void) { return m_nPeakThreads; }
         size_t GetIdleThreads(void) { return m_nTotalThreads - m_nCurrentThreads; }
         size_t GetQueueSize(void) { return m_qTaskQueue.Count(); }
+
+    private:
+        friend class CPooledThread;
+        void taskComplete( CPooledThread *thread );
     };
 } // end of namespace IASLib
 

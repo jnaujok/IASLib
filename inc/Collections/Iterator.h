@@ -2,7 +2,7 @@
  * Iterator Class
  *
  *  This abstract base class is used to define the basic iterator for
- * the collection classes. The iterator type allows the enumeration of 
+ * the collection classes. The iterator type allows the enumeration of
  * all the different collections while using the same interface
  * regardless of the collection type.
  *
@@ -29,23 +29,23 @@ namespace IASLib
                                      * This is the destructor that ends an iterator.
                                      */
             virtual            ~CIterator( void ) {}
-    
+
                                 DECLARE_OBJECT( CIterator, CObject )
 
                                     /**
                                      * This method is for use by the <code>CStringArray</code> class. Namely, it provides
-                                     * for the fact that the iterator returned by the <code>CStringArray</code> class 
+                                     * for the fact that the iterator returned by the <code>CStringArray</code> class
                                      * should return <code>CStrings</code>, and not <code>CObject</code> pointers.
                                      */
             virtual CString     NextString( void ) { return CString( "" ); }
 
                                     /**
                                      * This method is for use by the <code>CIntArray</code> class. Namely, it provides
-                                     * for the fact that the iterator returned by the <code>CIntArray</code> class 
+                                     * for the fact that the iterator returned by the <code>CIntArray</code> class
                                      * should return <code>int</code>s, and not <code>CObject</code> pointers.
                                      */
             virtual int         NextInt( void ) { return 0; }
-            
+
                                     /**
                                      * This method returns the next item in the iteration.
                                      */
@@ -63,7 +63,7 @@ namespace IASLib
                                      * must catch the <code>CException</code> that is thrown.
                                      */
             virtual void        Reset( void ) = 0;
-                
+
                                     /**
                                      * This method returns true if there are elements remaining to be iterated
                                      * in the collection.
@@ -84,7 +84,7 @@ namespace IASLib
                                      * CIterator constructor
                                      *
                                      * This class is protected so no one tries to create an Iterator
-                                     * directly. 
+                                     * directly.
                                      */
                                 CIterator( void ) {}
                                     /**
@@ -94,7 +94,7 @@ namespace IASLib
                                      */
                                 CIterator( const CIterator &oSource ) { oSource.HasMore(); }
                                     /**
-                                     * CIterator Copy Operator 
+                                     * CIterator Copy Operator
                                      *
                                      * This operator is hidden to prevent copying of iterators.
                                      */
