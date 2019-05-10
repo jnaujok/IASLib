@@ -45,8 +45,8 @@
 
 #ifdef IASLIB_MULTI_THREADED__
 
-#include "Threading/ThreadPool.h"
-#include "Threading/PooledThread.h"
+#include "ThreadPool.h"
+#include "PooledThread.h"
 
 namespace IASLib
 {
@@ -67,7 +67,12 @@ namespace IASLib
 
         CThreadPool::~CThreadPool(void)
         {
-
+            for ( int nX = 0; nX < m_aBusyThreads.Length(); nX++ )
+            {
+                CPooledThread *work = (CPooledThread *)m_aBusyThreads.Get( nX );
+                work->ShutdownThread();
+                work->Join();
+            }
         }
 
         IMPLEMENT_OBJECT(CThreadPool, CObject);

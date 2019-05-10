@@ -48,9 +48,10 @@
 #include "../Collections/Array.h"
 #include "../Collections/Queue.h"
 #include "../Collections/Hash.h"
-#include "ThreadTask.h"
 #include "Thread.h"
 #include "Mutex.h"
+#include "ThreadTask.h"
+#include "PooledThread.h"
 
 #ifdef IASLIB_MULTI_THREADED__
 

@@ -32,7 +32,7 @@
                                         CPooledThread( const char *strThreadName = "Pooled_Thread_" );
                 virtual                ~CPooledThread( void );
 
-                                        DECLARE_OBJECT(CPooledThread,CObject);
+                                        DEFINE_OBJECT(CPooledThread);
 
                 CObject *               GetResult( void ) { return m_pResult; }
                 bool                    IsRunning( void ) { return m_assignedTask != NULL; }

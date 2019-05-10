@@ -219,7 +219,9 @@ STRMHEADERS = $(STRMINC)/Stream.h $(STRMINC)/FileStream.h $(STRMINC)/NullStream.
               $(STRMINC)/SocketStream.h
 
 THRDHEADERS = $(THRDINC)/Mutex.h $(THRDINC)/Semaphore.h $(THRDINC)/Thread.h \
-              $(THRDINC)/ThreadMonitor.h $(THRDINC)/ServerThread.h
+              $(THRDINC)/ThreadMonitor.h $(THRDINC)/ServerThread.h \
+			  $(THRDINC)/ThreadPool.h $(THRDINC)/PooledThread.h \
+			  $(THRDINC)/ThreadTask.h
 
 XMLHEADERS  = $(XMLINC)/XMLDocument.h $(XMLINC)/XMLElement.h \
               $(XMLINC)/XMLIndex.h $(XMLINC)/XMLParser.h \
@@ -283,7 +285,8 @@ STRMOBJECTS = $(OBJDIR)/Stream.o $(OBJDIR)/FileStream.o $(OBJDIR)/NullStream.o \
               $(OBJDIR)/SocketStream.o $(OBJDIR)/StringStream.o $(OBJDIR)/BufferedStream.o
 
 THRDOBJECTS = $(OBJDIR)/Mutex.o $(OBJDIR)/Semaphore.o $(OBJDIR)/Thread.o \
-              $(OBJDIR)/ThreadMonitor.o $(OBJDIR)/ServerThread.o
+              $(OBJDIR)/ThreadMonitor.o $(OBJDIR)/ServerThread.o $(OBJDIR)/ThreadPool.o \
+			  $(OBJDIR)/PooledThread.o
 
 XMLOBJECTS  = $(OBJDIR)/XMLDocument.o $(OBJDIR)/XMLChunk.o $(OBJDIR)/XMLData.o \
 				  $(OBJDIR)/XMLElement.o $(OBJDIR)/XMLIndex.o $(OBJDIR)/XMLProperty.o
@@ -613,6 +616,12 @@ $(OBJDIR)/ThreadMonitor.o: $(BASEHEADERS) $(THRDHEADERS) $(THRDDIR)/ThreadMonito
 
 $(OBJDIR)/ServerThread.o: $(BASEHEADERS) $(THRDHEADERS) $(THRDDIR)/ServerThread.cpp;
 	$(COMPILE) -c $(THRDDIR)/ServerThread.cpp -o $(OBJDIR)/ServerThread.o
+
+$(OBJDIR)/ThreadPool.o: $(BASEHEADERS) $(THRDHEADERS) $(THRDDIR)/ThreadPool.cpp;
+	$(COMPILE) -c $(THRDDIR)/ThreadPool.cpp -o $(OBJDIR)/ThreadPool.o
+
+$(OBJDIR)/PooledThread.o: $(BASEHEADERS) $(THRDHEADERS) $(THRDDIR)/PooledThread.cpp;
+	$(COMPILE) -c $(THRDDIR)/PooledThread.cpp -o $(OBJDIR)/PooledThread.o
 
 #
 ## XML OBJECTS
