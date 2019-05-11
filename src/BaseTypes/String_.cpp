@@ -2043,4 +2043,19 @@ namespace IASLib
         return true;
     }
 
+    CString CString::FormatString( const char *fmt, ... )
+    {
+        CString ret;
+
+        va_list ap;
+        va_start(ap, fmt);
+
+        ret.Format( fmt, ap );
+
+        va_end(ap);
+
+        return ret;
+    }
+
+
 } // namespace ISALib
