@@ -51,7 +51,18 @@ namespace IASLib
                     m_RunMutex.Lock();
                     if ( m_pActiveTask )
                     {
-                        CObject *result = m_pActiveTask->Run();
+                        m_pActiveTask->setRunning();
+                        CObject *result = NULL;
+                        try
+                        {
+                            result = m_pActiveTask->Run();
+                            m_pActiveTask->setComplete();
+                        }
+                        catch(const std::exception& e)
+                        {
+                            m_pActiveTask->setException();
+                            std::cerr << e.what() << '\n';
+                        }
                         m_pParent->SetResult( result );
                         m_pActiveTask = NULL;
                     }
@@ -120,9 +131,9 @@ namespace IASLib
         }
     }
 
-    CThread *CPooledThread::GetThread( void ) 
-    { 
-        return m_ptThread; 
+    CThread *CPooledThread::GetThread( void )
+    {
+        return m_ptThread;
     }
 
     bool CPooledThread::SetTask( CThreadTask *task )

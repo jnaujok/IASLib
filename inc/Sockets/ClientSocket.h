@@ -29,6 +29,8 @@ namespace IASLib
 	        virtual    ~CClientSocket();
 
                         DEFINE_OBJECT( CClientSocket )
+
+            virtual bool isSecure( void ) { return false; }
     };
 }
 

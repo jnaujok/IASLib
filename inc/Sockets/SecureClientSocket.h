@@ -29,6 +29,10 @@ namespace IASLib
 	        virtual    ~CSecureClientSocket();
 
                         DEFINE_OBJECT( CSecureClientSocket )
+
+            virtual bool isSecure( void ) { return true; }
+
+            virtual void doHandshake();
     };
 }
 

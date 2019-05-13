@@ -39,6 +39,7 @@ namespace IASLib
                 SLEEPING,
                 BLOCKED,
                 COMPLETE,
+                EXCEPTION,
                 UNKNOWN
             };
         protected:
@@ -68,12 +69,14 @@ namespace IASLib
 
         private:
             friend class CThreadPool;
+            friend class CRunThread;
 
             void                    addToQueue(void) { m_currentStatus = QUEUED; }
             void                    setRunning( void ) { m_currentStatus = RUNNING; }
             void                    setSleeping( void ) { m_currentStatus = SLEEPING; }
             void                    setBlocked( void ) { m_currentStatus = BLOCKED; }
             void                    setComplete( void ) { m_currentStatus = COMPLETE; }
+            void                    setException(void ) { m_currentStatus = EXCEPTION; }
     };
 } // end of namespace IASLib
 
