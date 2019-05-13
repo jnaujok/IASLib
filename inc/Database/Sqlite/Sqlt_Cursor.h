@@ -27,12 +27,19 @@
 
 namespace IASLib
 {
+    extern "C"
+    {
+        int CursorCallback( void *pCursor, int nColumns, char **astrValues, char **astrHeaders );
+    };
+
     class CSQLiteCursor : public CCursor
     {
         protected:
             CSQLiteConnection *m_pConnection;
 
         public:
+            DEFINE_OBJECT( CSQLiteCursor );
+
                                 CSQLiteCursor( CSQLiteConnection *pConnection, bool bUpdatable );
             virtual            ~CSQLiteCursor( void );
 
@@ -44,10 +51,10 @@ namespace IASLib
 
             virtual bool        Next( void );
             virtual bool        Prev( void );
-
-            static int          CursorCallback( void *pCursor, int nColumns, char **astrValues, char **astrHeaders );
         
             void                SetValid( void ) { m_bValid = true; }
+
+            friend int CursorCallback( void *, int, char **, char **);
     };
 } // namespace IASLib
 

@@ -16,7 +16,7 @@
  */
 
 #ifdef IASLIB_DATABASE__
-#ifdef IASLIB_DB_SQLLITE__
+#ifdef IASLIB_DB_SQLITE__
 
 #include "sqlite3.h"
 #include "Sqlt_Cursor.h"
@@ -27,7 +27,7 @@
 
 namespace IASLib
 {
-    IMPLEMENT_OBJECT( CSQLiteCursor, CConnection );
+    IMPLEMENT_OBJECT( CSQLiteCursor, CCursor );
 
     CSQLiteCursor::CSQLiteCursor( CSQLiteConnection *pConnection, bool bUpdatable )
     {
@@ -94,7 +94,7 @@ namespace IASLib
     }
 
 
-    int CSQLiteCursor::CursorCallback( void *pCursorA, int nColumns, char **astrValues, char **astrHeaders )
+    int CursorCallback( void *pCursorA, int nColumns, char **astrValues, char **astrHeaders )
     {
         int                 nCount;
         CString             strTemp;

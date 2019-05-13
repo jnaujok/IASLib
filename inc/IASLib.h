@@ -232,6 +232,7 @@
 #include "Sockets/ClientSocket.h"
 #include "Sockets/ServerSocket.h"
 #include "Sockets/SecureSocket.h"
+#include "Sockets/SecureClientSocket.h"
 #include "Sockets/Socket.h"
 
 //*********
@@ -267,6 +268,9 @@
 #include "Threading/ServerThread.h"
 #include "Threading/Thread.h"
 #include "Threading/ThreadMonitor.h"
+#include "Threading/PooledThread.h"
+#include "Threading/ThreadPool.h"
+#include "Threading/ThreadTask.h"
 
 //*******
 //  XML

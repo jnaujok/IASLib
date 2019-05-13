@@ -135,7 +135,7 @@ namespace IASLib
 
         pNewCursor = new CSQLiteCursor( this, bUpdatable );
 
-        m_nLastErrorCode = (*m_fnSqlExec)( m_pSLDatabase, strConQuery, CSQLiteCursor::CursorCallback, pNewCursor, &m_pstrErrorStorage );
+        m_nLastErrorCode = (*m_fnSqlExec)( m_pSLDatabase, strConQuery, CursorCallback, pNewCursor, &m_pstrErrorStorage );
 
         if ( m_nLastErrorCode != SQLITE_OK )
         {
@@ -182,7 +182,7 @@ namespace IASLib
             return true;
         }
 
-        m_nLastErrorCode = (*m_fnSqlExec)( m_pSLDatabase, strConQuery, CSQLiteCursor::CursorCallback, NULL, &m_pstrErrorStorage );
+        m_nLastErrorCode = (*m_fnSqlExec)( m_pSLDatabase, strConQuery, CursorCallback, NULL, &m_pstrErrorStorage );
 
         if ( m_nLastErrorCode != SQLITE_OK )
         {
