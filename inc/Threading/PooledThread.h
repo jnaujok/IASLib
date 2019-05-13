@@ -18,18 +18,26 @@
     #include "Thread.h"
     #include "ThreadTask.h"
 
+
     namespace IASLib
     {
+        // Forward declaration of Thread Pool
+        class CThreadPool;
+        class CRunThread;
+
         class CPooledThread : public CObject
         {
             protected:
-                CThread        *m_ptThread;
+                CRunThread     *m_ptThread;
                 CString         m_strThreadName;
                 CThreadTask    *m_assignedTask;
                 CObject        *m_pResult;
+                bool            m_bThreadInShutdown;
+                int             m_nTimeoutSeconds;
+                CThreadPool    *m_pParent;
 
             public:
-                                        CPooledThread( const char *strThreadName = "Pooled_Thread_" );
+                                        CPooledThread( CThreadPool *parent, const char *strThreadName = "Pooled_Thread_", int nNumber = 0 );
                 virtual                ~CPooledThread( void );
 
                                         DEFINE_OBJECT(CPooledThread);
@@ -42,14 +50,18 @@
 
                 void                    SetTimeout( int nSeconds );
 
-                CThread                *GetThread( void ) { return m_ptThread; };
+                CThread                *GetThread( void );
 
             protected:
                 void                    ExitThread( int nExitCode );
 
             private:
                 friend class CThreadPool;
-                void                    SetTask( CThreadTask *task );
+                friend class CRunThread;
+                bool                    SetTask( CThreadTask *task );
+                void                    ShutdownThread( void );
+                void                    Join( void );
+                void                    SetResult( CObject *pResult );
         };
 
     } // Namespace IASLib

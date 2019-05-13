@@ -47,22 +47,79 @@
 
 #include "ThreadPool.h"
 #include "PooledThread.h"
+#include "Semaphore.h"
 
 namespace IASLib
 {
+    class CQueueingThread : public CThread
+    {
+        private:
+            CSemaphore  m_semQueueAvailable;
+            CQueue     *m_pQueue;
+            bool        m_bShutdown;
+            CThreadPool * m_pParent;
+
+        public:
+            CQueueingThread( size_t nSize, CQueue *pQueue, CThreadPool *parent ) : CThread( "ThreadPoolQueueingThread", true, false, true ), 
+                m_semQueueAvailable( nSize )
+            {
+                m_pQueue = pQueue;
+                m_bShutdown = false;
+                m_pParent = parent;
+                // Release the thread to start running.
+                this->Resume();
+            }
+
+            virtual void *Run( void )
+            {
+                while ( ! m_bShutdown )
+                {
+                    m_semQueueAvailable.Wait();
+                    if ( m_pParent->GetIdleThreads() )
+                    {
+                        CThreadTask *task = (CThreadTask *)m_pQueue->Pop();
+                        if ( ! m_pParent->startTask( task ) )
+                        {
+                            // Failed to allocate a thread -- push the task back
+                            // onto the queue and re-signal the semaphore.
+                            m_pQueue->Push(task);
+                            m_semQueueAvailable.Post();
+                        }
+                    }
+                    else
+                    {
+                        // There's no idle threads available. Wait 50 milliseconds and try again.
+                        Millisleep(50);
+                        m_semQueueAvailable.Post();
+                    }
+                }
+            }
+
+            virtual unsigned long   GetCapabilities( void )
+            {
+                return CThread::CapabilityFlags::SLEEP;
+            }
+
+            void signalQueue( void )
+            {
+                m_semQueueAvailable.Post();
+            }
+    };
+
         bool CThreadPool::m_bInitialized = false;
 
-        CThreadPool::CThreadPool(int maximumThreads ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
+        CThreadPool::CThreadPool( size_t maximumThreads ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
         {
             m_mutexArray.Lock();
             for ( int nX = 0; nX < maximumThreads; nX++ )
             {
-                m_aAvailableThreads.Append( new CPooledThread() );
+                m_aAvailableThreads.Append( new CPooledThread( this, "Pooled_Thread_", nX ) );
             }
             m_nTotalThreads = maximumThreads;
             m_nCurrentThreads = 0;
             m_nPeakThreads = 0;
             m_mutexArray.Unlock();
+            m_pQueueingThread = new CQueueingThread( m_nTotalThreads, &m_qTaskQueue, this );
         }
 
         CThreadPool::~CThreadPool(void)
@@ -72,6 +129,7 @@ namespace IASLib
                 CPooledThread *work = (CPooledThread *)m_aBusyThreads.Get( nX );
                 work->ShutdownThread();
                 work->Join();
+                delete work;
             }
         }
 
@@ -79,12 +137,38 @@ namespace IASLib
 
         bool CThreadPool::AddTask( CThreadTask *task )
         {
-
+            m_qTaskQueue.Push( task );
+            m_pQueueingThread->signalQueue();
         }
 
         CThreadTask::TASK_STATUS TaskStatus(const char *strIdentifier);
 
         CObject *GetResults(const char *strIdentifier);
+
+        bool CThreadPool::startTask( CThreadTask *task )
+        {
+            m_mutexArray.Lock();
+
+            if ( m_aAvailableThreads.Length() )
+            {
+                CPooledThread *workThread = (CPooledThread *)m_aAvailableThreads.Remove(1);
+                m_aBusyThreads.Push( workThread );
+                m_nCurrentThreads++;
+                if ( m_nCurrentThreads > this->m_nPeakThreads )
+                {
+                    m_nPeakThreads = m_nCurrentThreads;
+                }
+
+                workThread->SetTask( task );
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+            
+            m_mutexArray.Unlock();
+        }
 
 
 } // end of namespace IASLib

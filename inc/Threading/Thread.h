@@ -135,6 +135,7 @@
                 static bool             Equals( THREAD_T ptThread1, THREAD_T ptThread2 );
 
                 void                    Sleep( int nSeconds );
+                void                    Millisleep( int milliseconds );
 
                 virtual unsigned long   GetCapabilities( void ) = 0;
 

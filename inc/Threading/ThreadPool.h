@@ -57,6 +57,8 @@
 
 namespace IASLib
 {
+    class CQueueingThread;
+
 class CThreadPool : public CObject
 {
     protected:
@@ -69,11 +71,12 @@ class CThreadPool : public CObject
         CQueue m_qTaskQueue;
         CHash m_hashResults;
         CHash m_hashTaskIds;
+        CQueueingThread *m_pQueueingThread;
 
         static bool m_bInitialized;
 
     public:
-        CThreadPool(int maximumThreads = 16);
+        CThreadPool(size_t maximumThreads = 16);
         virtual ~CThreadPool(void);
 
         DEFINE_OBJECT(CThreadPool);
@@ -90,7 +93,9 @@ class CThreadPool : public CObject
 
     private:
         friend class CPooledThread;
+        friend class CQueueingThread;
         void taskComplete( CPooledThread *thread );
+        bool startTask( CThreadTask *task );
     };
 } // end of namespace IASLib
 

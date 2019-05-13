@@ -22,7 +22,8 @@
 #include "Object.h"
 
 #ifndef IASLIB_WIN32__
-#include <unistd.h>
+    #include <unistd.h>
+    #include <time.h>
 #endif
 
 #ifdef IASLIB_MULTI_THREADED__
@@ -397,6 +398,20 @@ void CThread::Sleep( int nSeconds )
     ::Sleep( (DWORD)( nSeconds * 1000 ) );
 #else
     sleep( nSeconds );
+#endif
+}
+
+void CThread::Millisleep( int milliseconds )
+{
+#ifdef IASLIB_WIN32__
+    ::Sleep( (DWORD)milliseconds);
+#elif _POSIX_C_SOURCE >= 199309L
+    struct timespec ts;
+    ts.tv_sec = milliseconds / 1000;
+    ts.tv_nsec = (milliseconds % 1000) * 1000000;
+    nanosleep(&ts, NULL);
+#else
+    usleep(milliseconds * 1000);
 #endif
 }
 
