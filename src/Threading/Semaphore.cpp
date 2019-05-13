@@ -29,7 +29,7 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_PTHREAD__
-        sem_init( &m_threadSemaphore, NULL, nValue );
+        sem_init( &m_threadSemaphore, 0, nValue );
     #endif
     }
 
