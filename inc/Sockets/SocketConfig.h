@@ -37,6 +37,7 @@ namespace IASLib
             bool reuseSocket;
             int timeoutMillis;
             bool noDelay;
+            bool blocking;
         protected:
             CSocketConfig( void );
         public:
@@ -50,6 +51,7 @@ namespace IASLib
             bool isReuseSocket(){return reuseSocket;}
             int getTimeout(){return timeoutMillis;}
             bool    isTcpNoDelay(){return noDelay;}
+            bool isBlocking() { return blocking; }
 
             friend class CSocketConfigBuilder;
     };
@@ -68,6 +70,7 @@ namespace IASLib
             bool reuseSocket;
             int timeoutMillis;
             bool noDelay;
+            bool blocking;
         public:
             DEFINE_OBJECT(CSocketConfigBuilder );
 
@@ -81,6 +84,7 @@ namespace IASLib
             CSocketConfigBuilder setReuseAddress( bool reuse );
             CSocketConfigBuilder setTimeout( int timeoutMillis );
             CSocketConfigBuilder setTCPNoDelay( bool noDelay );
+            CSocketConfigBuilder setBlocking( bool blocking );
 
             CSocketConfigBuilder( void );
             CSocketConfigBuilder( CSocketConfigBuilder &oSource );

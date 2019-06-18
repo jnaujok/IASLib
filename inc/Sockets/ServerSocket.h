@@ -26,8 +26,10 @@ namespace IASLib
     {
         protected:
             bool m_bSecure;
+            CSocketConfig config;
 
         public:
+                        CServerSocket( CSocketConfig config, int nPort, const char *bindAddress );
 	                    CServerSocket( int nPort, int nMaxBacklog = 16, bool bSecure = false );
 	        virtual    ~CServerSocket( void );
 

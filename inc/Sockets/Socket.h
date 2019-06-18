@@ -38,6 +38,7 @@
 #endif
 
 #include "../BaseTypes/String_.h"
+#include "SocketConfig.h"
 
 namespace IASLib
 {
@@ -57,6 +58,8 @@ namespace IASLib
             CString         m_strLocalAddress;
             CString         m_strSocketName;
         public:
+                            CSocket( CSocketConfig config, const char *strConnectTo, int nPort );
+                            CSocket( CSocketConfig config, int nBindPort, const char *strBindIP = NULL );
                             CSocket( SOCKET hSocket, const char *strSockName, void *AddressIn=NULL );
 	                        CSocket( int nPort, bool bBlocking = true );
                             CSocket( const char *strConnectTo, int nPort );

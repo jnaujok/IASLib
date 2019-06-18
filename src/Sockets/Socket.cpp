@@ -2,7 +2,7 @@
  *  Socket Class
  *
  *      This base class provides platform independent support for TCP/IP
- * sockets. This is the base class for both the server and client socket 
+ * sockets. This is the base class for both the server and client socket
  * classes.
  *
  *	Author: Jeffrey R. Naujok
@@ -22,7 +22,10 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
- 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+
 #ifdef IASLIB_WIN32__
 namespace IASLib
 {
@@ -39,11 +42,10 @@ typedef int socklen_t;
 #endif
 
 #ifndef IASLIB_SUN__
+    #ifdef IASLIB_MULTI_THREADED__
+    #include "Mutex.h"
 
-#ifdef IASLIB_MULTI_THREADED__
-#include "Mutex.h"
-
-static IASLib::CMutex mutexNTOP;
+    static IASLib::CMutex mutexNTOP;
 #endif
 
 static const char *inet_ntop( int iAddrFamily, unsigned long *addrConvert, char *strBuffer, int nMaxLen )
@@ -90,10 +92,191 @@ namespace IASLib
     IMPLEMENT_OBJECT( CSocket, CObject );
 
     /**
+     * Configured client socket Constructor
+     *
+     *      This constructor takes a configuration object and builds a
+     * client-connected socket using the configuration settings passed in.
+     *
+     * @param config
+     *          The configuration data to use when building the socket
+     * @param strConnectTo
+     *          The remote host, or IP address to connect to.
+     * @param nPort
+     *          The remote port number to attach to.
+     */
+    CSocket::CSocket( CSocketConfig config, const char *strConnectTo, int nPort )
+    {
+        m_nPort = 0;
+        m_addrIPAddress = 0;
+        m_addrLocalIPAddress = 0;
+        m_nLocalPort = 0;
+
+    #ifdef IASLIB_WIN32__
+        if ( ! m_bInitialized )
+        {
+            WSAStartup( 2, &m_wsaData );
+            m_bInitialized = true;
+        }
+    #endif
+
+        struct hostent *pHost = gethostbyname( strConnectTo );
+	    struct sockaddr_in connect_addr;
+
+        m_hSocket = socket( AF_INET, SOCK_STREAM, 0 );
+
+        connect_addr.sin_family = AF_INET;           // Connect to a TCP/IP Port
+	    connect_addr.sin_port = htons( (u_short)nPort );	     // The Port Number to attach to.
+        if ( pHost )
+        {
+	        connect_addr.sin_addr.s_addr = (unsigned long)*((unsigned long *)(pHost->h_addr_list[0]) );	// The address of the host machine.
+            m_strAddress.Format( "%s:%d", inet_ntoa( connect_addr.sin_addr ), nPort );
+        }
+        else
+        {
+            connect_addr.sin_addr.s_addr = inet_addr( strConnectTo );
+            m_strAddress.Format( "%s:%d", inet_ntoa( connect_addr.sin_addr ), nPort );
+        }
+
+        if ( connect( m_hSocket,(struct sockaddr *)&connect_addr, sizeof(struct sockaddr_in) ) == SOCKET_ERROR )
+        {
+    #ifdef IASLIB_WIN32__
+            closesocket( m_hSocket );
+    #else
+            close( m_hSocket );
+    #endif
+            m_hSocket = NULL_SOCKET;
+	    }
+        else
+        {
+            socklen_t nNameSize;
+
+            if ( getsockname( m_hSocket, (sockaddr *)&connect_addr, &nNameSize ) != SOCKET_ERROR )
+            {
+                m_nPort = ntohs( connect_addr.sin_port );
+                m_addrIPAddress = ntohl( connect_addr.sin_addr.s_addr );
+            }
+            struct in_addr addrConvert;
+            addrConvert.s_addr = htonl( m_addrIPAddress );
+            m_strLocalAddress.Format( "%s:%d", inet_ntoa( addrConvert ), m_nPort );
+            int temp = config.getSendBufferSize();
+            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(int) );
+            temp = config.getReceiveBufferSize();
+            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVBUF, &temp, sizeof(int) );
+            temp = config.getTimeout();
+            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVTIMEO, &temp, sizeof(int));
+            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDTIMEO, &temp, sizeof(int));
+            temp = config.isTcpNoDelay() ? 1:0;
+            setsockopt( m_hSocket, IPPROTO_TCP, TCP_NODELAY, &temp, sizeof(int));
+            temp = config.isLinger() ? 1:0;
+            setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, &temp, sizeof(int));
+            temp = config.isReuseSocket() ? 1:0;
+            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEPORT, &temp, sizeof(int));
+        }
+    }
+
+    /**
+     * Configured server socket Constructor
+     *
+     *      This constructor takes a configuration object and builds a
+     * server socket using the configuration settings passed in.
+     *
+     * @param config
+     *          The configuration data to use when building the socket
+     * @param nPort
+     *          The port to bind to.
+     * @param strBoundAddress
+     *          The address to bind to. By default, this is NULL, meaning to
+     * attach to all available IP interfaces.
+     */
+    CSocket::CSocket( CSocketConfig config, int nPort, const char *strBoundAddress )
+    {
+        int     nOption = 1;
+#ifndef IASLIB_NO_LINT__
+        bBlocking = config.isBlocking();
+#endif
+
+        m_nPort = 0;
+        m_addrIPAddress = 0;
+        m_addrLocalIPAddress = 0;
+        m_nLocalPort = 0;
+
+    #ifdef IASLIB_WIN32__
+        if ( ! m_bInitialized )
+        {
+            WSAStartup( 2, &m_wsaData );
+            m_bInitialized = true;
+        }
+    #endif
+	    struct sockaddr_in	listen_addr;
+
+        m_hSocket = socket( AF_INET, SOCK_STREAM, 0 );
+
+        if ( m_hSocket != INVALID_SOCKET )
+        {
+                // We have to set the re-use address so that we can re-start the server without waiting
+                // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
+    #ifndef IASLIB_WIN32__
+            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+    #else
+            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&nOption , sizeof( nOption )  );
+    #endif
+
+            int temp = config.getSendBufferSize();
+            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(int) );
+            temp = config.getReceiveBufferSize();
+            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVBUF, &temp, sizeof(int) );
+            temp = config.isTcpNoDelay() ? 1:0;
+            setsockopt( m_hSocket, IPPROTO_TCP, TCP_NODELAY, &temp, sizeof(int));
+            temp = config.isLinger() ? 1:0;
+            setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, &temp, sizeof(int));
+            temp = config.getBacklogSize();
+
+            listen_addr.sin_family = AF_INET;           // Listen for Internet (TCP/IP) connections
+            listen_addr.sin_port = htons( (u_short)nPort );	    // Assign the Port in Network byte order
+            listen_addr.sin_addr.s_addr = INADDR_ANY;	// Allow connection on any valid IP for this machine
+
+            if ( bind( m_hSocket,(struct sockaddr *)&listen_addr, sizeof(struct sockaddr_in) ) == SOCKET_ERROR )
+            {
+    #ifdef IASLIB_WIN32__
+                closesocket( m_hSocket );
+    #else
+                close( m_hSocket );
+    #endif
+                m_hSocket = NULL_SOCKET;
+                IASLIB_THROW_SOCKET_EXCEPTION(errno);
+            }
+            else
+            {
+                m_nPort = nPort;
+                m_addrIPAddress = INADDR_ANY;
+                    // Now that we've bound the correct socket, we need to un-set the reuse-address option,
+                    // because otherwise the accept call creates a socket that matches this one, apparently,
+                    // that includes re-using the same address, which is really, really bad. We can get
+                    // two requests on the same *bleep*ing socket, which basically makes the socket library
+                    // go off on a quest to use all of the CPU. So, we un-do the option here.
+                nOption = 0;
+    #ifdef IASLIB_WIN32__
+                setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&nOption , sizeof( nOption )  );
+    #else
+                setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+    #endif
+            }
+            struct in_addr addrConvert;
+            addrConvert.s_addr = htonl( m_addrIPAddress );
+            m_strAddress.Format( "%s:%d", inet_ntoa( addrConvert ), m_nPort );
+        }
+        else
+        {
+            m_hSocket = NULL_SOCKET;
+            IASLIB_THROW_SOCKET_EXCEPTION(errno);
+        }
+    }
+
+    /**
      *  Pre-existing Socket Constructor
      *
      *      This constructor takes an already existing socket and wraps it
-     * in a class. This is especially useful for sockets resulting from 
+     * in a class. This is especially useful for sockets resulting from
      * accept calls.
      *
      * @param hSocket
@@ -116,7 +299,7 @@ namespace IASLib
         m_nLocalPort = 0;
 
         m_strSocketName = strSockName;
-        
+
     #ifdef IASLIB_WIN32__
         if ( ! m_bInitialized )
         {
@@ -158,7 +341,7 @@ namespace IASLib
             }
 
             char strIPBuff[ INET_ADDRSTRLEN ];
-            
+
             struct in_addr addrConvert;
             addrConvert.s_addr = htonl( m_addrIPAddress );
             m_strAddress.Format( "%s:%d", inet_ntop(AF_INET, (unsigned long *)&(addrConvert.s_addr), strIPBuff, INET_ADDRSTRLEN ), m_nPort );
@@ -174,7 +357,7 @@ namespace IASLib
     /**
      *  Server Socket Constructor
      *
-     *      This constructor creates and binds a port for listening and 
+     *      This constructor creates and binds a port for listening and
      * accepting connections from a client.
      *
      * @param nPort
@@ -220,7 +403,7 @@ namespace IASLib
             listen_addr.sin_port = htons( (u_short)nPort );	    // Assign the Port in Network byte order
             listen_addr.sin_addr.s_addr = INADDR_ANY;	// Allow connection on any valid IP for this machine
 
-            if ( bind( m_hSocket,(struct sockaddr *)&listen_addr, sizeof(struct sockaddr_in) ) == SOCKET_ERROR ) 
+            if ( bind( m_hSocket,(struct sockaddr *)&listen_addr, sizeof(struct sockaddr_in) ) == SOCKET_ERROR )
             {
     #ifdef IASLIB_WIN32__
                 closesocket( m_hSocket );
@@ -234,9 +417,9 @@ namespace IASLib
             {
                 m_nPort = nPort;
                 m_addrIPAddress = INADDR_ANY;
-                    // Now that we've bound the correct socket, we need to un-set the reuse-address option, 
+                    // Now that we've bound the correct socket, we need to un-set the reuse-address option,
                     // because otherwise the accept call creates a socket that matches this one, apparently,
-                    // that includes re-using the same address, which is really, really bad. We can get 
+                    // that includes re-using the same address, which is really, really bad. We can get
                     // two requests on the same *bleep*ing socket, which basically makes the socket library
                     // go off on a quest to use all of the CPU. So, we un-do the option here.
                 nOption = 0;
@@ -261,10 +444,10 @@ namespace IASLib
      *  Client Socket Constructor
      *
      *      This constructor takes a remote host and a port to connect to
-     * and then attempts to connect to that host via that port. 
+     * and then attempts to connect to that host via that port.
      *
      * @param strConnectTo
-     *          The host name or IP address to connect to. 
+     *          The host name or IP address to connect to.
      * @param nPort
      *          The remote port to connect to.
      */
@@ -301,7 +484,7 @@ namespace IASLib
             m_strAddress.Format( "%s:%d", inet_ntoa( connect_addr.sin_addr ), nPort );
         }
 
-        if ( connect( m_hSocket,(struct sockaddr *)&connect_addr, sizeof(struct sockaddr_in) ) == SOCKET_ERROR ) 
+        if ( connect( m_hSocket,(struct sockaddr *)&connect_addr, sizeof(struct sockaddr_in) ) == SOCKET_ERROR )
         {
     #ifdef IASLIB_WIN32__
             closesocket( m_hSocket );
@@ -329,7 +512,7 @@ namespace IASLib
      *  Socket Destructor
      *
      *      This method is used to clean up a socket when the object is
-     * being destroyed. 
+     * being destroyed.
      */
     CSocket::~CSocket()
     {
@@ -356,7 +539,7 @@ namespace IASLib
         if ( m_hSocket != NULL_SOCKET )
         {
             int nRetVal = recv( m_hSocket, pchBuf, 1, 0 );
-            
+
             if ( nRetVal == SOCKET_ERROR )
                 throw( new CSocketException( errno ) );
 
@@ -410,7 +593,7 @@ namespace IASLib
     int CSocket::Send( unsigned char chSend )
     {
         char pchBuf[1];
-     
+
         if ( m_hSocket != NULL_SOCKET )
         {
             pchBuf[0] = (char)chSend;
@@ -431,7 +614,7 @@ namespace IASLib
      * multiple calls to the socket send routine.
      *
      * @param pchBuffer
-     *          The buffer to be sent to the socket. 
+     *          The buffer to be sent to the socket.
      * @param nBufferSize
      *          The length of the data in the buffer to be transmitted.
      */
@@ -535,7 +718,7 @@ namespace IASLib
      * blocking sockets.
      *
      * @param bDontBlock
-     *      Sets whether the socket should block or not when a 
+     *      Sets whether the socket should block or not when a
      *      request is made.
      */
     void CSocket::SetNonBlocking( bool bDontBlock )
@@ -597,7 +780,7 @@ namespace IASLib
     /**
      * inet_ntop
      *
-     * Converts an internet address into a printable (ASCII) 
+     * Converts an internet address into a printable (ASCII)
      * address that's human readable.
      *
      * @param iAddrFamily

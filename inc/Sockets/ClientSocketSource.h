@@ -31,6 +31,7 @@ namespace IASLib
     class CClientSocketSource : public CObject
     {
         protected:
+            CSocketConfig m_config;
             CClientSocketSource( void );
         public:
             DECLARE_OBJECT( CClientSocketSource, CObject );
@@ -39,7 +40,7 @@ namespace IASLib
             virtual CClientSocket *getClientSocket( const char *hostname ) = 0;
             virtual CClientSocket *getClientSocket( const char *hostname, int port ) = 0;
 
-            virtual bool init( CSocketSettings *settings );
+            virtual bool setConfig( const CSocketConfig &config ) { m_config = config; }
     };
 } // end of namespace IASLib
 

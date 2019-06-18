@@ -56,6 +56,7 @@ namespace IASLib
         config->reuseSocket = reuseSocket;
         config->timeoutMillis = timeoutMillis;
         config->noDelay = noDelay;
+        config->blocking = blocking;
 
         return config;
     }
@@ -101,6 +102,11 @@ namespace IASLib
         this->noDelay = noDelay;
         return *this;
     }
+    CSocketConfigBuilder CSocketConfigBuilder::setBlocking( bool blocking )
+    {
+        this->blocking = blocking;
+        return *this;
+    }
 
     CSocketConfigBuilder::CSocketConfigBuilder( void )
     {
@@ -112,6 +118,7 @@ namespace IASLib
         reuseSocket = false;
         timeoutMillis = 60000;
         noDelay = false;
+        blocking = false;
     }
 
     CSocketConfigBuilder::CSocketConfigBuilder( CSocketConfigBuilder &oSource )
@@ -124,6 +131,7 @@ namespace IASLib
         reuseSocket = oSource.reuseSocket;
         timeoutMillis = oSource.timeoutMillis;
         noDelay = oSource.noDelay;
+        blocking = oSource.blocking;
     }
 } // namespace IASLib
 

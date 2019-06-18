@@ -54,6 +54,9 @@ namespace IASLib
             virtual void        EmptyAll( void );
 
             virtual CIterator  *Enumerate( void );
+
+            virtual size_t      Put( CString pNew ) { return Insert(0, pNew); }
+            virtual size_t      Append( CString pNew ) { return Push(pNew); }
         private:
             void                Resize( bool bIncrease = true );
     };
