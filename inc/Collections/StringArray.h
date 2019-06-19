@@ -37,6 +37,7 @@ namespace IASLib
             size_t              m_nScale;
         public:
                                 CStringArray( size_t nScale = 4 );
+                                CStringArray( const CStringArray &oSource );
             virtual            ~CStringArray( void );
 
                                 DEFINE_OBJECT( CStringArray )
@@ -44,6 +45,9 @@ namespace IASLib
             virtual size_t      Push( CString pNew );
             virtual CString     Get( size_t nCount ) const;
             virtual CString    &operator []( size_t nCount ) const;
+            
+            virtual CStringArray &operator =( const CStringArray &oSource );
+
             virtual size_t      Insert( size_t nCount, CString pNew );
             virtual bool        Delete( size_t nCount );
 

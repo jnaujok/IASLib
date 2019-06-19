@@ -87,6 +87,8 @@ namespace IASLib
             void            Empty( void );
 
             virtual CIterator      *Enumerate( void );
+
+            virtual CStringArray keySet( void );
         private:
             int             BuildKey( const char *strKey );
             int             BuildKey( int nKey );

@@ -54,7 +54,7 @@ namespace IASLib
         {
             bRetVal = true;
         }
-        
+
         return bRetVal;
     }
 
@@ -69,6 +69,18 @@ namespace IASLib
         m_nSize = 0;
         m_nElements = 0;
         m_apElements = NULL;
+    }
+
+    CStringArray::CStringArray( const CStringArray &oSource )
+    {
+        m_nScale = oSource.m_nScale;
+        m_nSize = oSource.m_nSize;
+        m_nElements = oSource.m_nElements;
+        m_apElements = new CString *[ m_nSize ];
+        for ( int nX = 0; nX < m_nElements; nX++ )
+        {
+            m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
+        }
     }
 
     CStringArray::~CStringArray( void )
@@ -219,7 +231,7 @@ namespace IASLib
     {
         QuickSort( 0, m_nElements - 1, bAscending );
 
-        return true; 
+        return true;
     }
 
 
@@ -236,7 +248,7 @@ namespace IASLib
 
                 // loop through the array until indices cross
                // Watch out for the unsigned wrap-around on "nHi"
-            while ( ( nLo <= nHi ) && ( nHi <= nHigh ) ) 
+            while ( ( nLo <= nHi ) && ( nHi <= nHigh ) )
             {
                     // find the first element that is greater than or equal to
                     // the partition element starting from the left Index.
