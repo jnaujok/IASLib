@@ -57,6 +57,7 @@ namespace IASLib
             CString         m_strAddress;
             CString         m_strLocalAddress;
             CString         m_strSocketName;
+            bool            m_bBlocking;
         public:
                             CSocket( CSocketConfig config, const char *strConnectTo, int nPort );
                             CSocket( CSocketConfig config, int nBindPort, const char *strBindIP = NULL );

@@ -192,7 +192,7 @@ namespace IASLib
     {
         int     nOption = 1;
 #ifndef IASLIB_NO_LINT__
-        bBlocking = config.isBlocking();
+        m_bBlocking = config.isBlocking();
 #endif
 
         m_nPort = 0;

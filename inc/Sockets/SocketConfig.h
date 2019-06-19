@@ -21,9 +21,6 @@
 
 #ifdef IASLIB_NETWORKING__
 
-#include "ClientSocket.h"
-#include "Socket.h"
-
 namespace IASLib
 {
     class CSocketConfig : public CObject
@@ -54,6 +51,9 @@ namespace IASLib
             bool isBlocking() { return blocking; }
 
             friend class CSocketConfigBuilder;
+            friend class CSocket;
+            friend class CServerSocket;
+            friend class CClientSocket;
     };
 }
 

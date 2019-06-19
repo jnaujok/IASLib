@@ -50,7 +50,7 @@ namespace IASLib
         *                               (<code>true</code>) or treat them all as a 
         *                               single delimiter (<code>false</code>).
         */
-    CStringTokenizer::CStringTokenizer( const char *strParsed, const char *strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid )
+    CStringTokenizer::CStringTokenizer( const char *strParsed, const char *strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid, const bool bIgnoreQuotedDelimiters )
     {
 	    m_nCurrentPosition = 0;
 	    m_strWorkingString = strParsed;
@@ -60,6 +60,7 @@ namespace IASLib
         m_bPreserveDelimiters = bAllDelimitersValid;
         m_bLastTokenBlank = false;
         m_bFirstToken = true;
+        m_bIgnoreQuoted = bIgnoreQuotedDelimiters;
     }
 
         /**
@@ -88,7 +89,7 @@ namespace IASLib
         *                               (<code>true</code>) or treat them all as a 
         *                               single delimiter (<code>false</code>).
         */
-    CStringTokenizer::CStringTokenizer( const CString &strParsed, const char *strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid )
+    CStringTokenizer::CStringTokenizer( const CString &strParsed, const char *strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid, const bool bIgnoreQuotedDelimiters )
     {
 	    m_nCurrentPosition = 0;
 	    m_strWorkingString = strParsed;
@@ -98,6 +99,7 @@ namespace IASLib
         m_bPreserveDelimiters = bAllDelimitersValid;
         m_bLastTokenBlank = false;
         m_bFirstToken = true;
+        m_bIgnoreQuoted = bIgnoreQuotedDelimiters;
     }
 
         /**
@@ -126,7 +128,7 @@ namespace IASLib
         *                               (<code>true</code>) or treat them all as a 
         *                               single delimiter (<code>false</code>).
         */
-    CStringTokenizer::CStringTokenizer( const CString &strParsed, const CString &strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid )
+    CStringTokenizer::CStringTokenizer( const CString &strParsed, const CString &strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid, const bool bIgnoreQuotedDelimiters )
     {
 	    m_nCurrentPosition = 0;
 	    m_strWorkingString = strParsed;
@@ -136,6 +138,7 @@ namespace IASLib
         m_bPreserveDelimiters = bAllDelimitersValid;
         m_bLastTokenBlank = false;
         m_bFirstToken = true;
+        m_bIgnoreQuoted = bIgnoreQuotedDelimiters;
     }
 
         /**
@@ -153,8 +156,8 @@ namespace IASLib
     void CStringTokenizer::SkipDelimiters( void )
     {
 	    while ( ( !m_bReturnTokens ) &&
-	            ( m_nCurrentPosition < m_nMaxPosition ) &&
-	            ( m_strDelimiters.IndexOf( m_strWorkingString[ m_nCurrentPosition ] ) != IASLib::NOT_FOUND ) )
+	            ( m_nCurrentPosition < m_nMaxPosition ) && 
+	            (  m_strDelimiters.IndexOf( m_strWorkingString[ m_nCurrentPosition ] ) != IASLib::NOT_FOUND ) ) 
         {
             if ( ( m_bFirstToken ) && ( m_nCurrentPosition == 0 ) && ( m_bPreserveDelimiters ) )
             {
@@ -165,6 +168,7 @@ namespace IASLib
             m_bFirstToken = false;
             if ( m_bPreserveDelimiters )
                 break;
+
             m_bLastTokenBlank = false;
         }
     }
@@ -199,6 +203,7 @@ namespace IASLib
     CString CStringTokenizer::NextToken( void )
     {
 	    SkipDelimiters();
+        bool inQuote = false;
 
         m_bFirstToken = false;
 
@@ -213,8 +218,10 @@ namespace IASLib
 
             // Search for the next delimiter. Skip all text in-between
 	    while ( ( m_nCurrentPosition < m_nMaxPosition ) &&
-          ( m_strDelimiters.IndexOf( m_strWorkingString[ m_nCurrentPosition ] ) == IASLib::NOT_FOUND ) )
+          ( inQuote || ( m_strDelimiters.IndexOf( m_strWorkingString[ m_nCurrentPosition ] ) == IASLib::NOT_FOUND ) ) )
         {
+            if ( m_bIgnoreQuoted && ( m_strWorkingString[m_nCurrentPosition] == '"' ) )
+                inQuote = ! inQuote;
 	        m_nCurrentPosition++;
 	    }
 

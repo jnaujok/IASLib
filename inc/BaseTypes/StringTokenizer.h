@@ -32,10 +32,11 @@ namespace IASLib
             bool        m_bPreserveDelimiters;
             bool        m_bLastTokenBlank;
             bool        m_bFirstToken;
+            bool        m_bIgnoreQuoted;
         public:
-	                    CStringTokenizer( const char *strParsed, const char *strDelimiters = " \t\n\r\f", const bool bReturnTokens = false, const bool bAllDelimitersValid = false );
-	                    CStringTokenizer( const CString &strParsed, const char *strDelimiters = " \t\n\r\f", const bool bReturnTokens = false, const bool bAllDelimitersValid = false );
-	                    CStringTokenizer( const CString &strParsed, const CString &strDelimiters, const bool bReturnTokens = false, const bool bAllDelimitersValid = false );
+	                    CStringTokenizer( const char *strParsed, const char *strDelimiters = " \t\n\r\f", const bool bReturnTokens = false, const bool bAllDelimitersValid = false, const bool bIgnoreQuotedDelimiters = false );
+	                    CStringTokenizer( const CString &strParsed, const char *strDelimiters = " \t\n\r\f", const bool bReturnTokens = false, const bool bAllDelimitersValid = false, const bool bIgnoreQuotedDelimiters = false );
+	                    CStringTokenizer( const CString &strParsed, const CString &strDelimiters, const bool bReturnTokens = false, const bool bAllDelimitersValid = false, const bool bIgnoreQuotedDelimiters = false );
 	        virtual    ~CStringTokenizer();
 
                         DEFINE_OBJECT( CStringTokenizer );
