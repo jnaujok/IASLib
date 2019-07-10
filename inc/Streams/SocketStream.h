@@ -51,6 +51,8 @@ namespace IASLib
             void                SetNoDelete( void ) { m_bNoDelete = true; }
 
             virtual bool        IsEOS( void );
+
+			virtual void 		Close( void );
 	};
 } // namespace IASLib
 #endif // IASLIB_NETWORKING__

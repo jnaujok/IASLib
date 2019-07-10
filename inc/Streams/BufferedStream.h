@@ -43,8 +43,9 @@ namespace IASLib
 			virtual int         PutBuffer( const char *achBuffer, int nLength );
 			virtual int         GetBuffer( char *achBuffer, int nLength );
 
-            virtual bool        IsEOS( void ) { return m_oStream.IsEOS(); }
+            virtual bool        IsEOS( void );
 
+			virtual void 		Close( void ) { m_oStream.Close(); }
         private:
                                 CBufferedStream( void );
                                 CBufferedStream( const CBufferedStream &oSource );

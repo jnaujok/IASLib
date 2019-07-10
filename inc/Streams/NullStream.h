@@ -1,7 +1,7 @@
 /*
  * Null Stream Class
  *
- *      This class provides the basis for streaming data to a null. In 
+ *      This class provides the basis for streaming data to a null. In
  * other words, everything you send to this file goes to the great bit
  * bucket in the sky.
  *
@@ -39,7 +39,8 @@ namespace IASLib
 			virtual int         GetBuffer( char *achBuffer, int nLength );
 
             virtual bool        IsEOS( void ) { return true; }
-	        
+
+			virtual void 		Close( void ) { m_bIsOpen = false; }
 	};
 } // namespace IASLib
 

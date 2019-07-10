@@ -24,7 +24,7 @@ namespace IASLib
         m_nSize = m_oStream.GetBuffer( m_chBuffer, 4096 );
         m_nPointer = 0;
     }
-	
+
     CBufferedStream::~CBufferedStream( void )
     {
     }
@@ -102,6 +102,15 @@ namespace IASLib
         }
 
         return true;
+    }
+
+    bool CBufferedStream::IsEOS( void )
+    {
+        if ( ( m_nPointer == m_nSize ) && ( m_oStream.IsEOS() ) )
+        {
+            return true;
+        }
+        return false;
     }
 } // namespace IASLib
 

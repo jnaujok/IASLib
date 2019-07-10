@@ -25,12 +25,15 @@ namespace IASLib
 {
     class CStream : public CObject
     {
+        protected:
+            bool                m_bIsOpen;
         public:
-                                CStream( void ) {}
-            virtual            ~CStream( void ) {}
+                                CStream( void ) { m_bIsOpen = true; }
+            virtual            ~CStream( void ) { if (IsOpen()) { Close(); } }
 
                                 DEFINE_OBJECT( CStream );
 
+            virtual bool        IsOpen( void ) { return m_bIsOpen; }
             virtual CString     GetLine( void ) = 0;
             virtual char        GetChar( void ) = 0;
             virtual void        PutChar( const char chPut ) = 0;
@@ -42,6 +45,8 @@ namespace IASLib
 
             virtual bool        IsEOS( void ) = 0;
 
+            virtual void        Close( void ) = 0;
+
             CStream            &operator << ( const char chPut ) { PutChar( chPut ); return *this; }
             CStream            &operator << ( const short shPut);
             CStream            &operator << ( const long lPut);
@@ -52,7 +57,7 @@ namespace IASLib
             CStream            &operator << ( const char *strPut );
 
             CStream            &operator >> ( char &chGet ) { chGet = GetChar( ); return *this; }
-            CStream            &operator >> ( short &shGet); 
+            CStream            &operator >> ( short &shGet);
             CStream            &operator >> ( long &lGet);
             CStream            &operator >> ( unsigned char &chGet ) { chGet = GetUChar( ); return *this; }
             CStream            &operator >> ( unsigned short &shGet);

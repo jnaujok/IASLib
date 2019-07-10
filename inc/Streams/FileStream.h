@@ -44,7 +44,8 @@ namespace IASLib
 			virtual int         GetBuffer( char *achBuffer, int nLength );
 
             virtual bool        IsEOS( void ) { return m_pFile->IsEOF(); }
-	        
+
+			virtual void 		Close( void );
 	};
 } // namespace IASLib
 

@@ -83,6 +83,24 @@ namespace IASLib
         }
     }
 
+    CStringArray &CStringArray::operator =( const CStringArray &oSource )
+    {
+        if ( &oSource != this )
+        {
+            this->DeleteAll();
+            m_nScale = oSource.m_nScale;
+            m_nSize = oSource.m_nSize;
+            m_nElements = oSource.m_nElements;
+            m_apElements = new CString *[ m_nSize ];
+            for ( int nX = 0; nX < m_nElements; nX++ )
+            {
+                m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
+            }
+        }
+
+        return *this;
+    }
+
     CStringArray::~CStringArray( void )
     {
         DeleteAll();

@@ -46,6 +46,8 @@ namespace IASLib
 			virtual int             GetBuffer( char *achBuffer, int nLength );
 
             virtual bool            IsEOS( void ) { return ( m_nCurrentPosition == m_strString.GetCount() ); }
+
+            virtual void            Close( void ) { m_bIsOpen = false; }
     }; // class CStringStream
 } // namespace IASLib
 
