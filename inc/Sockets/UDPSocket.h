@@ -74,8 +74,6 @@ namespace IASLib
             virtual unsigned long   GetAddress( void ) { return m_addrIPAddress; }
             virtual const char     *GetAddressString( bool bRemoteAddress=true, bool bIncludePort=false );
             virtual void            Close( void );
-            virtual void            SetNonBlocking( bool bDontBlock );
-            virtual bool            HasData( void );
 
             static unsigned short Htons( unsigned short ushValue ) { return htons( ushValue ); }
             static unsigned long  Htonl( unsigned long ulValue ) { return htonl( ulValue ); }
