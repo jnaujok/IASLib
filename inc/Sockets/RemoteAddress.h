@@ -33,22 +33,44 @@
     #include <arpa/inet.h>
 #endif
 
-#include "BaseTypes/Object.h"
+#include "Object.h"
+#include "String_.h"
 
 namespace IASLib
 {
     class CRemoteAddress : public CObject
     {
         protected:
+            sockaddr   *m_sockAddress;
+            CString     m_strHostname;
+            CString     m_strService;
         public:
-                            CRemoteAddress( const char *hostname, int port = -1 );
+                            /// Note that hostname can be an IP or IPv6 address
+                            CRemoteAddress( const char *hostname, const char *service = NULL );
+                            CRemoteAddress( const char *hostname, int port );
                             CRemoteAddress( sockaddr *address );
                             CRemoteAddress( sockaddr_in *address );
 	        virtual        ~CRemoteAddress();
 
                             DEFINE_OBJECT( CRemoteAddress )
 
+            virtual CString         toString( void );
+            virtual CString         toStringWithPort( void );
 
+            virtual void    SetAddress( const char *hostname );
+            virtual void    SetAddress( sockaddr *sockAddress );
+
+            virtual sockaddr *GetAddress( void );
+            virtual sockaddr_in *GetIPv4( void );
+            virtual sockaddr_in6 *GetIPv6( void );
+
+            virtual CString GetHostname( void );
+            virtual sa_family_t GetFamily( void );
+            virtual CString GetFamilyString( void );
+
+            virtual operator sockaddr *( void ) const;
+            virtual operator sockaddr_in *(void) const;
+            virtual operator sockaddr_in6 *(void) const;
     };
 } // namespace IASLib
 
