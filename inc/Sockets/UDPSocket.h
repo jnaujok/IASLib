@@ -58,12 +58,11 @@ namespace IASLib
             CString         m_strLocalAddress;
             CString         m_strSocketName;
         public:
-                            CUDPSocket( CSocketConfig config, const char *strConnectTo, int nPort );
-                            CUDPSocket( CSocketConfig config, int nBindPort, const char *strBindIP = NULL );
-                            CUDPSocket( SOCKET hSocket, const char *strSockName, void *AddressIn=NULL );
-	                        CUDPSocket( int nPort, bool bBlocking = true );
-                            CUDPSocket( const char *strConnectTo, int nPort );
-	        virtual        ~CUDPSocket();
+                            // Server socket
+	                        CUDPSocket( int nPort );
+                            // client socket
+                            CUDPSocket( void );
+	        virtual        ~CUDPSocket( void );
 
                             DEFINE_OBJECT( CUDPSocket )
 
@@ -72,7 +71,6 @@ namespace IASLib
             virtual int             Send( const char *pchBuffer, int nBufferSize );
             virtual int             GetPort( void ) { return m_nPort; }
             virtual unsigned long   GetAddress( void ) { return m_addrIPAddress; }
-            virtual const char     *GetAddressString( bool bRemoteAddress=true, bool bIncludePort=false );
             virtual void            Close( void );
 
             static unsigned short Htons( unsigned short ushValue ) { return htons( ushValue ); }

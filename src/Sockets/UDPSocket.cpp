@@ -20,14 +20,14 @@
 
 namespace IASLib
 {
-    CUDPSocket::CUDPSocket( CSocketConfig config, const char *strConnectTo, int nPort )
-    {}
-    CUDPSocket::CUDPSocket( CSocketConfig config, int nBindPort, const char *strBindIP )
-    {}
     CUDPSocket::CUDPSocket( int nPort, bool bBlocking = true )
-    {}
+    {
+
+    }
     CUDPSocket::CUDPSocket( const char *strConnectTo, int nPort )
-    {}
+    {
+
+    }
     CUDPSocket::~CUDPSocket()
     {}
 
