@@ -41,15 +41,18 @@ namespace IASLib
     class CRemoteAddress : public CObject
     {
         protected:
-            sockaddr   *m_sockAddress;
+            struct addrinfo   *m_sockAddressList;
             CString     m_strHostname;
             CString     m_strService;
+            bool        m_bIsValid;
         public:
                             /// Note that hostname can be an IP or IPv6 address
-                            CRemoteAddress( const char *hostname, const char *service = NULL );
-                            CRemoteAddress( const char *hostname, int port );
-                            CRemoteAddress( sockaddr *address );
-                            CRemoteAddress( sockaddr_in *address );
+                            CRemoteAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
+                            CRemoteAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
+                            CRemoteAddress( const struct sockaddr *address, bool bResolveHost = false );
+                            CRemoteAddress( const struct sockaddr_in *address, bool bResolveHost = false );
+                            CRemoteAddress( const struct sockaddr_in6 *address, bool bResolveHost = false );
+                            CRemoteAddress( const struct addrinfo *addressInfo, bool bResolveHost = false );
 	        virtual        ~CRemoteAddress();
 
                             DEFINE_OBJECT( CRemoteAddress )
@@ -57,20 +60,28 @@ namespace IASLib
             virtual CString         toString( void );
             virtual CString         toStringWithPort( void );
 
-            virtual void    SetAddress( const char *hostname );
-            virtual void    SetAddress( sockaddr *sockAddress );
+            virtual bool isValid( void ) { return m_bIsValid; }
 
-            virtual sockaddr *GetAddress( void );
-            virtual sockaddr_in *GetIPv4( void );
-            virtual sockaddr_in6 *GetIPv6( void );
+            virtual void    SetAddress( const char *hostname );
+            virtual void    SetAddress( const struct sockaddr *sockAddress );
+
+            virtual struct sockaddr *GetAddress( void ) const;
+            virtual struct sockaddr_in *GetIPv4( void ) const;
+            virtual struct sockaddr_in6 *GetIPv6( void ) const;
 
             virtual CString GetHostname( void );
             virtual sa_family_t GetFamily( void );
             virtual CString GetFamilyString( void );
 
-            virtual operator sockaddr *( void ) const;
-            virtual operator sockaddr_in *(void) const;
-            virtual operator sockaddr_in6 *(void) const;
+            virtual operator struct sockaddr *( void ) const { return GetAddress(); }
+            virtual operator struct sockaddr_in *(void) const { return GetIPv4(); }
+            virtual operator struct sockaddr_in6 *(void) const { return GetIPv6(); }
+
+            static CString addressToString( const struct sockaddr *address );
+            static CString lookupHost( const struct sockaddr *address );
+            static struct addrinfo *resolveHost( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
+            static struct addrinfo *resolveHost( const char *hostname, int port, int socketType = SOCK_STREAM );
+            static int getPort( const struct sockaddr *address );
     };
 } // namespace IASLib
 
