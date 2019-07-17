@@ -33,8 +33,8 @@
     #include <arpa/inet.h>
 #endif
 
-#include "BaseTypes/Object.h"
-#include "BaseTypes/String_.h"
+#include "../BaseTypes/Object.h"
+#include "../BaseTypes/String_.h"
 
 namespace IASLib
 {
@@ -53,6 +53,7 @@ namespace IASLib
                             CRemoteAddress( const struct sockaddr_in *address, bool bResolveHost = false );
                             CRemoteAddress( const struct sockaddr_in6 *address, bool bResolveHost = false );
                             CRemoteAddress( const struct addrinfo *addressInfo, bool bResolveHost = false );
+                            CRemoteAddress( void );
 	        virtual        ~CRemoteAddress();
 
                             DEFINE_OBJECT( CRemoteAddress )

@@ -18,26 +18,8 @@
 #define IASLIB_UDPSOCKET_H__
 
 #ifdef IASLIB_NETWORKING__
-#ifdef IASLIB_WIN32__
-    #include <winsock2.h>
-    const SOCKET NULL_SOCKET = (SOCKET)NULL;
-#else
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-#ifndef IASLIB_DEC__
-    #include <inttypes.h>
-#endif
-    #include <unistd.h>
-    #include <netdb.h>
-    #include <arpa/inet.h>
-    #define INVALID_SOCKET -1
-    #define SOCKET_ERROR -1
-    typedef int SOCKET;
-    const int NULL_SOCKET = 0;
-#endif
 
-#include "../BaseTypes/String_.h"
+#include "Socket.h"
 #include "RemoteAddress.h"
 
 namespace IASLib

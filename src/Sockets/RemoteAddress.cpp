@@ -21,6 +21,12 @@
 
 namespace IASLib
 {
+    CRemoteAddress::CRemoteAddress( void ) 
+    {
+        m_sockAddressList = NULL;
+        m_bIsValid = false;
+    }
+    
     CRemoteAddress::CRemoteAddress( const char *hostname, const char *service, int socketType )
     {
         m_sockAddressList = CRemoteAddress::resolveAddress(hostname,service,socketType);

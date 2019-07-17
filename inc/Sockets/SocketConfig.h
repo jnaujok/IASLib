@@ -21,7 +21,7 @@
 
 #ifdef IASLIB_NETWORKING__
 
-#include "Object.h"
+#include "../BaseTypes/Object.h"
 
 namespace IASLib
 {
