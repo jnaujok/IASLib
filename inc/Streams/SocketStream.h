@@ -52,7 +52,7 @@ namespace IASLib
 
             virtual bool        IsEOS( void );
 
-			virtual void 		Close( void );
+			virtual void        Close( void );
 	};
 } // namespace IASLib
 #endif // IASLIB_NETWORKING__

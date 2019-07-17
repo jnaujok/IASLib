@@ -47,7 +47,7 @@ namespace IASLib
 
             virtual bool            IsEOS( void ) { return ( m_nCurrentPosition == m_strString.GetCount() ); }
 
-            virtual void            Close( void ) { m_bIsOpen = false; }
+            virtual void            Close( void ) { m_strString = ""; m_nCurrentPosition = 0; m_bIsOpen = false; }
     }; // class CStringStream
 } // namespace IASLib
 

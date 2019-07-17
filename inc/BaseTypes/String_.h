@@ -246,6 +246,9 @@ namespace IASLib
 
             static CString FormatString( const char *fmt, ... );
 
+            virtual int hashcode( void );
+
+
         private:
             void        ChangeStub( void );
             void        ResizeString( int nNewSize );

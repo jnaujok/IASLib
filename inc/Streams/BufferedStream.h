@@ -19,15 +19,20 @@
 
 #include "Stream.h"
 
+#define BUFFER_SIZE 4096
+
 namespace IASLib
 {
 	class CBufferedStream : public CStream
 	{
 		protected:
 			CStream            &m_oStream;
-            char                m_chBuffer[4096];
-            int                 m_nPointer;
-            int                 m_nSize;
+            char                m_chReadBuffer[BUFFER_SIZE];
+            char                m_chWriteBuffer[BUFFER_SIZE];
+            int                 m_nReadPointer;
+            int                 m_nWritePointer;
+            int                 m_nBufferRead;
+			int					m_nBufferWritten;
 		public:
 								CBufferedStream( CStream &oStream );
 			virtual            ~CBufferedStream( void );
@@ -45,7 +50,7 @@ namespace IASLib
 
             virtual bool        IsEOS( void );
 
-			virtual void 		Close( void ) { m_oStream.Close(); }
+			virtual void		Close( void );
         private:
                                 CBufferedStream( void );
                                 CBufferedStream( const CBufferedStream &oSource );

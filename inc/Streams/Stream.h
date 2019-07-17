@@ -29,7 +29,7 @@ namespace IASLib
             bool                m_bIsOpen;
         public:
                                 CStream( void ) { m_bIsOpen = true; }
-            virtual            ~CStream( void ) { if (IsOpen()) { Close(); } }
+            virtual            ~CStream( void ) {}
 
                                 DEFINE_OBJECT( CStream );
 

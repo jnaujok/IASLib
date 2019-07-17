@@ -37,6 +37,7 @@ namespace IASLib
     {
         m_strString = "";
         m_nCurrentPosition = 0;
+        m_bIsOpen = false;
     }
 
     CString CStringStream::GetLine( void )

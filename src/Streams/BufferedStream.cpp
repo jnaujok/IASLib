@@ -15,18 +15,26 @@
  */
 
 #include "BufferedStream.h"
+#include "StreamException.h"
+
+#define MIN(x,y) ((x < y) ? x:y)
 
 namespace IASLib
 {
     CBufferedStream::CBufferedStream( CStream &oStream )
         : m_oStream( oStream )
     {
-        m_nSize = m_oStream.GetBuffer( m_chBuffer, 4096 );
-        m_nPointer = 0;
+        memset( m_chReadBuffer, 0, BUFFER_SIZE );
+        memset( m_chWriteBuffer, 0, BUFFER_SIZE );
+        m_nReadPointer = 0;
+        m_nWritePointer = 0;
+        m_nBufferRead = 0;
+        m_nBufferWritten = 0;
     }
 
     CBufferedStream::~CBufferedStream( void )
     {
+        Close();
     }
 
 	IMPLEMENT_OBJECT( CBufferedStream, CStream );
@@ -34,6 +42,12 @@ namespace IASLib
     CString CBufferedStream::GetLine( void )
     {
         CString strRetVal;
+        char inChar;
+
+        while ( (!IsEOS() ) && (inChar = GetChar() ) != '\n' )
+        {
+            strRetVal += inChar;
+        }
 
         return strRetVal;
     }
@@ -51,6 +65,7 @@ namespace IASLib
     void CBufferedStream::PutLine( const CString &strOutput )
     {
         PutBuffer( (const char *)strOutput, (int)strOutput.GetCount() );
+        PutNextChar( '\n' );
     }
 
     unsigned char CBufferedStream::GetUChar( void )
@@ -65,40 +80,90 @@ namespace IASLib
 
     int CBufferedStream::PutBuffer( const char *achBuffer, int nLength )
     {
-        // Magic with memcpy
-        memcpy( m_chBuffer, achBuffer, nLength );
-        return 0;
+        int nOffset = 0, nSize = 0;
+
+        while ( nOffset < nLength )
+        {
+            nSize = MIN( nLength - nOffset, BUFFER_SIZE - m_nWritePointer );
+
+            memcpy( m_chWriteBuffer + m_nWritePointer, achBuffer + nOffset, nSize );
+            m_nWritePointer += nSize;
+            m_nBufferWritten += nSize;
+            nOffset += nSize;
+
+            if ( m_nWritePointer == BUFFER_SIZE )
+            {
+                m_oStream.PutBuffer( m_chWriteBuffer, m_nBufferWritten );
+                m_nWritePointer = 0;
+                m_nBufferWritten = 0;    
+            }
+        }
+        return nLength;
     }
 
     int CBufferedStream::GetBuffer( char *achBuffer, int nLength )
     {
-        // More Magic with memcpy
-        memcpy( achBuffer, m_chBuffer, nLength );
+        int retBytes = 0;
+        // Test for cases
+        if ( (m_nBufferRead - m_nReadPointer) >= nLength )
+        {
+            // We already have the data in memory
+            memcpy( achBuffer, m_chReadBuffer + m_nReadPointer, nLength );
+            m_nReadPointer += nLength;
+            retBytes = nLength;
+        }
+        else
+        {
+            int nOffset = 0;
+            while ( ( ( m_nBufferRead - m_nReadPointer ) < ( nLength - nOffset ) ) && ( ! IsEOS() ) )
+            {
+                memcpy( achBuffer + nOffset, m_chReadBuffer + m_nReadPointer, m_nBufferRead - m_nReadPointer );
+                nOffset += m_nBufferRead - m_nReadPointer;
+                m_nReadPointer = 0;
+                m_nBufferRead = m_oStream.GetBuffer( m_chReadBuffer, BUFFER_SIZE );
+            }
 
-        return nLength;
+            if ( ( nOffset < nLength ) && ( ! IsEOS() ) )
+            {
+                int nSize = MIN( m_nBufferRead - m_nReadPointer, nLength - nOffset );
+                memcpy( achBuffer + nOffset, m_chReadBuffer + m_nReadPointer, nSize );
+                nOffset += nSize;
+                m_nReadPointer = nSize;
+            }
+            retBytes = nOffset;
+        }
+
+        return retBytes;
     }
 
     unsigned char CBufferedStream::GetNextChar( void )
     {
-        unsigned char chRetVal = m_chBuffer[ m_nPointer ];
-        m_nPointer++;
-
-        if ( m_nPointer == 4096 )
+        if (  ( m_nReadPointer == m_nBufferRead ) && ( ! IsEOS() ) )
         {
-            // Rollover logic
+            m_nReadPointer = 0;
+            m_nBufferRead = m_oStream.GetBuffer( m_chReadBuffer, BUFFER_SIZE );
         }
 
-        return chRetVal;
+        if ( m_nReadPointer < m_nBufferRead )
+        {
+            unsigned char chRetVal = m_chReadBuffer[ m_nReadPointer ];
+            m_nReadPointer++;
+            return chRetVal;
+        }
+
+        IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
     }
 
     bool CBufferedStream::PutNextChar( const unsigned char chNext )
     {
-        m_chBuffer[m_nPointer] = chNext;
-        m_nPointer++;
+        m_chWriteBuffer[m_nWritePointer] = chNext;
+        m_nWritePointer++;
 
-        if ( m_nPointer == 4096 )
+        if ( m_nWritePointer == BUFFER_SIZE )
         {
-            // Rollover logic
+            m_oStream.PutBuffer( m_chWriteBuffer, m_nWritePointer );
+            m_nWritePointer = 0;
+            memset(m_chWriteBuffer, 0, BUFFER_SIZE );
         }
 
         return true;
@@ -106,11 +171,26 @@ namespace IASLib
 
     bool CBufferedStream::IsEOS( void )
     {
-        if ( ( m_nPointer == m_nSize ) && ( m_oStream.IsEOS() ) )
+        if ( ( m_nReadPointer == m_nBufferRead ) && ( m_oStream.IsEOS() ) )
         {
             return true;
         }
         return false;
+    }
+
+    void CBufferedStream::Close( void )
+    {
+        if ( ( m_oStream.IsOpen() ) && IsOpen() )
+        {
+            if ( m_nBufferWritten > 0 )
+            {
+                m_oStream.PutBuffer( m_chWriteBuffer, m_nBufferWritten );
+                m_nWritePointer = 0;
+                m_nBufferWritten = 0;
+            }
+            m_oStream.Close();
+            m_bIsOpen = false;
+        }        
     }
 } // namespace IASLib
 

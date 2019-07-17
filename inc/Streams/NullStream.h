@@ -40,7 +40,7 @@ namespace IASLib
 
             virtual bool        IsEOS( void ) { return true; }
 
-			virtual void 		Close( void ) { m_bIsOpen = false; }
+			virtual void 		Close() { m_bIsOpen = false; }
 	};
 } // namespace IASLib
 

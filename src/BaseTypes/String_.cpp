@@ -2057,5 +2057,20 @@ namespace IASLib
         return ret;
     }
 
+    // For proper hashing of strings, we redefine the hashcode function so 
+    // that the hash of a string is equivalent to the hash of its contents.
+    // Thus two strings with the same value, "Hello" and "Hello" will hash
+    // to the same hashcode, even though they are different values. 
+    int CString::hashcode( void )
+    {
+        int result = 131;
+
+        for ( int x = 0; x < m_pStubData->m_nLength; x++ )
+        {
+            result = 37 * result + m_pStubData->m_strData[x];
+        }
+
+        return result;
+    }
 
 } // namespace ISALib

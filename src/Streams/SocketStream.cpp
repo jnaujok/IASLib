@@ -41,6 +41,7 @@ namespace IASLib
            delete m_pSocket;
        }
        m_pSocket = NULL;
+       m_bIsOpen = false;
    }
 
    /***********************************************************************
