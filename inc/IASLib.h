@@ -20,6 +20,8 @@
 #ifndef IASLIB__
 #define IASLIB__
 
+#pragma pack(push, 1)
+
 #ifndef IASLIB_WIN32__
 #ifndef IASLIB_SUN__
 #ifndef IASLIB_DEC__
@@ -234,6 +236,8 @@
 #include "Sockets/SecureSocket.h"
 #include "Sockets/SecureClientSocket.h"
 #include "Sockets/Socket.h"
+#include "Sockets/RemoteAddress.h"
+#include "Sockets/UDPSocket.h"
 
 //*********
 //  STATS
@@ -258,6 +262,7 @@
 #include "Streams/NullStream.h"
 #include "Streams/SocketStream.h"
 #include "Streams/StringStream.h"
+#include "Streams/BufferedStream.h"
 
 //*************
 //  THREADING
@@ -280,5 +285,7 @@
 #include "XML/XMLElement.h"
 #include "XML/XMLIndex.h"
 #include "XML/XMLProperty.h"
+
+#pragma pack(pop)
 
 #endif // IASLIB__

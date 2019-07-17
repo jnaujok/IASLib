@@ -33,8 +33,8 @@
     #include <arpa/inet.h>
 #endif
 
-#include "Object.h"
-#include "String_.h"
+#include "BaseTypes/Object.h"
+#include "BaseTypes/String_.h"
 
 namespace IASLib
 {
