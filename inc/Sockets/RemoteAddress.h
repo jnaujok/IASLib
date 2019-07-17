@@ -79,8 +79,8 @@ namespace IASLib
 
             static CString addressToString( const struct sockaddr *address );
             static CString lookupHost( const struct sockaddr *address );
-            static struct addrinfo *resolveHost( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
-            static struct addrinfo *resolveHost( const char *hostname, int port, int socketType = SOCK_STREAM );
+            static struct addrinfo *resolveAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
+            static struct addrinfo *resolveAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
             static int getPort( const struct sockaddr *address );
     };
 } // namespace IASLib

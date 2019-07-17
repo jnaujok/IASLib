@@ -209,14 +209,17 @@ NETHEADERS  = $(NETINC)/HTTPClient.h $(NETINC)/HTTPHeader.h \
               $(NETINC)/HTTPServer.h $(NETINC)/Mail.h \
               $(NETINC)/Server.h
 
-SOCKHEADERS = $(SOCKINC)/Socket.h $(SOCKINC)/ClientSocket.h $(SOCKINC)/ServerSocket.h
+SOCKHEADERS = $(SOCKINC)/Socket.h $(SOCKINC)/ClientSocket.h $(SOCKINC)/ServerSocket.h \
+              $(SOCKINC)/RemoteAddress.h  $(SOCKINC)/ClientSocketSource.h $(SOCKINC)/FixedConnectionPool.h \
+			  $(SOCKINC)/SecureClientSocket.h $(SOCKINC)/SecureSocket.h $(SOCKINC)/SocketConfig.h \
+			  $(SOCKINC)/UDPSocket.h
 
 STATHEADERS = $(STATINC)/Histogram.h
 
 STUSHEADERS = $(STUSINC)/CPUUsage.h
 
 STRMHEADERS = $(STRMINC)/Stream.h $(STRMINC)/FileStream.h $(STRMINC)/NullStream.h \
-              $(STRMINC)/SocketStream.h
+              $(STRMINC)/SocketStream.h $(STRMINC)/StringStream.h $(STRMINC)/BufferedStream.h
 
 THRDHEADERS = $(THRDINC)/Mutex.h $(THRDINC)/Semaphore.h $(THRDINC)/Thread.h \
               $(THRDINC)/ThreadMonitor.h $(THRDINC)/ServerThread.h \
@@ -275,7 +278,11 @@ JSONOBJECTS = $(OBJDIR)/JsonNode.o $(OBJDIR)/ObjectNode.o $(OBJDIR)/ArrayNode.o 
 NETOBJECTS  = $(OBJDIR)/HTTPClient.o $(OBJDIR)/HTTPHeader.o \
               $(OBJDIR)/HTTPHeaderList.o $(OBJDIR)/Mail.o
 
-SOCKOBJECTS = $(OBJDIR)/ClientSocket.o $(OBJDIR)/ServerSocket.o $(OBJDIR)/Socket.o
+SOCKOBJECTS = $(OBJDIR)/ClientSocket.o $(OBJDIR)/ServerSocket.o $(OBJDIR)/Socket.o \
+              $(OBJDIR)/RemoteAddress.o $(OBJDIR)/SocketConfig.o \
+			  $(OBJDIR)/UDPSocket.o
+#$(OBJDIR)/ClientSocketSource.o $(OBJDIR)/FixedConnectionPool.o
+#			  $(OBJDIR)/SecureClientSocket.o $(OBJDIR)/SecureSocket.o
 
 STATOBJECTS = $(OBJDIR)/Histogram.o
 
@@ -561,6 +568,28 @@ $(OBJDIR)/ClientSocket.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/ClientSocket.
 
 $(OBJDIR)/ServerSocket.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/ServerSocket.cpp;
 	$(COMPILE) -c $(SOCKDIR)/ServerSocket.cpp -o $(OBJDIR)/ServerSocket.o
+
+#$(OBJDIR)/ClientSocketSource.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/ClientSocketSource.cpp;
+#	$(COMPILE) -c $(SOCKDIR)/ClientSocketSource.cpp -o $(OBJDIR)/ClientSocketSource.o
+
+#$(OBJDIR)/FixedConnectionPool.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/FixedConnectionPool.cpp;
+#	$(COMPILE) -c $(SOCKDIR)/FixedConnectionPool.cpp -o $(OBJDIR)/FixedConnectionPool.o
+
+$(OBJDIR)/RemoteAddress.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/RemoteAddress.cpp;
+	$(COMPILE) -c $(SOCKDIR)/RemoteAddress.cpp -o $(OBJDIR)/RemoteAddress.o
+
+#$(OBJDIR)/SecureClientSocket.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/SecureClientSocket.cpp;
+#	$(COMPILE) -c $(SOCKDIR)/SecureClientSocket.cpp -o $(OBJDIR)/SecureClientSocket.o
+
+#$(OBJDIR)/SecureSocket.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/SecureSocket.cpp;
+#	$(COMPILE) -c $(SOCKDIR)/SecureSocket.cpp -o $(OBJDIR)/SecureSocket.o
+
+$(OBJDIR)/SocketConfig.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/SocketConfig.cpp;
+	$(COMPILE) -c $(SOCKDIR)/SocketConfig.cpp -o $(OBJDIR)/SocketConfig.o
+
+$(OBJDIR)/UDPSocket.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/UDPSocket.cpp;
+	$(COMPILE) -c $(SOCKDIR)/UDPSocket.cpp -o $(OBJDIR)/UDPSocket.o
+
 
 #
 ## STATISTICAL OBJECTS

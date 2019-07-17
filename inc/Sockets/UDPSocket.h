@@ -38,7 +38,7 @@
 #endif
 
 #include "../BaseTypes/String_.h"
-#include "SocketConfig.h"
+#include "RemoteAddress.h"
 
 namespace IASLib
 {
@@ -51,11 +51,8 @@ namespace IASLib
     #endif
             SOCKET          m_hSocket;
             int             m_nPort;
-            unsigned long   m_addrIPAddress;
-            int             m_nLocalPort;
-            unsigned long   m_addrLocalIPAddress;
+            CRemoteAddress *m_addrIPAddress;
             CString         m_strAddress;
-            CString         m_strLocalAddress;
             CString         m_strSocketName;
         public:
                             // Server socket
@@ -66,19 +63,14 @@ namespace IASLib
 
                             DEFINE_OBJECT( CUDPSocket )
 
+            virtual void setName( const char *name ) { m_strSocketName = name; }
+            virtual CString getName( void ) { return m_strSocketName; }
             virtual bool            IsConnected( void ) { return (m_hSocket != NULL_SOCKET ) ? true:false; }
-            virtual int             Read( char *pchBuffer, int nBufferSize );
-            virtual int             Send( const char *pchBuffer, int nBufferSize );
+            virtual int             Read( char *pchBuffer, int nBufferSize, CRemoteAddress &incomingAddress );
+            virtual int             Send( const char *pchBuffer, int nBufferSize, const CRemoteAddress &targetAddress );
             virtual int             GetPort( void ) { return m_nPort; }
-            virtual unsigned long   GetAddress( void ) { return m_addrIPAddress; }
+            virtual const CRemoteAddress &GetAddress( void ) const { return *m_addrIPAddress; }
             virtual void            Close( void );
-
-            static unsigned short Htons( unsigned short ushValue ) { return htons( ushValue ); }
-            static unsigned long  Htonl( unsigned long ulValue ) { return htonl( ulValue ); }
-            static unsigned short Ntohs( unsigned short ushValue ) { return ntohs( ushValue ); }
-            static unsigned long  Ntohl( unsigned long ulValue ) { return ntohl( ulValue ); }
-
-            static const char *inet_ntop( int iAddrFamily, unsigned long *addrConvert, char *strBuffer, int nMaxLen );
     };
 } // namespace IASLib
 

@@ -23,7 +23,7 @@ namespace IASLib
 {
     CRemoteAddress::CRemoteAddress( const char *hostname, const char *service, int socketType )
     {
-        m_sockAddressList = resolveAddress(hostname,service,socketType);
+        m_sockAddressList = CRemoteAddress::resolveAddress(hostname,service,socketType);
         m_strHostname = hostname;
         m_strService = service;
         m_bIsValid = (m_sockAddressList != NULL );
@@ -50,15 +50,14 @@ namespace IASLib
 
         m_strService.Format( "%d", getPort(address) );
 
-        m_sockAddressList = resolveAddress(m_strHostname, m_strService, SOCK_RAW );
+        m_sockAddressList = CRemoteAddress::resolveAddress(m_strHostname, m_strService, SOCK_RAW );
         m_bIsValid = (m_sockAddressList != NULL );
     }
 
     CRemoteAddress::CRemoteAddress( const struct sockaddr_in *address, bool bResolveHost )
     {
         struct sockaddr temp;
-        temp.sa_family = AF_INET;
-        memcpy( temp.sa_data, address, sizeof(struct sockaddr_in) );
+        memcpy( &temp, address, sizeof(struct sockaddr_in) );
 
         if (bResolveHost)
         {
@@ -70,28 +69,24 @@ namespace IASLib
         }
         m_strService.Format( "%d", getPort( &temp ));
 
-        m_sockAddressList = resolveAddress(m_strHostname, m_strService, SOCK_RAW );
+        m_sockAddressList = CRemoteAddress::resolveAddress(m_strHostname, m_strService, SOCK_RAW );
         m_bIsValid = (m_sockAddressList != NULL );
     }
 
     CRemoteAddress::CRemoteAddress( const struct sockaddr_in6 *address, bool bResolveHost )
     {
-        struct sockaddr temp;
-        temp.sa_family = AF_INET;
-        memcpy( temp.sa_data, address, sizeof(struct sockaddr_in) );
-
         if (bResolveHost)
         {
-            m_strHostname = lookupHost( &temp );
+            m_strHostname = lookupHost( (const struct sockaddr *)address );
         }
         else
         {
-            m_strHostname = addressToString( &temp );
+            m_strHostname = addressToString( (const struct sockaddr *)address );
         }
 
-        m_strService.Format( "%d", getPort( &temp ));
+        m_strService.Format( "%d", getPort( (const struct sockaddr *)address ));
 
-        m_sockAddressList = resolveAddress(m_strHostname, m_strService, SOCK_RAW );
+        m_sockAddressList = CRemoteAddress::resolveAddress(m_strHostname, m_strService, SOCK_RAW );
         m_bIsValid = (m_sockAddressList != NULL );
     }
 
@@ -122,7 +117,7 @@ namespace IASLib
         {
             freeaddrinfo(m_sockAddressList);
         }
-        m_sockAddressList = resolveAddress( hostname, (const char *)NULL, SOCK_STREAM );
+        m_sockAddressList = CRemoteAddress::resolveAddress( hostname, (const char *)NULL, SOCK_STREAM );
     }
 
     void CRemoteAddress::SetAddress( const struct sockaddr *sockAddress )
@@ -135,7 +130,7 @@ namespace IASLib
 
         m_strService.Format( "%d", getPort(sockAddress) );
 
-        m_sockAddressList = resolveAddress(m_strHostname, m_strService, SOCK_RAW );
+        m_sockAddressList = CRemoteAddress::resolveAddress(m_strHostname, m_strService, SOCK_RAW );
         m_bIsValid = (m_sockAddressList != NULL );
     }
 
@@ -246,7 +241,7 @@ namespace IASLib
         return -1;
     }
 
-    struct addrinfo *resolveAddress( const char *hostname, const char *service, int socketType )
+    struct addrinfo *CRemoteAddress::resolveAddress( const char *hostname, const char *service, int socketType )
     {
         struct addrinfo *pHints = new struct addrinfo();
         memset( pHints, 0, sizeof( struct addrinfo ) );
@@ -276,7 +271,7 @@ namespace IASLib
         return NULL;
     }
 
-    struct addrinfo *resolveAddress( const char *hostname, int port, int socketType )
+    struct addrinfo *CRemoteAddress::resolveAddress( const char *hostname, int port, int socketType )
     {
         struct addrinfo *pHints = new struct addrinfo();
         memset( pHints, 0, sizeof( struct addrinfo ) );

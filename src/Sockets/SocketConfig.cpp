@@ -19,6 +19,7 @@
 #ifdef IASLIB_NETWORKING__
 
 #include "SocketConfig.h"
+#include "String_.h"
 
 namespace IASLib
 {

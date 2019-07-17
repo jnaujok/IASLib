@@ -21,6 +21,8 @@
 
 #ifdef IASLIB_NETWORKING__
 
+#include "Object.h"
+
 namespace IASLib
 {
     class CSocketConfig : public CObject
@@ -38,6 +40,7 @@ namespace IASLib
         protected:
             CSocketConfig( void );
         public:
+            virtual ~CSocketConfig( void );
             DEFINE_OBJECT( CSocketConfig );
 
             int getBacklogSize() { return backlogSize; }
