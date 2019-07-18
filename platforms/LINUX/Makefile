@@ -212,7 +212,7 @@ NETHEADERS  = $(NETINC)/HTTPClient.h $(NETINC)/HTTPHeader.h \
 SOCKHEADERS = $(SOCKINC)/Socket.h $(SOCKINC)/ClientSocket.h $(SOCKINC)/ServerSocket.h \
               $(SOCKINC)/RemoteAddress.h  $(SOCKINC)/ClientSocketSource.h $(SOCKINC)/FixedConnectionPool.h \
 			  $(SOCKINC)/SecureClientSocket.h $(SOCKINC)/SecureSocket.h $(SOCKINC)/SocketConfig.h \
-			  $(SOCKINC)/UDPSocket.h
+			  $(SOCKINC)/UDPSocket.h $(SOCKINC)/SafeAddressInfo.h
 
 STATHEADERS = $(STATINC)/Histogram.h
 
@@ -280,7 +280,8 @@ NETOBJECTS  = $(OBJDIR)/HTTPClient.o $(OBJDIR)/HTTPHeader.o \
 
 SOCKOBJECTS = $(OBJDIR)/ClientSocket.o $(OBJDIR)/ServerSocket.o $(OBJDIR)/Socket.o \
               $(OBJDIR)/RemoteAddress.o $(OBJDIR)/SocketConfig.o \
-			  $(OBJDIR)/UDPSocket.o
+			  $(OBJDIR)/UDPSocket.o $(OBJDIR)/SafeAddressInfo.o
+
 #$(OBJDIR)/ClientSocketSource.o $(OBJDIR)/FixedConnectionPool.o
 #			  $(OBJDIR)/SecureClientSocket.o $(OBJDIR)/SecureSocket.o
 
@@ -590,6 +591,8 @@ $(OBJDIR)/SocketConfig.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/SocketConfig.
 $(OBJDIR)/UDPSocket.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/UDPSocket.cpp;
 	$(COMPILE) -c $(SOCKDIR)/UDPSocket.cpp -o $(OBJDIR)/UDPSocket.o
 
+$(OBJDIR)/SafeAddressInfo.o: $(BASEHEADERS) $(SOCKHEADERS) $(SOCKDIR)/SafeAddressInfo.cpp;
+	$(COMPILE) -c $(SOCKDIR)/SafeAddressInfo.cpp -o $(OBJDIR)/SafeAddressInfo.o
 
 #
 ## STATISTICAL OBJECTS

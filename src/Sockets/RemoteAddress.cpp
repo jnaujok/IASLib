@@ -21,15 +21,16 @@
 
 namespace IASLib
 {
+
     CRemoteAddress::CRemoteAddress( void ) 
     {
         m_sockAddressList = NULL;
         m_bIsValid = false;
     }
-    
+
     CRemoteAddress::CRemoteAddress( const char *hostname, const char *service, int socketType )
     {
-        m_sockAddressList = CRemoteAddress::resolveAddress(hostname,service,socketType);
+        m_sockAddressList =  CRemoteAddress::resolveAddress(hostname,service,socketType);
         m_strHostname = hostname;
         m_strService = service;
         m_bIsValid = (m_sockAddressList != NULL );
@@ -96,11 +97,19 @@ namespace IASLib
         m_bIsValid = (m_sockAddressList != NULL );
     }
 
+    CRemoteAddress::CRemoteAddress( const CRemoteAddress &oSource )
+    {
+        m_bIsValid = oSource.m_bIsValid;
+        m_sockAddressList = new CSafeAddressInfo( *oSource.m_sockAddressList );
+        m_strHostname = oSource.m_strHostname;
+        m_strService = oSource.m_strService;
+    }
+
     CRemoteAddress::~CRemoteAddress()
     {
         if ( m_sockAddressList != NULL )
         {
-            freeaddrinfo( m_sockAddressList );
+            delete m_sockAddressList;
         }
     }
 
@@ -108,20 +117,20 @@ namespace IASLib
 
     CString CRemoteAddress::toString( void )
     {
-        return addressToString(m_sockAddressList->ai_addr);
+        return addressToString(m_sockAddressList->getAddr() );
     }
 
     CString CRemoteAddress::toStringWithPort( void )
     {
         CString retVal;
-        return retVal.Format( "%s:%d", (const char *)toString(), getPort( m_sockAddressList->ai_addr) );
+        return retVal.Format( "%s:%d", (const char *)toString(), getPort( m_sockAddressList->getAddr() ) );
     }
 
     void CRemoteAddress::SetAddress( const char *hostname )
     {
         if (m_sockAddressList)
         {
-            freeaddrinfo(m_sockAddressList);
+            delete m_sockAddressList;
         }
         m_sockAddressList = CRemoteAddress::resolveAddress( hostname, (const char *)NULL, SOCK_STREAM );
     }
@@ -130,7 +139,7 @@ namespace IASLib
     {
         if (m_sockAddressList)
         {
-            freeaddrinfo(m_sockAddressList);
+            delete m_sockAddressList;
         }
         m_strHostname = addressToString( sockAddress );
 
@@ -144,7 +153,7 @@ namespace IASLib
     {
         if (m_bIsValid)
         {
-            return m_sockAddressList->ai_addr;
+            return m_sockAddressList->getAddr();
         }
 
         return NULL;
@@ -155,15 +164,15 @@ namespace IASLib
         if (m_bIsValid)
         {
             // look for an IPv4 Address
-            struct addrinfo *temp = m_sockAddressList;
+            CSafeAddressInfo *temp = m_sockAddressList;
 
             while ( temp )
             {
-                if (temp->ai_family == AF_INET )
+                if (temp->getFamily() == AF_INET )
                 {
-                    return (struct sockaddr_in *)(temp->ai_addr->sa_data);
+                    return (struct sockaddr_in *)(temp->getAddr() );
                 }
-                temp = temp->ai_next;
+                temp = temp->getNext();
             }
         }
 
@@ -174,16 +183,16 @@ namespace IASLib
     {
         if (m_bIsValid)
         {
-            // look for an IPv4 Address
-            struct addrinfo *temp = m_sockAddressList;
+            // look for an IPv6 Address
+            CSafeAddressInfo *temp = m_sockAddressList;
 
             while ( temp )
             {
-                if (temp->ai_family == AF_INET6 )
+                if (temp->getFamily() == AF_INET6 )
                 {
-                    return (struct sockaddr_in6 *)(temp->ai_addr->sa_data);
+                    return (struct sockaddr_in6 *)(temp->getAddr() );
                 }
-                temp = temp->ai_next;
+                temp = temp->getNext();
             }
         }
 
@@ -198,12 +207,24 @@ namespace IASLib
 
     sa_family_t CRemoteAddress::GetFamily( void )
     {
-        return m_sockAddressList->ai_family;
+        return m_sockAddressList->getFamily();
     }
 
     CString CRemoteAddress::GetFamilyString( void )
     {
-        return "AF_INET";
+        if ( isValid() )
+        {
+            switch ( m_sockAddressList->getFamily() )
+            {
+                case AF_INET:
+                    return "AF_INET";
+                case AF_INET6:
+                    return "AF_INET6";
+                default:
+                    return "AF_RAW";
+            }
+        }
+        return "INVALID";
     }
 
     CString CRemoteAddress::addressToString( const struct sockaddr *address )
@@ -247,8 +268,9 @@ namespace IASLib
         return -1;
     }
 
-    struct addrinfo *CRemoteAddress::resolveAddress( const char *hostname, const char *service, int socketType )
+    CSafeAddressInfo *CRemoteAddress::resolveAddress( const char *hostname, const char *service, int socketType )
     {
+        CSafeAddressInfo *retVal = NULL;
         struct addrinfo *pHints = new struct addrinfo();
         memset( pHints, 0, sizeof( struct addrinfo ) );
         struct addrinfo *retList = NULL;
@@ -262,23 +284,24 @@ namespace IASLib
         pHints->ai_next = NULL;
 
         int nRet = getaddrinfo( hostname, service, pHints, &retList );
+
+        delete pHints;
         if ( nRet == 0 )
         {
-            return retList;
-        }
-        else
-        {
-            if ( retList != NULL )
-            {
-                freeaddrinfo( retList );
-            }
+            CSafeAddressInfo *retVal = new CSafeAddressInfo( retList );
         }
 
-        return NULL;
+        if ( retList != NULL )
+        {
+            freeaddrinfo( retList );
+        }
+        
+        return retVal;
     }
 
-    struct addrinfo *CRemoteAddress::resolveAddress( const char *hostname, int port, int socketType )
+    CSafeAddressInfo *CRemoteAddress::resolveAddress( const char *hostname, int port, int socketType )
     {
+        CSafeAddressInfo *retVal = NULL;
         struct addrinfo *pHints = new struct addrinfo();
         memset( pHints, 0, sizeof( struct addrinfo ) );
         struct addrinfo *retList = NULL;
@@ -295,23 +318,33 @@ namespace IASLib
         service.Format( "%d", port );
 
         int nRet = getaddrinfo( hostname, service, pHints, &retList );
+
+        delete pHints;
         if ( nRet == 0 )
         {
-            return retList;
-        }
-        else
-        {
-            if ( retList != NULL )
-            {
-                freeaddrinfo( retList );
-            }
+            CSafeAddressInfo *retVal = new CSafeAddressInfo( retList );
         }
 
-        return NULL;
+        if ( retList != NULL )
+        {
+            freeaddrinfo( retList );
+        }
+        
+        return retVal;
     }
 
-
-
+    CRemoteAddress &CRemoteAddress::operator =( const CRemoteAddress &oSource )
+    {
+        if ( this != &oSource )
+        {
+            m_bIsValid = oSource.m_bIsValid;
+            m_sockAddressList = new CSafeAddressInfo( *oSource.m_sockAddressList );
+            m_strHostname = oSource.m_strHostname;
+            m_strService = oSource.m_strService;
+        }
+        return *this;
+    }
+    
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__

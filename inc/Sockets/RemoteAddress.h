@@ -35,13 +35,14 @@
 
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/String_.h"
+#include "SafeAddressInfo.h"
 
 namespace IASLib
 {
     class CRemoteAddress : public CObject
     {
         protected:
-            struct addrinfo   *m_sockAddressList;
+            CSafeAddressInfo *m_sockAddressList;
             CString     m_strHostname;
             CString     m_strService;
             bool        m_bIsValid;
@@ -54,9 +55,12 @@ namespace IASLib
                             CRemoteAddress( const struct sockaddr_in6 *address, bool bResolveHost = false );
                             CRemoteAddress( const struct addrinfo *addressInfo, bool bResolveHost = false );
                             CRemoteAddress( void );
+                            CRemoteAddress( const CRemoteAddress &oSource );
 	        virtual        ~CRemoteAddress();
 
                             DEFINE_OBJECT( CRemoteAddress )
+
+            CRemoteAddress &operator =( const CRemoteAddress &oSource );
 
             virtual CString         toString( void );
             virtual CString         toStringWithPort( void );
@@ -80,8 +84,8 @@ namespace IASLib
 
             static CString addressToString( const struct sockaddr *address );
             static CString lookupHost( const struct sockaddr *address );
-            static struct addrinfo *resolveAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
-            static struct addrinfo *resolveAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
+            static CSafeAddressInfo *resolveAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
+            static CSafeAddressInfo *resolveAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
             static int getPort( const struct sockaddr *address );
     };
 } // namespace IASLib

@@ -26,6 +26,8 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
+#include "RemoteAddress.h"
+
 #ifdef IASLIB_WIN32__
 namespace IASLib
 {
@@ -155,6 +157,8 @@ namespace IASLib
                 m_nPort = ntohs( connect_addr.sin_port );
                 m_addrIPAddress = ntohl( connect_addr.sin_addr.s_addr );
             }
+            setRemoteAddress();
+
             struct in_addr addrConvert;
             addrConvert.s_addr = htonl( m_addrIPAddress );
             m_strLocalAddress.Format( "%s:%d", inet_ntoa( addrConvert ), m_nPort );
@@ -324,6 +328,8 @@ namespace IASLib
                     m_nLocalPort = ntohs( connect_addr.sin_port );
                     m_addrLocalIPAddress = ntohl( connect_addr.sin_addr.s_addr );
                 }
+
+                setRemoteAddress();
             }
             else
             {
@@ -338,6 +344,8 @@ namespace IASLib
                     m_nPort = ntohs( connect_addr.sin_port );
                     m_addrIPAddress = ntohl( connect_addr.sin_addr.s_addr );
                 }
+
+                setRemoteAddress();
             }
 
             char strIPBuff[ INET_ADDRSTRLEN ];
@@ -502,6 +510,9 @@ namespace IASLib
                 m_nPort = ntohs( connect_addr.sin_port );
                 m_addrIPAddress = ntohl( connect_addr.sin_addr.s_addr );
             }
+
+            setRemoteAddress();
+
             struct in_addr addrConvert;
             addrConvert.s_addr = htonl( m_addrIPAddress );
             m_strLocalAddress.Format( "%s:%d", inet_ntoa( addrConvert ), m_nPort );
@@ -797,6 +808,26 @@ namespace IASLib
     {
         return ::inet_ntop( iAddrFamily, addrConvert, strBuffer, nMaxLen );
     }
+
+    void CSocket::setRemoteAddress( void )
+    {
+        if ( m_hSocket )
+        {
+            if ( IsConnected() )
+            {
+                socklen_t nNameSize = sizeof( struct sockaddr_in6 );
+                struct sockaddr *connect_addr = (sockaddr *)malloc( nNameSize );
+
+                if ( getpeername( m_hSocket, (sockaddr *)&connect_addr, &nNameSize ) != SOCKET_ERROR )
+                {
+                    m_remoteAddress = new CRemoteAddress( connect_addr );
+                }
+
+                free( connect_addr );
+            }
+        }
+    }
+
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__
