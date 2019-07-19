@@ -26,6 +26,8 @@ namespace IASLib
             static CMissingNode *instance;
 
         public:
+            DEFINE_OBJECT( CMissingNode );
+            
             static CMissingNode *getInstance( void );
 
             /**
@@ -73,6 +75,8 @@ namespace IASLib
             virtual CString	toString()   { return CString( "" ); }
 
             virtual CString asText() { return CString(""); }
+
+            virtual int getType() {}
         private:
             // Private constructors
             CMissingNode( void ) {}

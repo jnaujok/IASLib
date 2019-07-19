@@ -17,13 +17,15 @@
 
 namespace IASLib
 {
+    IMPLEMENT_OBJECT( CMissingNode, CJsonNode );
+    
     CMissingNode *CMissingNode::instance = NULL;
 
     CMissingNode *CMissingNode::getInstance( void )
     {
         if ( instance == NULL )
         {
-            instance = new CMissingNode();
+            instance = new CMissingNode(); 
         }
         return instance;
     }

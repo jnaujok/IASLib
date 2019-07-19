@@ -207,7 +207,7 @@ namespace IASLib
 
     int CArrayNode::size()
     {
-        return m_aElements.Length();
+        return m_aElements.Length(); 
     }
 
     // Note: marked as abstract to ensure all implementation classes define it properly.

@@ -344,6 +344,25 @@ namespace IASLib
         }
         return *this;
     }
+
+    CString CRemoteAddress::lookupHost( const struct sockaddr *address )
+    {
+        CString retVal;
+        char hostname[NI_MAXHOST];
+        char servicename[NI_MAXSERV];
+        int flags = NI_NAMEREQD;
+
+        int ret = getnameinfo( address, ( address->sa_family == AF_INET ) ? sizeof(struct sockaddr_in):sizeof(struct sockaddr_in6), hostname, NI_MAXHOST, servicename, NI_MAXSERV, flags );
+
+        if ( ret != 0 )
+        {
+            flags = NI_NUMERICHOST | NI_NUMERICSERV;
+            ret = getnameinfo( address, ( address->sa_family == AF_INET ) ? sizeof(struct sockaddr_in):sizeof(struct sockaddr_in6), hostname, NI_MAXHOST, servicename, NI_MAXSERV, flags );
+        }
+        retVal = hostname;
+
+        return retVal;
+    }
     
 } // namespace IASLib
 

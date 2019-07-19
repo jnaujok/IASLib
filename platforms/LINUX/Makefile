@@ -199,7 +199,7 @@ SQLTHEADERS = $(SQLTINC)/Sqlt_Connection.h $(SQLTINC)/Sqlt_Cursor.h \
 DYNLHEADERS = $(DYNLINC)/DynamicLibrary.h
 
 JSONHEADERS = $(JSONINC)/JsonNode.h $(JSONINC)/ObjectNode.h $(JSONINC)/ArrayNode.h \
-              $(JSONINC)/ValueNode.h
+              $(JSONINC)/ValueNode.h $(JSONINC)/MissingNode.h
 
 FILEHEADERS = $(FILEINC)/File.h $(FILEINC)/FileStat.h $(FILEINC)/Directory.h \
               $(FILEINC)/DirectoryEntry.h $(FILEINC)/RWFile.h
@@ -273,7 +273,7 @@ FILEOBJECTS = $(OBJDIR)/Directory.o $(OBJDIR)/DirectoryEntry.o $(OBJDIR)/File.o 
 	          $(OBJDIR)/FileStat.o $(OBJDIR)/RWFile.o
 
 JSONOBJECTS = $(OBJDIR)/JsonNode.o $(OBJDIR)/ObjectNode.o $(OBJDIR)/ArrayNode.o \
-              $(OBJDIR)/ValueNode.o
+              $(OBJDIR)/ValueNode.o $(OBJDIR)/MissingNode.o
 
 NETOBJECTS  = $(OBJDIR)/HTTPClient.o $(OBJDIR)/HTTPHeader.o \
               $(OBJDIR)/HTTPHeaderList.o $(OBJDIR)/Mail.o
@@ -521,6 +521,10 @@ $(OBJDIR)/ArrayNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/JsonNode.cpp;
 
 $(OBJDIR)/ValueNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/ValueNode.cpp;
 	$(COMPILE) -c $(JSONDIR)/ValueNode.cpp -o $(OBJDIR)/ValueNode.o
+
+$(OBJDIR)/MissingNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/MissingNode.cpp;
+	$(COMPILE) -c $(JSONDIR)/MissingNode.cpp -o $(OBJDIR)/MissingNode.o
+
 
 #
 ## FILE OBJECTS
