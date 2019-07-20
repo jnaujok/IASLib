@@ -12,8 +12,8 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-#include "../../inc/JSON/ArrayNode.h"
-#include "../../inc/JSON/MissingNode.h"
+#include "JSON/ArrayNode.h"
+#include "JSON/MissingNode.h"
 
 namespace IASLib
 {
@@ -207,7 +207,7 @@ namespace IASLib
 
     int CArrayNode::size()
     {
-        return m_aElements.Length(); 
+        return m_aElements.Length();
     }
 
     // Note: marked as abstract to ensure all implementation classes define it properly.
