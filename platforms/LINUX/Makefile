@@ -139,10 +139,10 @@ DEFS    = -Dlinux \
 #
 # Specify the compile-time options.
 #
-#OPTIONS = -g0 -mt -pg -D__THREADED__
+OPTIONS =  -ggdb -fvar-tracking -pg -D__THREADED__
 #OPTIONS_NO_THREAD = -g0 -pg
 # non-debug version
-OPTIONS = -O3
+#OPTIONS = -O3
 
 #
 # Define the compiler command and compile flags.
@@ -174,7 +174,8 @@ COLHEADERS  = $(COLINC)/Collection.h $(COLINC)/Array.h $(COLINC)/Cache.h \
 
 XCPTHEADERS = $(XCPTINC)/Exception.h $(XCPTINC)/CollectionException.h \
               $(XCPTINC)/FileException.h $(XCPTINC)/SocketException.h \
-              $(XCPTINC)/StringException.h $(XCPTINC)/XMLException.h
+              $(XCPTINC)/StringException.h $(XCPTINC)/XMLException.h \
+			  $(XCPTINC)/StreamException.h $(XCPTINC)/ThreadException.h
 
 CONFHEADERS = $(CONFINC)/Profile.h $(CONFINC)/Settings.h
 
@@ -267,7 +268,7 @@ DYNLOBJECTS = $(OBJDIR)/DynamicLibrary.o
 XCPTOBJECTS = $(OBJDIR)/Exception.o $(OBJDIR)/CollectionException.o \
               $(OBJDIR)/FileException.o $(OBJDIR)/SocketException.o \
               $(OBJDIR)/StringException.o $(OBJDIR)/XMLException.o \
-			  $(OBJDIR)/StreamException.o
+			  $(OBJDIR)/StreamException.o $(OBJDIR)/ThreadException.o
 
 FILEOBJECTS = $(OBJDIR)/Directory.o $(OBJDIR)/DirectoryEntry.o $(OBJDIR)/File.o \
 	          $(OBJDIR)/FileStat.o $(OBJDIR)/RWFile.o
@@ -408,6 +409,9 @@ $(OBJDIR)/XMLException.o: $(BASEHEADERS) $(XCPTHEADERS) $(XCPTDIR)/XMLException.
 
 $(OBJDIR)/StreamException.o: $(BASEHEADERS) $(XCPTHEADERS) $(XCPTDIR)/StreamException.cpp;
 	$(COMPILE) -c $(XCPTDIR)/StreamException.cpp -o $(OBJDIR)/StreamException.o
+
+$(OBJDIR)/ThreadException.o: $(BASEHEADERS) $(XCPTHEADERS) $(XCPTDIR)/ThreadException.cpp;
+	$(COMPILE) -c $(XCPTDIR)/ThreadException.cpp -o $(OBJDIR)/ThreadException.o
 
 #
 ## CONFIGURATION OBJECTS

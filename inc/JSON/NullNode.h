@@ -1,0 +1,8 @@
+#ifndef IASLIB_NULLNODE_H__
+#define IASLIB_NULLNODE_H__
+
+#ifdef IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_NULLNODE_H__

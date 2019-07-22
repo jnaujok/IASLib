@@ -39,4 +39,4 @@ namespace IASLib
 
 } // namespace IASLib
 
-#endif // IASLIB_STRINGEXCEPTION_H__
+#endif // IASLIB_STREAMEXCEPTION_H__

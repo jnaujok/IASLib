@@ -63,18 +63,15 @@ namespace IASLib
 
     CRemoteAddress::CRemoteAddress( const struct sockaddr_in *address, bool bResolveHost )
     {
-        struct sockaddr temp;
-        memcpy( &temp, address, sizeof(struct sockaddr_in) );
-
         if (bResolveHost)
         {
-            m_strHostname = lookupHost( &temp );
+            m_strHostname = lookupHost( (const struct sockaddr *)address );
         }
         else
         {
-            m_strHostname = addressToString( &temp );
+            m_strHostname = addressToString( (const struct sockaddr *)address );
         }
-        m_strService.Format( "%d", getPort( &temp ));
+        m_strService.Format( "%d", getPort( (const struct sockaddr *)address ));
 
         m_sockAddressList = CRemoteAddress::resolveAddress(m_strHostname, m_strService, SOCK_RAW );
         m_bIsValid = (m_sockAddressList != NULL );
@@ -123,7 +120,15 @@ namespace IASLib
     CString CRemoteAddress::toStringWithPort( void )
     {
         CString retVal;
-        return retVal.Format( "%s:%d", (const char *)toString(), getPort( m_sockAddressList->getAddr() ) );
+        if ( m_sockAddressList )
+        {
+            retVal = retVal.Format( "%s:%d", (const char *)toString(), getPort( m_sockAddressList->getAddr() ) );
+        }
+        else
+        {
+            retVal = "0.0.0.0:0";
+        }
+        return retVal;
     }
 
     void CRemoteAddress::SetAddress( const char *hostname )
@@ -253,17 +258,20 @@ namespace IASLib
 
     int CRemoteAddress::getPort( const struct sockaddr *address )
     {
-        switch(address->sa_family) {
-            case AF_INET: {
-                const struct sockaddr_in *addr_in = (const struct sockaddr_in *)address;
-                return addr_in->sin_port;
+        if ( address != NULL )
+        {
+            switch(address->sa_family) {
+                case AF_INET: {
+                    const struct sockaddr_in *addr_in = (const struct sockaddr_in *)address;
+                    return addr_in->sin_port;
+                }
+                case AF_INET6: {
+                    const struct sockaddr_in6 *addr_in6 = (const struct sockaddr_in6 *)address;
+                    return addr_in6->sin6_port;
+                }
+                default:
+                    break;
             }
-            case AF_INET6: {
-                const struct sockaddr_in6 *addr_in6 = (const struct sockaddr_in6 *)address;
-                return addr_in6->sin6_port;
-            }
-            default:
-                break;
         }
         return -1;
     }

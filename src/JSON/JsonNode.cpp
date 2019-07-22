@@ -12,6 +12,9 @@
  * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
+
+#ifdef IASLIB_JSONSUPPORT__
+
 #include "JsonNode.h"
 
 namespace IASLib
@@ -257,3 +260,5 @@ CJsonNode *CJsonNode::withArray(CString propertyName)
 }
 
 } // namespace IASLib
+
+#endif // IASLIB_JSONSUPPORT__

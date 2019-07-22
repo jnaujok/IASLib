@@ -16,6 +16,8 @@
 #ifndef IASLIB_MISSINGNODE_H__
 #define IASLIB_MISSINGNODE_H__
 
+#ifdef IASLIB_JSONSUPPORT__
+
 #include "JsonNode.h"
 
 namespace IASLib
@@ -84,5 +86,6 @@ namespace IASLib
     };
 }
 
+#endif // IASLIB_JSONSUPPORT__
 #endif // IASLIB_MISSINGNODE_H__
 

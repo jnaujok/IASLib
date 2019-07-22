@@ -1,0 +1,8 @@
+#ifndef IASLIB_POJONODE_H__
+#define IASLIB_POJONODE_H__
+
+#ifdef IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_POJONODE_H__

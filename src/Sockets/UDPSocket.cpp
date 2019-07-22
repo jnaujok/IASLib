@@ -35,6 +35,7 @@ namespace IASLib
         }
     #endif
 	    struct sockaddr_in	listen_addr;
+        memset( &listen_addr, 0, sizeof(struct sockaddr_in));
 
         m_hSocket = socket( AF_INET, SOCK_DGRAM, 0 );
 
@@ -64,7 +65,7 @@ namespace IASLib
             }
 
             m_nPort = nPort;
-            m_addrIPAddress = new CRemoteAddress( "0.0.0.0", nPort, SOCK_DGRAM );
+            m_addrIPAddress = new CRemoteAddress( &listen_addr );
                 // Now that we've bound the correct socket, we need to un-set the reuse-address option,
                 // because otherwise the accept call creates a socket that matches this one, apparently,
                 // that includes re-using the same address, which is really, really bad. We can get

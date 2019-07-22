@@ -58,6 +58,17 @@ namespace IASLib
         }
     }
 
+    void CFileStream::Close( void )
+    {
+        if ( m_pFile )
+        {
+            delete m_pFile;
+            m_pFile = NULL;
+        }
+
+        m_bIsOpen = false;
+    }
+
     CString CFileStream::GetLine( void )
     {
         CString strRetVal = "";

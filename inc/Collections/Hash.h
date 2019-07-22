@@ -34,6 +34,8 @@
 #include "../Database/Cursor.h"
 #endif
 
+#include "StringArray.h"
+
 namespace IASLib
 {
     class CHash : public CCollection
@@ -71,10 +73,13 @@ namespace IASLib
             void            Push( const char *strKey, CObject *pElement, bool bDeleteCurrent = true );
             CObject        *Get( const char *strKey );
             void            Delete( const char *strKey );
+            CObject        *Remove( const char *strKey );
 
             void            Push( int nKey, CObject *pElement, bool bDeleteCurrent = true );
             CObject        *Get( int nKey );
             void            Delete( int nKey );
+            CObject        *Remove( int nKey );
+
 
             bool            HasKey( const char *strKey );
             bool            HasKey( int nKey );

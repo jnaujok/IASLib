@@ -678,6 +678,82 @@ namespace IASLib
     }
 
     /*************************************************************************************
+    ** Remove
+    **
+    **  This function removes an element from the hash and returns it to the calling code.
+    **
+    **************************************************************************************/
+    CObject *CHash::Remove( const char *strKey )
+    {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Lock();
+#endif
+        int nKey = BuildKey( strKey );
+
+        if ( m_aHashTable[ nKey ] == NULL )
+        {
+#ifdef IASLIB_MULTI_THREADED__
+            m_mutexProtect.Unlock();
+#endif
+            return NULL;
+        }
+
+        CObject *pRetVal = m_aHashTable[nKey]->Remove( strKey );
+
+            // If the removal results in an empty bucket, delete the bucket.
+        if ( pRetVal && m_aHashTable[ nKey ]->GetLength() == 0  )
+        {
+            delete m_aHashTable[ nKey ];
+            m_aHashTable[ nKey ] = NULL;
+            m_nElements--;
+        }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Unlock();
+#endif
+        return pRetVal;
+    }
+
+    /*************************************************************************************
+    ** Remove
+    **
+    **  This function removes an element from the hash and returns it to the calling code.
+    **
+    **************************************************************************************/
+    CObject *CHash::Remove( int nKey )
+    {
+        int nSaveKey = nKey;
+
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Lock();
+#endif
+
+        nKey = ( nKey * m_nHashKey ) % (int)m_nArraySize;
+
+        if ( m_aHashTable[ nKey ] == NULL )
+        {
+#ifdef IASLIB_MULTI_THREADED__
+            m_mutexProtect.Unlock();
+#endif
+            return NULL;
+        }
+
+        CObject *pRetVal = m_aHashTable[nKey]->Remove( nSaveKey );
+
+            // If the removal results in an empty bucket, delete the bucket.
+        if ( pRetVal && m_aHashTable[ nKey ]->GetLength() == 0  )
+        {
+            delete m_aHashTable[ nKey ];
+            m_aHashTable[ nKey ] = NULL;
+            m_nElements--;
+        }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Unlock();
+#endif
+        return pRetVal;
+    }
+
+
+    /*************************************************************************************
     ** Empty
     **
     **  This function removes all of the elements from the hash without deleting them.
@@ -709,6 +785,27 @@ namespace IASLib
     CIterator *CHash::Enumerate( void )
     {
         return new CHashIterator( this );
+    }
+
+    CStringArray CHash::keySet( void )
+    {
+        CStringArray retVal;
+
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Lock();
+#endif
+        for ( int nX = 0; nX < m_nArraySize; nX++ )
+        {
+            if ( m_aHashTable[nX] != NULL )
+            {
+                m_aHashTable[nX]->keySet( retVal );
+            }
+        }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutexProtect.Unlock();
+#endif
+
+        return retVal;
     }
 
 } // namespace IASLib

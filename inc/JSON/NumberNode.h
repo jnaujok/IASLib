@@ -1,0 +1,8 @@
+#ifndef IASLIB_NUMBERNODE_H__
+#define IASLIB_NUMBERNODE_H__
+
+#ifdef IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_NUMBERNODE_H__

@@ -279,6 +279,60 @@ namespace IASLib
     }
 
     /*************************************************************************************
+    ** Remove
+    **
+    **  This function removes (returns and deletes) an element or slat from the hash bucket.
+    **
+    **************************************************************************************/
+    CObject *CHashBucket::Remove( const char *strKey )
+    {
+        CString strWork1 = strKey;
+        strWork1.Trim();
+        CString strWork2;
+        size_t nCount = 0;
+        CObject *pRetVal = NULL;
+
+        while ( nCount < m_nSlats )
+        {
+            strWork2 = m_aSlats[ nCount ]->GetKey();
+            strWork2.Trim();
+            if ( strWork2 == strWork1 )
+            {
+                pRetVal = m_aSlats[ nCount ]->GetElement();
+                size_t nStep = nCount + 1;
+                while ( nStep < m_nSlats )
+                {
+                    m_aSlats[ nStep - 1 ] = m_aSlats[ nStep ];
+                    nStep++;
+                }
+                m_nSlats--;
+                if ( m_nSlats == 0 )
+                {
+                    delete m_aSlats;
+                    m_aSlats = NULL;
+                }
+            }
+            nCount++;
+        }
+
+        return pRetVal;
+    }
+
+    /*************************************************************************************
+    ** Delete
+    **
+    **  This function deletes an element or slat from the hash bucket.
+    **
+    **************************************************************************************/
+    CObject *CHashBucket::Remove( int nKey )
+    {
+        CString strKey;
+        strKey = nKey;
+
+        return Remove( strKey );
+    }
+
+    /*************************************************************************************
     ** Empty
     **
     **  This function removes all of the elements from the hash bucket without deleting
@@ -295,6 +349,14 @@ namespace IASLib
         delete m_aSlats;
         m_aSlats = NULL;
         m_nSlats = 0;
+    }
+
+    void CHashBucket::keySet( CStringArray &oKeyArray )
+    {
+        for ( size_t nCount = 0; nCount < m_nSlats ; nCount++ )
+        {
+            oKeyArray.Append( m_aSlats[nCount]->GetKey() );
+        }
     }
 } // namespace IASLib
 

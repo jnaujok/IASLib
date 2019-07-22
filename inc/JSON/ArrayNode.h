@@ -15,6 +15,8 @@
 #ifndef IASLIB_ARRAYNODE_H__
 #define IASLIB_ARRAYNODE_H__
 
+#ifdef IASLIB_JSONSUPPORT__
+
 #include "JsonNode.h"
 #include "../Collections/List.h"
 
@@ -126,5 +128,7 @@ namespace IASLib
     };
 }
 
-#endif // IASLIB_JSONNODE_H__
+#endif // IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_ARRAYNODE_H__
 

@@ -48,6 +48,7 @@
 #include "ThreadPool.h"
 #include "PooledThread.h"
 #include "Semaphore.h"
+#include "ThreadException.h"
 
 namespace IASLib
 {
@@ -106,70 +107,111 @@ namespace IASLib
             }
     };
 
-        bool CThreadPool::m_bInitialized = false;
+    bool CThreadPool::m_bInitialized = false;
 
-        CThreadPool::CThreadPool( size_t maximumThreads ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
+    CThreadPool::CThreadPool( size_t maximumThreads ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
+    {
+        m_mutexArray.Lock();
+        for ( int nX = 0; nX < maximumThreads; nX++ )
         {
-            m_mutexArray.Lock();
-            for ( int nX = 0; nX < maximumThreads; nX++ )
-            {
-                m_aAvailableThreads.Append( new CPooledThread( this, "Pooled_Thread_", nX ) );
-            }
-            m_nTotalThreads = maximumThreads;
-            m_nCurrentThreads = 0;
-            m_nPeakThreads = 0;
-            m_mutexArray.Unlock();
-            m_pQueueingThread = new CQueueingThread( m_nTotalThreads, &m_qTaskQueue, this );
+            m_aAvailableThreads.Append( new CPooledThread( this, "Pooled_Thread_", nX ) );
         }
+        m_nTotalThreads = maximumThreads;
+        m_nCurrentThreads = 0;
+        m_nPeakThreads = 0;
+        m_mutexArray.Unlock();
+        m_pQueueingThread = new CQueueingThread( m_nTotalThreads, &m_qTaskQueue, this );
+    }
 
-        CThreadPool::~CThreadPool(void)
+    CThreadPool::~CThreadPool(void)
+    {
+        for ( int nX = 0; nX < m_aBusyThreads.Length(); nX++ )
+        {
+            CPooledThread *work = (CPooledThread *)m_aBusyThreads.Get( nX );
+            work->ShutdownThread();
+            work->Join();
+            delete work;
+        }
+    }
+
+    IMPLEMENT_OBJECT(CThreadPool, CObject);
+
+    bool CThreadPool::AddTask( CThreadTask *task )
+    {
+        m_qTaskQueue.Push( task );
+        m_pQueueingThread->signalQueue();
+    }
+
+    CThreadTask::TASK_STATUS CThreadPool::TaskStatus(const char *strIdentifier)
+    {
+
+    }
+
+    CObject *CThreadPool::GetResults(const char *strIdentifier)
+    {
+        if ( m_hashResults.HasKey( strIdentifier ) )
+        {
+            return m_hashResults.Remove( strIdentifier );
+        }
+        
+        return NULL;
+    }
+
+    bool CThreadPool::startTask( CThreadTask *task )
+    {
+        m_mutexArray.Lock();
+
+        if ( m_aAvailableThreads.Length() )
+        {
+            CPooledThread *workThread = (CPooledThread *)m_aAvailableThreads.Remove(1);
+            m_aBusyThreads.Push( workThread );
+            m_nCurrentThreads++;
+            if ( m_nCurrentThreads > this->m_nPeakThreads )
+            {
+                m_nPeakThreads = m_nCurrentThreads;
+            }
+
+            workThread->SetTask( task );
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+        
+        m_mutexArray.Unlock();
+    }
+
+    void CThreadPool::taskComplete( CPooledThread *thread )
+    {
+        m_mutexArray.Lock();
+
+        CThreadTask *pTask = thread->GetTask();
+        CObject *result = thread->GetResult();
+
+        thread->ResetThread();
+
+        if ( m_nCurrentThreads > 0 )
         {
             for ( int nX = 0; nX < m_aBusyThreads.Length(); nX++ )
             {
-                CPooledThread *work = (CPooledThread *)m_aBusyThreads.Get( nX );
-                work->ShutdownThread();
-                work->Join();
-                delete work;
-            }
-        }
-
-        IMPLEMENT_OBJECT(CThreadPool, CObject);
-
-        bool CThreadPool::AddTask( CThreadTask *task )
-        {
-            m_qTaskQueue.Push( task );
-            m_pQueueingThread->signalQueue();
-        }
-
-        CThreadTask::TASK_STATUS TaskStatus(const char *strIdentifier);
-
-        CObject *GetResults(const char *strIdentifier);
-
-        bool CThreadPool::startTask( CThreadTask *task )
-        {
-            m_mutexArray.Lock();
-
-            if ( m_aAvailableThreads.Length() )
-            {
-                CPooledThread *workThread = (CPooledThread *)m_aAvailableThreads.Remove(1);
-                m_aBusyThreads.Push( workThread );
-                m_nCurrentThreads++;
-                if ( m_nCurrentThreads > this->m_nPeakThreads )
+                if ( m_aBusyThreads[nX] == thread )
                 {
-                    m_nPeakThreads = m_nCurrentThreads;
+                    m_aBusyThreads.Remove( nX );
+                    m_nCurrentThreads--;
+                    break;
                 }
+            }
 
-                workThread->SetTask( task );
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-            
-            m_mutexArray.Unlock();
+            m_aAvailableThreads.Push( thread );
         }
-
+        else
+        {
+            IASLIB_THROW_THREAD_EXCEPTION( "An attempt was made to release an unknown thread to the thread pool.");
+        }
+        
+        m_mutexArray.Unlock();
+    }
 
 } // end of namespace IASLib
 

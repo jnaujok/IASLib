@@ -42,6 +42,8 @@
 
 namespace IASLib
 {
+    static struct sockaddr_in dummyAddress;
+
     class CSafeAddressInfo : public CObject
     {
         private:

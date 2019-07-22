@@ -20,6 +20,7 @@
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/Bool.h"
 #include "HashSlat.h"
+#include "StringArray.h"
 
 namespace IASLib
 {
@@ -38,10 +39,12 @@ namespace IASLib
             bool            Push( const char *strKey, CObject *pElement, bool bDeleteCurrent );
             CObject        *Get( const char *strKey );
             bool            Delete( const char *strKey );
+            CObject        *Remove( const char *strKey );
 
             bool            Push( int nKey, CObject *pElement, bool bDeleteCurrent );
             CObject        *Get( int nKey );
             bool            Delete( int nKey );
+            CObject        *Remove( int nKey );
 
             bool            HasKey( const char *strKey );
             bool            HasKey( int nKey );
@@ -49,6 +52,10 @@ namespace IASLib
             CObject        *Enum( size_t nIndex );
             void            DeleteAll( void );
             void            Empty( void );
+
+        private:
+            friend class CHash;
+            void            keySet( CStringArray &oKeyArray );
     };
 } // namespace IASLib
 

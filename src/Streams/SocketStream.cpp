@@ -44,6 +44,16 @@ namespace IASLib
        m_bIsOpen = false;
    }
 
+   void CSocketStream::Close( void )
+   {
+       if ( ( m_pSocket ) && ( ! m_bNoDelete ) )
+       {
+           delete m_pSocket;
+       }
+       m_pSocket = NULL;
+       m_bIsOpen = false;
+   }
+
    /***********************************************************************
    **  GetLine 
    **

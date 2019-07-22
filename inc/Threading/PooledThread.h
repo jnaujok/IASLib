@@ -62,6 +62,8 @@
                 void                    ShutdownThread( void );
                 void                    Join( void );
                 void                    SetResult( CObject *pResult );
+                CThreadTask *           GetTask( void ) { return m_assignedTask; }
+                void                    ResetThread( void ) { m_assignedTask = NULL; m_pResult = NULL; }
         };
 
     } // Namespace IASLib

@@ -16,6 +16,8 @@
 #ifndef IASLIB_JSONNODE_H__
 #define IASLIB_JSONNODE_H__
 
+#ifdef IASLIB_JSONSUPPORT__
+
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/IASLib_String.h"
 #include "../Collections/Iterator.h"
@@ -217,5 +219,6 @@ namespace IASLib
     };
 }
 
+#endif // IASLIB_JSONSUPPORT__
 #endif // IASLIB_JSONNODE_H__
 

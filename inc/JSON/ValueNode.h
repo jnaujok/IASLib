@@ -1,0 +1,8 @@
+#ifndef IASLIB_VALUENODE_H__
+#define IASLIB_VALUENODE_H__
+
+#ifdef IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_JSONSUPPORT__
+
+#endif // IASLIB_VALUENODE_H__

@@ -12,8 +12,10 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-#include "JSON/ArrayNode.h"
-#include "JSON/MissingNode.h"
+#ifdef IASLIB_JSONSUPPORT__
+
+#include "ArrayNode.h"
+#include "MissingNode.h"
 
 namespace IASLib
 {
@@ -229,3 +231,4 @@ namespace IASLib
     }
 } // namespace IASLib
 
+#endif // IASLIB_JSONSUPPORT__
