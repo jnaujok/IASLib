@@ -4,7 +4,7 @@
 **  Description:
 **      This class wraps the sending of mail through an SMTP server.
 ** Please note that the SMTP server must be set-up prior to calling the
-** send method of the class. 
+** send method of the class.
 **
 **  $AUTHOR$
 **  $LOG$
@@ -76,7 +76,7 @@ namespace IASLib
 				CString         strWork;
 
 				if ( pMailServer->IsConnected() )
-				{   
+				{
 					bRetVal = true;
 					CSocketStream   oStream( pMailServer );
 
@@ -85,7 +85,7 @@ namespace IASLib
 						strResponse = oStream.GetLine();
 
 						strWork = m_strFrom;
-						if ( strWork.IndexOf( '@' ) != -1 )
+						if ( strWork.IndexOf( '@' ) != NOT_FOUND )
 						{
 							strWork = strWork.Substring( strWork.IndexOf( '@' ) + 1 );
 						}
@@ -106,7 +106,7 @@ namespace IASLib
 						{
 							strWork = stRecipients.NextToken();
 							strWork.Trim();
-	                        
+
 							strCommand.Format( "RCPT TO:<%s>\r\n", (const char *)strWork );
 							oStream << strCommand;
 
@@ -132,7 +132,7 @@ namespace IASLib
 
 						strCommand.Format( "Subject: %s\r\n", (const char *)m_strSubject );
 						oStream << strCommand;
-	                    
+
 						strCommand = "\r\n";
 						oStream << strCommand;
 

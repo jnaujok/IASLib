@@ -11,6 +11,8 @@
 ***********************************************************************/
 
 #include "Semaphore.h"
+#include <exception>
+#include <stdexcept>
 
 namespace IASLib
 {
@@ -20,16 +22,12 @@ namespace IASLib
         sema_init( &m_threadSemaphore, nValue, USYNC_THREAD, NULL );
     #endif
 
-    #ifdef IASLIB_DEC__
-        sem_init( &m_threadSemaphore, NULL, nValue );
+    #ifdef IASLIB_PTHREAD__
+        sem_init( &m_threadSemaphore, 0, nValue );
     #endif
 
     #ifdef IASLIB_WIN32__
         m_threadSemaphore = CreateSemaphore( NULL, nValue, 65535, NULL );
-    #endif
-
-    #ifdef IASLIB_PTHREAD__
-        sem_init( &m_threadSemaphore, 0, nValue );
     #endif
     }
 
@@ -38,14 +36,11 @@ namespace IASLib
     #ifdef IASLIB_SUN__
         sema_destroy( &m_threadSemaphore );
     #endif
-    #ifdef IASLIB_DEC__
+    #ifdef IASLIB_PTHREAD__
         sem_destroy( &m_threadSemaphore );
     #endif
     #ifdef IASLIB_WIN32__
         CloseHandle( m_threadSemaphore );
-    #endif
-    #ifdef IASLIB_PTHREAD__
-        sem_destroy( &m_threadSemaphore );
     #endif
     }
 
@@ -55,16 +50,12 @@ namespace IASLib
         sema_wait( &m_threadSemaphore );
     #endif
 
-    #ifdef IASLIB_DEC__
+    #ifdef IASLIB_PTHREAD__
         sem_wait( &m_threadSemaphore );
     #endif
 
     #ifdef IASLIB_WIN32__
         WaitForSingleObject( m_threadSemaphore, INFINITE );
-    #endif
-
-    #ifdef IASLIB_PTHREAD__
-        sem_wait( &m_threadSemaphore );
     #endif
     }
 
@@ -74,16 +65,12 @@ namespace IASLib
         sema_post( &m_threadSemaphore );
     #endif
 
-    #ifdef IASLIB_DEC__
+    #ifdef IASLIB_PTHREAD__
         sem_post( &m_threadSemaphore );
     #endif
 
     #ifdef IASLIB_WIN32__
         ReleaseSemaphore( m_threadSemaphore, 1, NULL );
-    #endif
-
-    #ifdef IASLIB_PTHREAD__
-        sem_post( &m_threadSemaphore );
     #endif
     }
 
@@ -96,7 +83,7 @@ namespace IASLib
         }
     #endif
 
-    #ifdef IASLIB_DEC__
+    #ifdef IASLIB_PTHREAD__
         if ( sem_trywait( &m_threadSemaphore ) == 0 )
         {
             return true;
@@ -108,12 +95,6 @@ namespace IASLib
             return true;
     #endif
 
-    #ifdef IASLIB_PTHREAD__
-        if ( sem_trywait( &m_threadSemaphore ) == 0 )
-        {
-            return true;
-        }
-    #endif
         return false;
     }
 } // namespace IASLib

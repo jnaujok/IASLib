@@ -2,7 +2,7 @@
  * Settings Class
  *
  *      This class is used to pull various settings out of a settings
- * file. These settings can then be used to drive the various other 
+ * file. These settings can then be used to drive the various other
  * classes that need those settings to operate.
  *
  *	Author: Jeffrey R. Naujok
@@ -21,7 +21,7 @@
 
 namespace IASLib
 {
-    CSettings   *g_Settings; 
+    CSettings   *g_Settings;
 
     IMPLEMENT_OBJECT( CSettings, CObject );
 
@@ -50,7 +50,7 @@ namespace IASLib
                 {
                     strLine.Trim();
 
-                    if ( strLine.IndexOf( '=' ) != -1 )
+                    if ( strLine.IndexOf( '=' ) != NOT_FOUND )
                     {
                         CStringTokenizer stTokens( strLine, "=", false );
                         CString strName = stTokens.NextToken();
@@ -80,7 +80,7 @@ namespace IASLib
         {
             return *pstrReturn;
         }
-        
+
         strSetting = strDefault;
 
         return strSetting;

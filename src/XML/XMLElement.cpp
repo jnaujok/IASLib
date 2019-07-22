@@ -46,9 +46,9 @@ namespace IASLib
 
         strWork.Trim();
 
-        if ( ( strWork[0] != '<' ) || ( strWork.IndexOf( '>' ) == -1 ) )
+        if ( ( strWork[0] != '<' ) || ( strWork.IndexOf( '>' ) == NOT_FOUND ) )
         {
-                // There are no tags within this block. That's bad, because we never should 
+                // There are no tags within this block. That's bad, because we never should
                 // have called this constructor if there were no tags...
             // To Do: Really cool error handling.
             IASLIB_THROW_XML_EXCEPTION( "Unclosed tag! No closing brace found in data!" );
@@ -58,7 +58,7 @@ namespace IASLib
             // Well, there's some kind of tag in here, so let's try and find the highest
             // level tag that we can find. Ideally, it will wrap the whole string, but
             // we can't really be sure of that, so we'll have to be careful about how
-            // we do this. If it doesn't wrap the whole thing, we're going to have to 
+            // we do this. If it doesn't wrap the whole thing, we're going to have to
             // return a modified string.
 
 
@@ -66,7 +66,7 @@ namespace IASLib
             // be the tag we're working on. We only care about what's inside the tag markers
             // though.
         strStartTag = strWork.Substring( 1, (int)strWork.IndexOf( '>' ) - 1  );
-            
+
 		    // Okay, we've found the first tag part, let's take it off of the working string
 		    // as a whole, so we're only working with the remainder of the tag.
         strWork = strWork.Substring( strWork.IndexOf( '>' ) + 1 );
@@ -84,7 +84,7 @@ namespace IASLib
             bSingleTag = true;
         }
 
-        if ( strStartTag[ strStartTag.GetLength() - 1 ] == '/' ) 
+        if ( strStartTag[ strStartTag.GetLength() - 1 ] == '/' )
         {
                 // This is an "Empty" tag. In other words, it contains no data.
             bSingleTag = true;
@@ -98,14 +98,14 @@ namespace IASLib
             bSingleTag = true;
             m_bCommentTag = true;
             m_strElementName = "!--";
-            if ( strStartTag.IndexOf( "--", 3 ) == -1 )
+            if ( strStartTag.IndexOf( "--", 3 ) == NOT_FOUND )
             {
                 CString strTempData;
                     // The end tag wasn't grabbed, let's find it.
                 strTempData = strStartTag.Substring( 3 );
                 strTempData += ">";
-                int nEndComment = (int)strWork.IndexOf( "-->" );
-                if ( nEndComment != -1 )
+                size_t nEndComment = strWork.IndexOf( "-->" );
+                if ( nEndComment != NOT_FOUND )
                 {
                     strTempData += strWork.Substring( 0, nEndComment );
                     strWork = strWork.Substring( nEndComment + 3 );
@@ -136,7 +136,7 @@ namespace IASLib
             strStartTag = strStartTag.Substring( 1 );
             strStartTag.Trim();
                 // Now, let's tokenize our starting tag just so we can grab the tag name.
-            CStringTokenizer    stDeclares( strStartTag ); 
+            CStringTokenizer    stDeclares( strStartTag );
 
                 // Whether we have white space or not, the first token has to be the name of the tag.
                 // let's grab it.
@@ -154,7 +154,7 @@ namespace IASLib
         }
 
             // Now, let's tokenize our starting tag just so we can grab the tag name.
-        CStringTokenizer    stTokens( strStartTag ); 
+        CStringTokenizer    stTokens( strStartTag );
 
             // Whether we have white space or not, the first token has to be the name of the tag.
             // let's grab it.
@@ -176,25 +176,25 @@ namespace IASLib
             strStartTag1.Format( "<%s>", (const char *)m_strElementName );
             strStartTag2.Format( "<%s ", (const char *)m_strElementName );
 
-            int nFound = 0;
-            int nStart = 0;
-            int	nStart1 = 0;
-            int nStart2 = 0;
+            size_t nFound = 0;
+            size_t  nStart = 0;
+            size_t 	nStart1 = 0;
+            size_t  nStart2 = 0;
             bool bDone = false;
 
             do
             {
-                nFound = (int)strWork.IndexOf( strEndTag, nFound, false );
-                nStart1 = (int)strWork.IndexOf( strStartTag1, nStart, false );
-                nStart2 = (int)strWork.IndexOf( strStartTag2, nStart, false );
+                nFound = strWork.IndexOf( strEndTag, nFound, false );
+                nStart1 = strWork.IndexOf( strStartTag1, nStart, false );
+                nStart2 = strWork.IndexOf( strStartTag2, nStart, false );
 
-                while ( nStart2 != -1 )
+                while ( nStart2 != NOT_FOUND )
                 {
                         // Make sure it's not an "Empty Tag" start tag.
-                    if ( ( strWork.IndexOf( "/>", nStart2 ) != -1 ) && ( ! ( strWork.IndexOf( '>', nStart2 ) < strWork.IndexOf( "/>", nStart2 ) ) ) )
+                    if ( ( strWork.IndexOf( "/>", nStart2 ) != NOT_FOUND ) && ( ! ( strWork.IndexOf( '>', nStart2 ) < strWork.IndexOf( "/>", nStart2 ) ) ) )
                     {
                             // It is an empty tag, ignore it and look for the next occurance.
-                        nStart2 = (int)strWork.IndexOf( strStartTag2, nStart2 + strStartTag2.GetLength() , false );
+                        nStart2 = strWork.IndexOf( strStartTag2, nStart2 + strStartTag2.GetLength() , false );
                     }
                     else
                     {
@@ -203,23 +203,23 @@ namespace IASLib
                     }
                 }
 
-                if ( nStart1 == -1 )
-                    nStart1 = (int)strWork.GetLength() + 1;
-                if ( nStart2 == -1 )
-                    nStart2 = (int)strWork.GetLength() + 1;
+                if ( nStart1 == NOT_FOUND )
+                    nStart1 = strWork.GetLength() + 1;
+                if ( nStart2 == NOT_FOUND )
+                    nStart2 = strWork.GetLength() + 1;
 
                 nStart = ( nStart1 < nStart2 ) ? nStart1 : nStart2;
 
                 if ( nStart < nFound )
                 {
-                    nFound += (int)strEndTag.GetLength();
-                    nStart += (int)strStartTag2.GetLength();
+                    nFound += strEndTag.GetLength();
+                    nStart += strStartTag2.GetLength();
                 }
                 else
                     bDone = true;
             } while ( ! bDone );
 
-            if ( nFound == - 1 )
+            if ( nFound == NOT_FOUND )
             {
                     // Error! No end tag found for this tag. That's bad.
                 CString strTemp;
@@ -239,7 +239,7 @@ namespace IASLib
             strTag = strWork;
         }
 
-            // Now that we've got all the parts of our XML tag pulled apart, let's fill in 
+            // Now that we've got all the parts of our XML tag pulled apart, let's fill in
             // the properties of our element.
         while ( strStartTag.GetLength() )
         {
@@ -332,13 +332,13 @@ namespace IASLib
 
         if ( ! bSingleTag )
         {
-                // Okay, now that we've analyzed the start tag properties, it's time to 
-                // tear apart the data in the tag. 
+                // Okay, now that we've analyzed the start tag properties, it's time to
+                // tear apart the data in the tag.
             while ( strTagData.GetLength() )
             {
                 strTagData.Trim();
 
-                if ( strTagData.IndexOf( '<' ) != -1 )
+                if ( strTagData.IndexOf( '<' ) != NOT_FOUND )
                 {
                     CString strTemp = strTagData.Substring( 0, (int)strTagData.IndexOf( '<' ) );
                     strTagData = strTagData.Substring( strTagData.IndexOf( '<' ) );
@@ -372,7 +372,7 @@ namespace IASLib
 
     CXMLProperty *CXMLElement::GetProperty( size_t nCount ) const
     {
-        if ( ( nCount >= 0 ) && ( nCount < m_aProperties.Length() ) )
+        if  ( nCount < m_aProperties.Length() )
         {
             return (CXMLProperty *)m_aProperties[ nCount ];
         }
@@ -397,7 +397,7 @@ namespace IASLib
             }
             nIndex++;
         }
-        
+
         return NULL;
     }
 

@@ -1,9 +1,9 @@
 /*
  * XML Index Class
  *
- *      This class is used to convert an XML file into an XML Index. 
+ *      This class is used to convert an XML file into an XML Index.
  * In general, this class is simply a container for XML Elements within
- * an XML file. 
+ * an XML file.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 06/15/2000
@@ -60,7 +60,7 @@ namespace IASLib
         pXMLFile->Close();
         delete pXMLFile;
 
-        while ( ( strData.GetLength() ) && ( strData.IndexOf( '<' ) != -1 ) )
+        while ( ( strData.GetLength() ) && ( strData.IndexOf( '<' ) != NOT_FOUND ) )
         {
             CXMLElement *pElement = new CXMLElement( strData );
             m_aElements.Push( pElement );
@@ -75,7 +75,7 @@ namespace IASLib
 
     CXMLChunk *CXMLIndex::GetChunk( size_t nCount ) const
     {
-        if ( nCount < GetChunkCount() ) 
+        if ( nCount < GetChunkCount() )
         {
             return (CXMLChunk *)m_aElements[ nCount ];
         }
@@ -167,7 +167,7 @@ namespace IASLib
         while ( nCount < m_aElements.Length() )
         {
             CXMLChunk *pChunk = (CXMLChunk *)m_aElements[nCount];
-            if ( pChunk->IsElement() ) 
+            if ( pChunk->IsElement() )
             {
                 nTotal++;
             }
@@ -221,7 +221,7 @@ namespace IASLib
         while ( nCount < m_aElements.Length() )
         {
             CXMLChunk *pChunk = (CXMLChunk *)m_aElements[nCount];
-            if ( pChunk->IsData() ) 
+            if ( pChunk->IsData() )
             {
                 nTotal++;
             }

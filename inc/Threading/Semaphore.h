@@ -18,7 +18,7 @@
 #define SEMAPHORE_T sema_t
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
 #include <pthread.h>
 #include <semaphore.h>
 #define SEMAPHORE_T sem_t
@@ -27,12 +27,6 @@
 #ifdef IASLIB_WIN32__
 #include <windows.h>
 #define SEMAPHORE_T HANDLE
-#endif
-
-#ifdef IASLIB_PTHREAD__
-#include <pthread.h>
-#include <semaphore.h>
-#define SEMAPHORE_T sem_t
 #endif
 
 namespace IASLib

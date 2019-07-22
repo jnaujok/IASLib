@@ -198,8 +198,10 @@ namespace IASLib
     **************************************************************************************/
     CObject *CHashBucket::Enum( size_t nIndex )
     {
-        if ( ( nIndex >= m_nSlats ) || ( nIndex < 0 ) )
+        if ( nIndex >= m_nSlats )
+        {
             return NULL;
+        }
 
         return m_aSlats[ nIndex ]->GetElement();
     }

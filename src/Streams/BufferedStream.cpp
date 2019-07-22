@@ -95,7 +95,7 @@ namespace IASLib
             {
                 m_oStream.PutBuffer( m_chWriteBuffer, m_nBufferWritten );
                 m_nWritePointer = 0;
-                m_nBufferWritten = 0;    
+                m_nBufferWritten = 0;
             }
         }
         return nLength;
@@ -152,6 +152,7 @@ namespace IASLib
         }
 
         IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+        return '\0';
     }
 
     bool CBufferedStream::PutNextChar( const unsigned char chNext )
@@ -190,7 +191,7 @@ namespace IASLib
             }
             m_oStream.Close();
             m_bIsOpen = false;
-        }        
+        }
     }
 } // namespace IASLib
 

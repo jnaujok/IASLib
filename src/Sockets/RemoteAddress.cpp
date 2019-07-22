@@ -22,7 +22,7 @@
 namespace IASLib
 {
 
-    CRemoteAddress::CRemoteAddress( void ) 
+    CRemoteAddress::CRemoteAddress( void )
     {
         m_sockAddressList = NULL;
         m_bIsValid = false;
@@ -296,14 +296,14 @@ namespace IASLib
         delete pHints;
         if ( nRet == 0 )
         {
-            CSafeAddressInfo *retVal = new CSafeAddressInfo( retList );
+            retVal = new CSafeAddressInfo( retList );
         }
 
         if ( retList != NULL )
         {
             freeaddrinfo( retList );
         }
-        
+
         return retVal;
     }
 
@@ -330,14 +330,14 @@ namespace IASLib
         delete pHints;
         if ( nRet == 0 )
         {
-            CSafeAddressInfo *retVal = new CSafeAddressInfo( retList );
+            retVal = new CSafeAddressInfo( retList );
         }
 
         if ( retList != NULL )
         {
             freeaddrinfo( retList );
         }
-        
+
         return retVal;
     }
 
@@ -371,7 +371,7 @@ namespace IASLib
 
         return retVal;
     }
-    
+
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__

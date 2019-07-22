@@ -25,14 +25,14 @@ namespace IASLib
     {
 
         m_nErrorNumber = nErrorNumber;
-     
+
         switch ( m_nErrorNumber )
         {
             case EACCES:
                 m_strExceptionMessage = "File access has been denied.";
                 m_nPriority = CException::FATAL;
                 break;
-        
+
             case EINTR:
                 m_strExceptionMessage = "A signal interrupted the file operation.";
                 m_nPriority = CException::WARNING;
@@ -47,7 +47,7 @@ namespace IASLib
                 m_strExceptionMessage = "There are too many file descriptors currently open in the calling process.";
                 m_nPriority = CException::FATAL;
                 break;
-                
+
 
             case ENAMETOOLONG:
                 m_strExceptionMessage = "The length of the filename exceeds PATH_MAX or a pathname component is longer than NAME_MAX.";
@@ -58,7 +58,7 @@ namespace IASLib
                 m_strExceptionMessage = "The maximum allowable number of files is currently open in the system.";
                 m_nPriority = CException::FATAL;
                 break;
-                
+
             case ENOENT:
                 m_strExceptionMessage = "A component of filename does not name an existing file or filename is an empty string.";
                 m_nPriority = CException::FATAL;
@@ -112,6 +112,7 @@ namespace IASLib
 
             case EPIPE:
                 m_strExceptionMessage = "Attempt to read/write to a closed pipe. SIGPIPE will be generated.";
+                break;
 
     #ifndef WIN32
             case ETXTBSY:

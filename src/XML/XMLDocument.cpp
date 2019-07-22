@@ -1,11 +1,11 @@
 /**
  * XML Document class
- * 
- *		This class implements a high-speed parser for XML to provide a 
+ *
+ *		This class implements a high-speed parser for XML to provide a
  * fast and consistent means of loading an XML document from a stream.
  * Because streams can represent sockets, files, or other items, this will
- * improve the overall capability of the IAS Library versus the XML Index 
- * class which can only load files. 
+ * improve the overall capability of the IAS Library versus the XML Index
+ * class which can only load files.
  *		However, to retain compatibility, this class will actually load an
  * XML Index/Element/Property hierarchy as it runs. This should make any
  * conversion from the old system much simpler.
@@ -134,7 +134,7 @@ namespace IASLib
 
         return true;
     }
-           
+
     size_t CXMLDocument::Write( CStream *pOutput )
     {
         size_t nLength = 0;
@@ -154,7 +154,6 @@ namespace IASLib
         bool    bTagClosed = false;
         bool    bIsSelfClose = false;
         CString strPropertyName;
-        bool    bPropertiesFound = false;
 
         while ( ( ! bTagFound ) && ( ! bTagClosed ) && ( ! oStream.IsEOS() ) )
         {
@@ -220,7 +219,7 @@ namespace IASLib
                                     bIsEndTag = true;
                                 }
                                 else
-                                {   
+                                {
                                     strTagName += chChar;
                                 }
                             }
@@ -272,7 +271,7 @@ namespace IASLib
                             strException += "]";
                             IASLIB_THROW_XML_EXCEPTION( strException );
                         }
-            
+
                         delete pTag;
                         pTag = pTemp;
                     }
@@ -288,7 +287,7 @@ namespace IASLib
             }
         }
 
-        if ( ! bTagFound ) 
+        if ( ! bTagFound )
         {
             IASLIB_THROW_XML_EXCEPTION( "Unclosed Tag Found." );
         }
@@ -307,7 +306,7 @@ namespace IASLib
                 }
             }
             return CXMLDocument::OPEN_TAG;
-        } 
+        }
 
         // If we get here, then we have a tag name with whitespace after it, implying that
         // we are about to run into some properties. So, here we start going through the
@@ -338,7 +337,6 @@ namespace IASLib
                         // name to the tag with a blank value.
                         CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
-                        bPropertiesFound = true;
                     }
                     break;
 
@@ -349,20 +347,19 @@ namespace IASLib
                         {
                             IASLIB_THROW_XML_EXCEPTION( "Property found in XML End Tag." );
                         }
-                        bPropertiesFound = true;
                         TagReturns trPropRet = StartProperty( oStream, pTag, strPropertyName );
                         if ( trPropRet == CXMLDocument::OPEN_TAG )
                         {
                             // We've gotten a property, but we haven't found the ending
-                            // bracket for the tag, so we just prep for the next property 
+                            // bracket for the tag, so we just prep for the next property
                             // name by clearing the current name out.
                             strPropertyName.Clear();
                         }
                         else
                         {
                             // Here, the property ended with the "/>" tag, so we can close
-                            // out the tag at the same time. Note that if we get a 
-                            // self-close in an end tag (for that matter, if we get a 
+                            // out the tag at the same time. Note that if we get a
+                            // self-close in an end tag (for that matter, if we get a
                             // property in an end tag) we have an error.
                             if ( trPropRet == CXMLDocument::SELF_CLOSE )
                             {
@@ -392,7 +389,7 @@ namespace IASLib
 
                 case '/':
                     // This may be a self-close mark. To know for sure, we need to check
-                    // if the next character is the close brace. If not, we're going to 
+                    // if the next character is the close brace. If not, we're going to
                     // need to throw an error, because this is a bad character in an XML
                     // tag.
                     oStream >> chChar;
@@ -414,10 +411,9 @@ namespace IASLib
                         // name to the tag with a blank value.
                         CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
-                        bPropertiesFound = true;
                     }
                     break;
-                
+
                 case '>':
                     bTagClosed = true;
                     if ( strPropertyName.GetLength() != 0 )
@@ -426,7 +422,6 @@ namespace IASLib
                         // name to the tag with a blank value.
                         CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
-                        bPropertiesFound = true;
                     }
                     break;
 
@@ -442,7 +437,6 @@ namespace IASLib
                         CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
                         strPropertyName.Clear();
-                        bPropertiesFound = true;
                     }
                     break;
 
@@ -469,7 +463,7 @@ namespace IASLib
         }
         CString strException = "No closing brace found for tag within stream. Stream ended without finding closing \">\" for tag named [";
         strException += strTagName;
-        strException += "]"; 
+        strException += "]";
         IASLIB_THROW_XML_EXCEPTION( strException );
         return CXMLDocument::ERROR_TAG;
     }
@@ -507,7 +501,7 @@ namespace IASLib
                         bFoundSelfClose = true;
                     }
                     break;
- 
+
                 case '"':
                     if ( ( bInQuotes ) && ( ! bSingleQuotes ) )
                     {

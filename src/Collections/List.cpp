@@ -56,7 +56,7 @@ namespace IASLib
     {
         CObject *pRetVal = NULL;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pList->GetLength() ) )
+        if ( m_nCurrentPos < m_pList->GetLength() )
         {
             pRetVal = m_pList->GetAt( m_nCurrentPos );
             m_nCurrentPos++;
@@ -82,11 +82,11 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pList->GetLength() ) )
+        if ( m_nCurrentPos < m_pList->GetLength() )
         {
             bRetVal = true;
         }
-        
+
         return bRetVal;
     }
 

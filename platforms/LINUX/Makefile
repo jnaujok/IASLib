@@ -139,7 +139,7 @@ DEFS    = -Dlinux \
 #
 # Specify the compile-time options.
 #
-OPTIONS =  -ggdb -fvar-tracking -pg -D__THREADED__
+OPTIONS =  -ggdb -fvar-tracking -pg -D__THREADED__ -Wall -Wextra
 #OPTIONS_NO_THREAD = -g0 -pg
 # non-debug version
 #OPTIONS = -O3

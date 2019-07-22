@@ -211,8 +211,6 @@ namespace IASLib
             m_bInitialized = true;
         }
     #endif
-	    struct sockaddr_in	listen_addr;
-
         m_hSocket = socket( AF_INET, SOCK_STREAM, 0 );
 
         if ( m_hSocket != INVALID_SOCKET )
@@ -235,11 +233,9 @@ namespace IASLib
             setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, &temp, sizeof(int));
             temp = config.getBacklogSize();
 
-            listen_addr.sin_family = AF_INET;           // Listen for Internet (TCP/IP) connections
-            listen_addr.sin_port = htons( (u_short)nPort );	    // Assign the Port in Network byte order
-            listen_addr.sin_addr.s_addr = INADDR_ANY;	// Allow connection on any valid IP for this machine
+            CRemoteAddress localListen( strBoundAddress, nPort, SOCK_STREAM );
 
-            if ( bind( m_hSocket,(struct sockaddr *)&listen_addr, sizeof(struct sockaddr_in) ) == SOCKET_ERROR )
+            if ( bind( m_hSocket, localListen, sizeof(struct sockaddr_in) ) == SOCKET_ERROR )
             {
     #ifdef IASLIB_WIN32__
                 closesocket( m_hSocket );
@@ -772,11 +768,11 @@ namespace IASLib
         int     nRet;
 
         memset( &readSet, 0, sizeof( fd_set ) );
-#ifndef IASLIB_NO_LINT__
+#ifdef IASLIB_LINT__
 #pragma warning(disable:4127)
 #endif
         FD_SET( m_hSocket, &readSet );
-#ifndef IASLIB_NO_LINT__
+#ifdef IASLIB_LINT__
 #pragma warning(default:4127)
 #endif
 

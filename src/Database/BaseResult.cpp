@@ -3,7 +3,7 @@
  *
  *  This abstract class provides a common interface from the
  * results from a Stored Procedure (on databases that support
- * table results from a stored procedure) and results from 
+ * table results from a stored procedure) and results from
  * a select statement.
  *  This class implements the common elements between these
  * two result types.
@@ -25,24 +25,24 @@ namespace IASLib
 {
     IMPLEMENT_OBJECT( CBaseResult, CObject );
 
-    CBaseResult::CBaseResult( void ) 
-    { 
-        m_nColumns = 0; 
-        m_nRows = 0; 
-        m_anColumnWidths = NULL; 
-        m_aastrData = NULL; 
-        m_nCurrentRow = 0; 
-        m_bValid = false; 
+    CBaseResult::CBaseResult( void )
+    {
+        m_nColumns = 0;
+        m_nRows = 0;
+        m_anColumnWidths = NULL;
+        m_aastrData = NULL;
+        m_nCurrentRow = 0;
+        m_bValid = false;
     }
 
-    CBaseResult::~CBaseResult( void ) 
-    { 
+    CBaseResult::~CBaseResult( void )
+    {
         // Nothing to do here.
     }
 
     const char *CBaseResult::ColumnName( size_t nColumn )
     {
-        if ( ( m_bValid ) && ( nColumn >= 0 ) && ( nColumn < m_nColumns )  )
+        if ( ( m_bValid ) && ( nColumn < m_nColumns )  )
             return (const char *)m_astrHeaders[ nColumn ];
 
         return "";
@@ -93,7 +93,7 @@ namespace IASLib
 
     CString CBaseResult::GetColumn( size_t nColumn )
     {
-        if ( ( m_bValid ) && ( nColumn >= 0 ) && ( nColumn < m_nColumns ) && ( m_aastrData != NULL ) && ( m_nCurrentRow < m_nRows ) )
+        if ( ( m_bValid )  && ( nColumn < m_nColumns ) && ( m_aastrData != NULL ) && ( m_nCurrentRow < m_nRows ) )
         {
             CStringArray *pArray = m_aastrData[m_nCurrentRow];
 
@@ -129,7 +129,7 @@ namespace IASLib
 
     bool CBaseResult::SetRow( size_t nRow )
     {
-        if ( ( nRow < 0 ) || ( nRow >= m_nRows ) )
+        if  ( nRow >= m_nRows )
         {
             return false;
         }

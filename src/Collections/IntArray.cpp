@@ -37,7 +37,7 @@ namespace IASLib
     {
         int pRetVal = 0;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if  ( m_nCurrentPos < m_pArray->GetLength() )
         {
             pRetVal = (*m_pArray)[ m_nCurrentPos ];
             m_nCurrentPos++;
@@ -50,11 +50,11 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if  ( m_nCurrentPos < m_pArray->GetLength() )
         {
             bRetVal = true;
         }
-        
+
         return bRetVal;
     }
 
@@ -123,7 +123,7 @@ namespace IASLib
 
     int CIntArray::Get( size_t nCount )
     {
-        if ( ( nCount >= 0 ) && ( nCount < m_nElements ) )
+        if ( nCount < m_nElements )
         {
             return m_apElements[ nCount ];
         }
@@ -134,7 +134,7 @@ namespace IASLib
     {
         static int nRet = -1;
 
-        if ( ( nCount >= 0 ) && ( nCount < m_nElements ) )
+        if  ( nCount < m_nElements )
         {
             return m_apElements[ nCount ];
         }
@@ -150,9 +150,6 @@ namespace IASLib
 
         Resize( true );
 
-        if ( nCount < 0 )
-            nCount = 0;
-
         for ( size_t nIndex = m_nElements; nIndex > nCount ; nIndex-- )
         {
             m_apElements[ nIndex ] = m_apElements[ nIndex - 1 ];
@@ -165,7 +162,7 @@ namespace IASLib
 
     bool CIntArray::Delete( size_t nCount )
     {
-        if ( ( nCount >= m_nElements ) || ( nCount < 0 ) )
+        if ( nCount >= m_nElements )
             return false;
 
         for ( size_t nIndex = nCount; nIndex < (m_nElements - 1) ; nIndex++ )

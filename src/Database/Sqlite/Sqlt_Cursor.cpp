@@ -4,7 +4,7 @@
  *      Cursor class for connecting to SQL Lite. The Cursor class stores
  * the data retrieved from a query against the database. It is a some-
  * what simple class, since the SQL Lite database has a rather simple
- * way of handling queries. 
+ * way of handling queries.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 05/13/2003
@@ -32,7 +32,7 @@ namespace IASLib
     CSQLiteCursor::CSQLiteCursor( CSQLiteConnection *pConnection, bool bUpdatable )
     {
         m_pConnection = pConnection;
-        m_bUpdatable = false;
+        m_bUpdatable = bUpdatable;
         m_bValid = false;
     }
 
@@ -43,7 +43,7 @@ namespace IASLib
 
     int CSQLiteCursor::Close( void )
     {
-        for ( int nStep = 0; nStep < m_nRows ; nStep++ )
+        for ( size_t nStep = 0; nStep < m_nRows ; nStep++ )
         {
             m_aastrData[nStep]->DeleteAll();
             delete m_aastrData[ nStep ];
@@ -59,16 +59,19 @@ namespace IASLib
 
     int CSQLiteCursor::DeleteRow( const char *strTable )
     {
+        strTable = strTable; // avoids warnings.
         return IASLIB_DB_ERROR_UNSUPPORTED;
     }
 
     int CSQLiteCursor::InsertRow( const char *strTable )
     {
+        strTable = strTable; // avoids warnings.
         return IASLIB_DB_ERROR_UNSUPPORTED;
     }
 
     int CSQLiteCursor::UpdateRow( const char *strTable )
     {
+        strTable = strTable; // avoids warnings.
         return IASLIB_DB_ERROR_UNSUPPORTED;
     }
 
@@ -106,10 +109,10 @@ namespace IASLib
             {
                 strTemp = astrHeaders[ nCount ];
 
-                if ( strTemp.IndexOf( '.' ) != -1 )
+                if ( strTemp.IndexOf( '.' ) != NOT_FOUND )
                     strTemp = strTemp.Substring( strTemp.IndexOf( '.' ) + 1 );
 
-                if ( ( strTemp.IndexOf( '(' ) != -1 ) || ( strTemp.IndexOf( ')' ) != -1 ) )
+                if ( ( strTemp.IndexOf( '(' ) != NOT_FOUND ) || ( strTemp.IndexOf( ')' ) != NOT_FOUND ) )
                 {
                     strTemp.Replace( '(', ' ' );
                     strTemp.Replace( ')', ' ' );
@@ -124,7 +127,7 @@ namespace IASLib
         if ( ( pCursor->m_nRows % GROW_BY ) == 0 )
         {
             CStringArray  **aaTemp = new CStringArray *[pCursor->m_nRows + GROW_BY];
-            for (int nStep = 0; nStep < pCursor->m_nRows ; nStep++ )
+            for (size_t nStep = 0; nStep < pCursor->m_nRows ; nStep++ )
                 aaTemp[ nStep ] = pCursor->m_aastrData[ nStep ];
             delete pCursor->m_aastrData;
             pCursor->m_aastrData = aaTemp;
@@ -138,8 +141,8 @@ namespace IASLib
 		    pCursor->m_aastrData[ pCursor->m_nRows ]->Push( strTemp );
         }
 
-        if ( pCursor->m_nColumns < nColumns )
-            pCursor->m_nColumns = nColumns;
+        if ( pCursor->m_nColumns < (size_t)nColumns )
+            pCursor->m_nColumns = (size_t)nColumns;
         pCursor->m_nRows++;
 
         return 0;

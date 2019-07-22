@@ -37,7 +37,7 @@ namespace IASLib
     {
         CString pRetVal = NULL;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if ( m_nCurrentPos < m_pArray->GetLength() )
         {
             pRetVal = (*m_pArray)[ m_nCurrentPos ];
             m_nCurrentPos++;
@@ -50,7 +50,7 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if ( m_nCurrentPos < m_pArray->GetLength() )
         {
             bRetVal = true;
         }
@@ -77,7 +77,7 @@ namespace IASLib
         m_nSize = oSource.m_nSize;
         m_nElements = oSource.m_nElements;
         m_apElements = new CString *[ m_nSize ];
-        for ( int nX = 0; nX < m_nElements; nX++ )
+        for ( size_t nX = 0; nX < m_nElements; nX++ )
         {
             m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
         }
@@ -92,7 +92,7 @@ namespace IASLib
             m_nSize = oSource.m_nSize;
             m_nElements = oSource.m_nElements;
             m_apElements = new CString *[ m_nSize ];
-            for ( int nX = 0; nX < m_nElements; nX++ )
+            for ( size_t nX = 0; nX < m_nElements; nX++ )
             {
                 m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
             }
@@ -153,7 +153,7 @@ namespace IASLib
 
     CString CStringArray::Get( size_t nCount ) const
     {
-        if ( ( nCount >= 0 ) && ( nCount < m_nElements ) )
+        if ( nCount < m_nElements )
         {
             return *(m_apElements[ nCount ]);
         }
@@ -166,7 +166,7 @@ namespace IASLib
         static     CString strRet;
 
 
-        if ( ( nCount >= 0 ) && ( nCount < m_nElements ) )
+        if ( nCount < m_nElements )
         {
             return *(m_apElements[ nCount ]);
         }
@@ -182,9 +182,6 @@ namespace IASLib
 
         Resize( true );
 
-        if ( nCount < 0 )
-            nCount = 0;
-
         for ( size_t nIndex = m_nElements; nIndex > nCount ; nIndex-- )
         {
             m_apElements[ nIndex ] = m_apElements[ nIndex - 1 ];
@@ -197,8 +194,10 @@ namespace IASLib
 
     bool CStringArray::Delete( size_t nCount )
     {
-        if ( ( nCount >= m_nElements ) || ( nCount < 0 ) )
+        if ( nCount >= m_nElements )
+        {
             return false;
+        }
 
         CString *pDel = m_apElements[ nCount ];
 

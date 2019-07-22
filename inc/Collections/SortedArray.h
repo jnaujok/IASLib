@@ -49,7 +49,7 @@ namespace IASLib
             virtual size_t      Prepend( CObject *pNew ) { return Push( pNew ); }
             virtual size_t      Find( CObject *pSearch ) const { return (GetLength()) ? FindIndex( pSearch, 0, m_nElements ) : IASLib::NOT_FOUND; }
 
-			virtual bool		Swap( size_t nSwap1, size_t nSwap2 ) { nSwap1=nSwap2; return false; }
+			virtual bool		Swap( size_t nSwap1, size_t nSwap2 );
 
             virtual CIterator  *Enumerate( void );
 

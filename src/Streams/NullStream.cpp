@@ -52,19 +52,19 @@ namespace IASLib
         return '\0';
     }
 
-    void CNullStream::PutChar( const char chPut )
+    void CNullStream::PutChar( const char )
     {
     }
 
-    void CNullStream::PutChar( const unsigned char chPut )
+    void CNullStream::PutChar( const unsigned char  )
     {
     }
 
-    void CNullStream::PutLine( const CString &strOutput )
+    void CNullStream::PutLine( const CString & )
     {
     }
 
-    int CNullStream::PutBuffer( const char *achBuffer, int nLength )
+    int CNullStream::PutBuffer( const char *, int nLength )
     {
         return nLength;
     }

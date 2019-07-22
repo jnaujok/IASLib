@@ -64,6 +64,7 @@ namespace IASLib
 
     CSocketConfigBuilder CSocketConfigBuilder::setBacklogSize( int backlogSize )
     {
+        this->backlogSize = backlogSize;
         return *this;
     }
 

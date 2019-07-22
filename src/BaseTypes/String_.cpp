@@ -185,7 +185,7 @@ namespace IASLib
         else
         {
             size_t nStrLen = strlen( strSource );
-            if ( ( nLength > nStrLen ) || ( nLength < 0 ) )
+            if ( nLength > nStrLen )
                 nLength = nStrLen;
 
             if ( nLength > 0 )
@@ -1014,7 +1014,7 @@ namespace IASLib
     {
         static IASLibChar__ chDummy;
 
-        if ( (m_pStubData) && ( nIndex >= 0 ) && ( (size_t)nIndex < m_pStubData->m_nLength ) )
+        if ( (m_pStubData) && ( (size_t)nIndex < m_pStubData->m_nLength ) )
             return m_pStubData->m_strData[ (size_t)nIndex ];
 
         chDummy = '\0';
@@ -1043,7 +1043,7 @@ namespace IASLib
 
         if ( m_pStubData )
         {
-            if ( ( nStartIndex >= 0 ) && ( nStartIndex < m_pStubData->m_nLength ) )
+            if (  nStartIndex < m_pStubData->m_nLength )
             {
                 if ( ( nLength == - 1 ) || ( nLength > (int)((int) m_pStubData->m_nLength - (int)nStartIndex ) ) )
                 {
@@ -1115,7 +1115,7 @@ namespace IASLib
 
             m_pStubData->ChangeSize( nLength * 2 );
 
-            for (nCount = nLength; nCount >= 0; nCount-- )
+            for (nCount = nLength; nCount != NOT_FOUND; nCount-- )
             {
                m_pStubData->m_strData[ nCount * 2 + 1 ] = strHex[ m_pStubData->m_strData[ nCount ] % 16 ];
                m_pStubData->m_strData[ nCount * 2 ]     = strHex[ m_pStubData->m_strData[ nCount ] / 16 ];
@@ -1224,11 +1224,18 @@ namespace IASLib
 
             size_t nCount;
 
-            for ( nCount = m_pStubData->m_nLength - 1;( nCount >= 0 ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount-- );
+            for ( nCount = m_pStubData->m_nLength - 1;( nCount != NOT_FOUND ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount-- );
 
-            if ( nCount != (m_pStubData->m_nLength - 1) )
+            if ( nCount != NOT_FOUND )
             {
-                *this = Substring( 0, (int)nCount + 1 );
+                if ( nCount != (m_pStubData->m_nLength - 1) )
+                {
+                    *this = Substring( 0, (int)nCount + 1 );
+                }
+            }
+            else
+            {
+                *this = "";
             }
         }
         return *this;
@@ -1253,7 +1260,7 @@ namespace IASLib
             if ( ! m_pStubData )
                 return *this;
 
-            for ( nCount = m_pStubData->m_nLength - 1;( nCount >= 0 ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount-- );
+            for ( nCount = m_pStubData->m_nLength - 1;( nCount != NOT_FOUND ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount-- );
 
             if ( nCount != (m_pStubData->m_nLength - 1) )
             {
@@ -1420,7 +1427,7 @@ namespace IASLib
                         if ( pFound )
                             pPos = (size_t)(pFound - strCopy.m_pStubData->m_strData);
 
-                    } while ( ( pFound ) && ( pPos < nStart ) );
+                    } while ( ( pFound ) && (pPos != NOT_FOUND) && ( pPos < nStart ) );
 
                     if ( pLast != strCopy.m_pStubData->m_strData )
                     {
@@ -1437,7 +1444,7 @@ namespace IASLib
                         if ( pFound )
                             pPos = (int)(pFound - m_pStubData->m_strData);
 
-                    } while ( ( pFound ) && ( pPos < (int)nStart ) );
+                    } while ( ( pFound ) && ( pPos < nStart ) );
 
                     if ( pLast != m_pStubData->m_strData )
                     {
@@ -1456,12 +1463,12 @@ namespace IASLib
 
         if ( m_pStubData )
         {
-            if ( ( nStart > m_pStubData->m_nLength ) || ( nStart < 0 ) )
+            if ( ( nStart > m_pStubData->m_nLength ) || ( nStart == NOT_FOUND ) )
             {
                 nStart = m_pStubData->m_nLength;
             }
 
-            for ( nCount = nStart; nCount >= 0; nCount-- )
+            for ( nCount = nStart; nCount != NOT_FOUND; nCount-- )
             {
                 if ( bCaseInsensitive )
                 {
@@ -1499,7 +1506,7 @@ namespace IASLib
                             // Input a string from a stream derived object.
     std::istream  &operator >>( std::istream &oInputStream, CString &strTarget )
     {
-        int nCount;
+        size_t nCount;
         unsigned long nInputLength;
 
         oInputStream >> nInputLength;
@@ -1512,7 +1519,7 @@ namespace IASLib
         strTarget.m_pStubData = new CStringStub( nInputLength );
         strTarget.m_pStubData->AddRef();
 
-        for ( nCount = 0; nCount < nInputLength; nCount++ )
+        for ( nCount = 0; nCount < strTarget.m_pStubData->m_nLength; nCount++ )
         {
             oInputStream >> strTarget.m_pStubData->m_strData[ nCount ];
         }
@@ -1606,7 +1613,7 @@ namespace IASLib
             {
                 if ( ( m_pStubData->m_strData[ nCount ] < (IASLibChar__)32 ) ||
                      ( m_pStubData->m_strData[nCount] > 126 ) ||
-                     ( strEscapableChars.IndexOf( m_pStubData->m_strData[ nCount ] ) >= 0 ) )
+                     ( strEscapableChars.IndexOf( m_pStubData->m_strData[ nCount ] ) != NOT_FOUND ) )
                 {
                     strEscapedVersion += "%";
                     strEscapedVersion += strHexChars[ m_pStubData->m_strData[nCount] / 16 ];
@@ -1884,7 +1891,7 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( IndexOf( strSearch) >= 0 )
+        if ( IndexOf( strSearch) != NOT_FOUND )
             bRetVal = true;
 
         return bRetVal;
@@ -1894,7 +1901,7 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( IndexOf( strSearch) >= 0 )
+        if ( IndexOf( strSearch) != NOT_FOUND )
             bRetVal = true;
 
         return bRetVal;
@@ -1904,7 +1911,7 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( IndexOf( chSearch) >= 0 )
+        if ( IndexOf( chSearch) != NOT_FOUND )
             bRetVal = true;
 
         return bRetVal;
@@ -2057,15 +2064,15 @@ namespace IASLib
         return ret;
     }
 
-    // For proper hashing of strings, we redefine the hashcode function so 
+    // For proper hashing of strings, we redefine the hashcode function so
     // that the hash of a string is equivalent to the hash of its contents.
     // Thus two strings with the same value, "Hello" and "Hello" will hash
-    // to the same hashcode, even though they are different values. 
+    // to the same hashcode, even though they are different values.
     int CString::hashcode( void )
     {
         int result = 131;
 
-        for ( int x = 0; x < m_pStubData->m_nLength; x++ )
+        for ( size_t x = 0; x < m_pStubData->m_nLength; x++ )
         {
             result = 37 * result + m_pStubData->m_strData[x];
         }

@@ -34,20 +34,15 @@
         #include <sched.h>
         #define THREAD_T thread_t
     #else
-        #ifdef IASLIB_DEC__
-            #include <pthread.h>
-            #define THREAD_T pthread_t
+        #ifdef IASLIB_WIN32__
+            #include <windows.h>
+            #define THREAD_T HANDLE
         #else
-            #ifdef IASLIB_WIN32__
-                #include <windows.h>
-                #define THREAD_T HANDLE
+            #ifdef IASLIB_PTHREAD__
+                #include <pthread.h>
+                #define THREAD_T pthread_t
             #else
-                #ifdef IASLIB_PTHREAD__
-                    #include <pthread.h>
-                    #define THREAD_T pthread_t
-                #else
-                    #error No Thread type defined, but multi-threading is active!
-                #endif
+                #error No Thread type defined, but multi-threading is active!
             #endif
         #endif
     #endif
@@ -71,7 +66,7 @@
                 bool            m_bDaemon;
                 CString         m_strThreadName;
 
-        #ifdef IASLIB_DEC_
+        #ifdef IASLIB_PTHREAD__
                 pthread_attr_t  m_stAttributes;
             public:
                 CMutex          m_mutexStartSuspended;

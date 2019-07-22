@@ -1,7 +1,7 @@
 /*
  *  Directory Class
  *
- *      This class encapsulates a directory listing with a filter. 
+ *      This class encapsulates a directory listing with a filter.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 02/19/2002
@@ -48,7 +48,7 @@ namespace IASLib
 
     const char *CDirectory::GetFileName( size_t nIndex )
     {
-        if ( ( nIndex < 0 ) || ( nIndex >= m_aDirEntries.Length() ) )
+        if ( nIndex >= m_aDirEntries.Length() )
         {
             return NULL;
         }
@@ -59,7 +59,7 @@ namespace IASLib
 
     CDirectoryEntry *CDirectory::GetEntry( size_t nIndex )
     {
-        if ( ( nIndex < 0 ) || ( nIndex >= m_aDirEntries.Length() ) )
+        if ( nIndex >= m_aDirEntries.Length() )
         {
             return NULL;
         }

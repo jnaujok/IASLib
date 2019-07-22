@@ -163,11 +163,13 @@ namespace IASLib
 
     int CUDPSocket::Send( const char *pchBuffer, int nBufferSize, const CRemoteAddress &targetAddress )
     {
-        int n, len;
+        size_t retVal = 0;
 
-        sendto( m_hSocket, (const char *)pchBuffer, nBufferSize,
+        retVal = sendto( m_hSocket, (const char *)pchBuffer, nBufferSize,
             MSG_CONFIRM, (const struct sockaddr *)targetAddress,
                 sizeof(struct sockaddr));
+                
+        return retVal;
     }
 
     void CUDPSocket::Close( void )

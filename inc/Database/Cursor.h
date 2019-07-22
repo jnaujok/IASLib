@@ -42,7 +42,7 @@ namespace IASLib
 
             virtual int         SetColumn( size_t nColumn, const char *strValue )
                                 {
-                                    if ( ( m_bValid != 0 ) && ( nColumn >= 0 ) && ( nColumn < m_nColumns ) )
+                                    if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
                                     {
                                         m_astrNewValues[ nColumn ] = strValue;
                                         return 1;
@@ -52,7 +52,7 @@ namespace IASLib
 
             virtual int         SetColumn( size_t nColumn, size_t nValue )
                                 {
-                                    if ( ( m_bValid != 0 ) && ( nColumn >= 0 ) && ( nColumn < m_nColumns ) )
+                                    if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
                                     {
                                         m_astrNewValues[ nColumn ].Format( "%d", nValue );
                                         return 1;

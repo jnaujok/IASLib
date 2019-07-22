@@ -202,7 +202,7 @@ namespace IASLib
     }
 
         // Fixed location String Stub. Cannot be resized or moved.
-    CStringStub::CStringStub( IASLibChar__ *strData, int nLength, int nSize, bool bDeletable ) 
+    CStringStub::CStringStub( IASLibChar__ *strData, int nLength, int nSize, bool bDeletable )
     {
         if ( strData == NULL )
         {
@@ -263,7 +263,8 @@ namespace IASLib
     {
         if ( m_nReferences != 0 )
         {
-            throw CStringException( "String Stub deleted while still referenced!", CException::NORMAL );
+            printf( "String Stub deleted while still referenced!" );
+            //throw CStringException( "String Stub deleted while still referenced!", CException::NORMAL );
         }
 
         if ( m_bDeletable )

@@ -783,7 +783,7 @@ static CMutex g_mutexSingleThread;
         int         nMinute = 0;
         int         nSecond = 0;
 
-        if ( strTime.IndexOf( ":" ) != -1 )
+        if ( strTime.IndexOf( ":" ) != NOT_FOUND )
         {
             strHour = strTime.Substring( 0, (int)strTime.IndexOf( ":" ) );
 
@@ -791,7 +791,7 @@ static CMutex g_mutexSingleThread;
 
             strWork = strTime.Substring( strTime.IndexOf( ":" ) + 1 );
 
-            if ( strWork.IndexOf( ":" ) != -1 )
+            if ( strWork.IndexOf( ":" ) != NOT_FOUND )
             {
                 strMinute = strWork.Substring( 0, (int)strWork.IndexOf( ":" ) );
                 nMinute = atoi( strMinute );
@@ -884,23 +884,23 @@ static CMutex g_mutexSingleThread;
         strValue.ToUpperCase();
         CDate dttRetVal = CDate( );
 
-        if ( ( strValue.IndexOf( "GMT-" ) != -1 ) || ( strValue.IndexOf( "GMT+" ) != -1 ) || ( strValue.IndexOf( "GMT -" ) != -1 ) || ( strValue.IndexOf( "GMT +" ) != -1 ) || ( strValue.IndexOf( "GMT" ) != -1 ) )
+        if ( ( strValue.IndexOf( "GMT-" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT+" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT -" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT +" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT" ) != NOT_FOUND ) )
         {
             return CDate::DateParse( strValue );
         }
 
             // Check for the "NOW" format which is just the current time
-        if ( strValue.IndexOf( "NOW" ) != -1 )
+        if ( strValue.IndexOf( "NOW" ) != NOT_FOUND )
         {
             return GetNowDate( strValue );
         }
 
-        if ( strValue.IndexOf( "TODAY" ) != -1 )
+        if ( strValue.IndexOf( "TODAY" ) != NOT_FOUND )
         {
             return GetTodayDate( strValue );
         }
 
-        if ( strValue.IndexOf( "START OF DAY" ) != -1 )
+        if ( strValue.IndexOf( "START OF DAY" ) != NOT_FOUND )
         {
             return GetTodayDate( "TODAY" );
         }
@@ -1230,7 +1230,7 @@ static CMutex g_mutexSingleThread;
             strWork = strWork.Substring( nTemp + 1 );
             strWork.Trim();
 
-            if ( ( ! bAsctime ) && ( strWkday.IndexOf( strTemp ) != -1 ) )
+            if ( ( ! bAsctime ) && ( strWkday.IndexOf( strTemp ) != NOT_FOUND ) )
             {
                 // This is an RFC 1123 Date: Wkday "," SP 2DIGIT SP month SP 4DIGIT SP 2DIGIT ":" 2DIGIT ":" 2DIGIT SP "GMT" (Mon, 02 Jun 2001 12:14:11 GMT)
                     // Find the end of the date.
@@ -1313,7 +1313,7 @@ static CMutex g_mutexSingleThread;
                 }
                 else
                 {
-                    if ( strWkday.IndexOf( strTemp ) != -1 )
+                    if ( strWkday.IndexOf( strTemp ) != NOT_FOUND )
                     {
                         // This is an ASC-Time date: Wkday SP month SP 1*DIGIT SP 2DIGIT ":" 2DIGIT ":" 2DIGIT SP 4DIGIT (Mon Jun  2 12:14:11 2001)
                             // Find the end of the Month.
@@ -1603,7 +1603,6 @@ static CMutex g_mutexSingleThread;
         char        str_mon[500], str_wday[500], str_gmtoff[500], str_ampm[500], str_trash[500];
         int         tm_sec, tm_min, tm_hour, tm_mday, tm_year;
         long        tm_mon, tm_wday, ampm, gmtoff;
-        int         got_zone;
         tm_type     tmVals;
 
             // sscanf_s has problems with leading/trailing spaces.
@@ -1619,7 +1618,6 @@ static CMutex g_mutexSingleThread;
         tmVals.tm_isdst = 0;
         tmVals.tm_gmtoffset = 0;
         ampm = AMPM_NONE;
-        got_zone = 0;
 
         /* And do the sscanfs.  WARNING: you can add more formats here,
         ** but be careful!  You can easily screw up the parsing of existing
@@ -1680,7 +1678,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -1716,7 +1713,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            got_zone = 1;
             AdjustTime( tmVals, 0 );
             return CDate( tmVals );
         }
@@ -1818,7 +1814,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -1854,7 +1849,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -1922,7 +1916,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -1990,7 +1983,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -2058,7 +2050,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -2126,7 +2117,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -2566,7 +2556,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -2605,7 +2594,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -2716,7 +2704,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -2755,7 +2742,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -2865,7 +2851,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
@@ -2904,7 +2889,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            got_zone = 1;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
@@ -3042,7 +3026,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3118,7 +3101,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3182,7 +3164,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3247,7 +3228,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3321,7 +3301,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_mon--;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3383,7 +3362,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_mday = tm_mday;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3445,7 +3423,6 @@ static CMutex g_mutexSingleThread;
             tmVals.tm_mon--;
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3517,7 +3494,6 @@ static CMutex g_mutexSingleThread;
                 // Months go from 0 to 11, not 1 to 12
             tmVals.tm_mon--;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3577,7 +3553,6 @@ static CMutex g_mutexSingleThread;
         {
             tmVals.tm_mday = tm_mday;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
-            got_zone = 1;
             AdjustTime( tmVals, gmtoff );
             return CDate( tmVals );
         }
@@ -3897,19 +3872,19 @@ static CMutex g_mutexSingleThread;
         if ( ScanTokens( GMTOffsetTable, sizeof( GMTOffsetTable ) / sizeof( Token_Type ), strOffset, lValue ) )
             return true;
 
-        if ( strOffset.IndexOf( "gmt" ) != -1 )
+        if ( strOffset.IndexOf( "gmt" ) != NOT_FOUND )
         {
             strOffset = strOffset.Substring( strOffset.IndexOf( "gmt" ) + 3 );
             bool bAdd = true;
 
                 // Remember, we converted "-" to "/"
-            if ( strOffset.IndexOf( "/" ) != -1 )
+            if ( strOffset.IndexOf( "/" ) != NOT_FOUND )
             {
                 bAdd = false;
                 strOffset = strOffset.Substring( strOffset.IndexOf( "/" ) + 1 );
             }
 
-            if ( strOffset.IndexOf( "+" ) != -1 )
+            if ( strOffset.IndexOf( "+" ) != NOT_FOUND )
             {
                 bAdd = true;
                 strOffset = strOffset.Substring( strOffset.IndexOf( "+" ) + 1 );

@@ -47,7 +47,7 @@ namespace IASLib
         *                         as tokens.
         * @param   bAllDelimitersValid  flag indicating whether to treat multiple
         *                               continuous delimiters as multiple delimiters
-        *                               (<code>true</code>) or treat them all as a 
+        *                               (<code>true</code>) or treat them all as a
         *                               single delimiter (<code>false</code>).
         */
     CStringTokenizer::CStringTokenizer( const char *strParsed, const char *strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid, const bool bIgnoreQuotedDelimiters )
@@ -86,7 +86,7 @@ namespace IASLib
         *                         as tokens.
         * @param   bAllDelimitersValid  flag indicating whether to treat multiple
         *                               continuous delimiters as multiple delimiters
-        *                               (<code>true</code>) or treat them all as a 
+        *                               (<code>true</code>) or treat them all as a
         *                               single delimiter (<code>false</code>).
         */
     CStringTokenizer::CStringTokenizer( const CString &strParsed, const char *strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid, const bool bIgnoreQuotedDelimiters )
@@ -125,7 +125,7 @@ namespace IASLib
         *                         as tokens.
         * @param   bAllDelimitersValid  flag indicating whether to treat multiple
         *                               continuous delimiters as multiple delimiters
-        *                               (<code>true</code>) or treat them all as a 
+        *                               (<code>true</code>) or treat them all as a
         *                               single delimiter (<code>false</code>).
         */
     CStringTokenizer::CStringTokenizer( const CString &strParsed, const CString &strDelimiters, const bool bReturnTokens, const bool bAllDelimitersValid, const bool bIgnoreQuotedDelimiters )
@@ -156,8 +156,8 @@ namespace IASLib
     void CStringTokenizer::SkipDelimiters( void )
     {
 	    while ( ( !m_bReturnTokens ) &&
-	            ( m_nCurrentPosition < m_nMaxPosition ) && 
-	            (  m_strDelimiters.IndexOf( m_strWorkingString[ m_nCurrentPosition ] ) != IASLib::NOT_FOUND ) ) 
+	            ( m_nCurrentPosition < m_nMaxPosition ) &&
+	            (  m_strDelimiters.IndexOf( m_strWorkingString[ m_nCurrentPosition ] ) != IASLib::NOT_FOUND ) )
         {
             if ( ( m_bFirstToken ) && ( m_nCurrentPosition == 0 ) && ( m_bPreserveDelimiters ) )
             {
@@ -189,7 +189,7 @@ namespace IASLib
             SkipDelimiters();
             return ( ( m_nCurrentPosition < m_nMaxPosition ) ? true:false );
         }
-        
+
         return ( ( ( m_nCurrentPosition + 1 ) < m_nMaxPosition ) ? true:false );
     }
 
@@ -221,7 +221,9 @@ namespace IASLib
           ( inQuote || ( m_strDelimiters.IndexOf( m_strWorkingString[ m_nCurrentPosition ] ) == IASLib::NOT_FOUND ) ) )
         {
             if ( m_bIgnoreQuoted && ( m_strWorkingString[m_nCurrentPosition] == '"' ) )
+            {
                 inQuote = ! inQuote;
+            }
 	        m_nCurrentPosition++;
 	    }
 

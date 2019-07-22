@@ -2,11 +2,11 @@
 **  Thread Class
 **
 **  Description:
-**      This class encapsulates a thread. Creating an object of this 
-** class creates a new thread. The new object then begins execution at 
+**      This class encapsulates a thread. Creating an object of this
+** class creates a new thread. The new object then begins execution at
 ** the virtual Run method of the class. Note that this class isn't
 ** really meant to be created directly, since the Run method of this
-** class simply exits the thread. 
+** class simply exits the thread.
 **      The real power comes from inheriting from this object and over-
 ** riding the Run method. This lets you create unique objects that run
 ** as threads.
@@ -62,7 +62,7 @@ extern "C"
 
         pThread->SetRunning( true );
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
 			// Here we play a trick on DECs to start suspended
 		pThread->m_mutexStartSuspended.Lock();
         sleep(0);
@@ -99,7 +99,7 @@ CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetache
     CThreadMonitor *pMonitor;
     int nRetCode;
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
 	if ( bStartSuspended )
 	{
 		m_mutexStartSuspended.Lock();
@@ -152,10 +152,9 @@ CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetache
 
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
     if ( pthread_attr_init( &m_stAttributes ) )
     {
-        ErrorLog( "Could not initialize thread attributes!\n" );
         if ( ! bStartSuspended )
         {
             CThread::LeaveCriticalSection();
@@ -165,7 +164,6 @@ CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetache
 
     if ( pthread_attr_setscope( &m_stAttributes, PTHREAD_SCOPE_SYSTEM ) )
     {
-        ErrorLog( "Could not set thread contention scope!\n" );
         if ( ! bStartSuspended )
         {
             CThread::LeaveCriticalSection();
@@ -173,9 +171,8 @@ CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetache
         return;
     }
 
-    if ( nRetCode = pthread_create( &m_ptThreadID, &m_stAttributes, ThreadStartRoutine, this ) )
+    if ( ( nRetCode = pthread_create( &m_ptThreadID, &m_stAttributes, ThreadStartRoutine, this ) ) != 0 )
     {
-        ErrorLog( "Could not instantiate thread! (Error Code: %d)\n", nRetCode );
         if ( ! bStartSuspended )
         {
             CThread::LeaveCriticalSection();
@@ -237,7 +234,7 @@ CThread::CThread( THREAD_T ptThreadID, const char *strThreadName )
         ptThreadID = thr_self();
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
         ptThreadID = pthread_self();
 #endif
 
@@ -275,7 +272,7 @@ CThread::~CThread( void )
             Join();
         }
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
         pthread_attr_destroy( &m_stAttributes );
 #endif
 
@@ -304,7 +301,7 @@ int CThread::Kill( void )
         return -1;
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
         return pthread_cancel( m_ptThreadID );
 #endif
 
@@ -323,12 +320,12 @@ int CThread::Join( void )
 #ifdef IASLIB_MULTI_THREADED__
     if ( m_bIsRunning )
     {
-        void *pRetVal;
+        void *pRetVal = NULL;
 #ifdef IASLIB_SUN__
         if ( thr_join( m_ptThreadID, NULL, &pRetVal ) == 0 )
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
         if ( pthread_join( m_ptThreadID, &pRetVal ) == 0 )
 #endif
 
@@ -368,7 +365,7 @@ void CThread::ExitThread( int nExitCode )
     }
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
     if ( pthread_equal( pthread_self(), m_ptThreadID ) )
     {
         m_nReturnCode = nExitCode;
@@ -436,8 +433,8 @@ void CThread::Resume( void )
     thr_continue( m_ptThreadID );
 #endif
 
-#ifdef IASLIB_DEC__
-		// On DEC we can only start a thread suspended with a mutex trick, so this 
+#ifdef IASLIB_PTHREAD__
+		// On DEC we can only start a thread suspended with a mutex trick, so this
 		// whole thing is a big kluge to prevent race conditions.
 	m_mutexStartSuspended.Unlock();
 #endif
@@ -452,7 +449,7 @@ void CThread::Resume( void )
 bool CThread::Detach( void )
 {
 #ifdef IASLIB_MULTI_THREADED__
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
     if ( ! m_bDetached )
     {
         pthread_detach( m_ptThreadID );
@@ -482,7 +479,7 @@ CThread *CThread::Self( void )
     ptThreadID = thr_self();
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
     ptThreadID = pthread_self();
 #endif
 
@@ -512,7 +509,7 @@ bool CThread::Equals( THREAD_T ptThread1, THREAD_T ptThread2 )
     }
 #endif
 
-#ifdef IASLIB_DEC__
+#ifdef IASLIB_PTHREAD__
     if ( pthread_equal( ptThread1, ptThread2 ) )
     {
         return true;

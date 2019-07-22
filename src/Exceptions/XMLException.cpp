@@ -2,7 +2,7 @@
  * XML Exception Class
  *
  *      This class is used for throwing whenever an exception occurs in
- * the XML handling classes. XML exceptions can take many forms, and 
+ * the XML handling classes. XML exceptions can take many forms, and
  * include things like parsing poorly formed XML data.
  *
  *	Author: Jeffrey R. Naujok
@@ -31,6 +31,7 @@ namespace IASLib
 
             case 1:
                 m_strExceptionMessage = "No ending brace found.";
+                break;
 
             default:
                 m_strExceptionMessage = "Unknown XML Exception!";

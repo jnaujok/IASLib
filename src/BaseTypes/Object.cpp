@@ -58,13 +58,15 @@ namespace IASLib
 
     void CObject::SetAssertHandler( )
     {
+        // TODO: Implement Assertion Handlers
     }
 
 
-    void CObject::CallAssertHandler( const char *strFile, 
-                                     int nLine, 
+    void CObject::CallAssertHandler( const char *strFile,
+                                     int nLine,
                                      const char *strCondition )
     {
-
+        // TODO: Implement Assertion Handlers
+        printf( "Assertion failed: (%s) - %s:%d", strCondition, strFile, nLine );
     }
 } // End of Namespace

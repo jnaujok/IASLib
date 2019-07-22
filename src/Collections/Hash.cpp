@@ -53,7 +53,7 @@ namespace IASLib
     {
         CObject *pRetVal = NULL;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pHash->GetLength() ) )
+        if (  m_nCurrentPos < m_pHash->GetLength() )
         {
             pRetVal = m_pHash->Enum( m_nCurrentPos );
             m_nCurrentPos++;
@@ -79,7 +79,7 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pHash->GetLength() ) )
+        if ( m_nCurrentPos < m_pHash->GetLength() )
         {
             bRetVal = true;
         }
@@ -794,7 +794,7 @@ namespace IASLib
 #ifdef IASLIB_MULTI_THREADED__
         m_mutexProtect.Lock();
 #endif
-        for ( int nX = 0; nX < m_nArraySize; nX++ )
+        for ( size_t nX = 0; nX < m_nArraySize; nX++ )
         {
             if ( m_aHashTable[nX] != NULL )
             {

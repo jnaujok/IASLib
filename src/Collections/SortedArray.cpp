@@ -48,8 +48,9 @@ namespace IASLib
 	{
 		size_t nInsertPoint = Find( pNew );
 
-      if ( (int)nInsertPoint >= ( GetCount() + 1 ) )
-			nInsertPoint = (size_t)(-((int)nInsertPoint + 1));
+      	if ( nInsertPoint >= ( GetCount() + 1 ) )
+		    CArray::Append( pNew );
+			return GetCount();
 
 		return CArray::Insert( nInsertPoint, pNew );
 	}
@@ -76,7 +77,7 @@ namespace IASLib
          }
 			return FindIndex( pSearch, nMiddle, nHigh );
 		}
-		
+
 		if ( nResult > 0 )
 		{
          if ( ( nMiddle == nHigh ) && ( nMiddle != nLow ) )
@@ -93,6 +94,18 @@ namespace IASLib
     {
         return new CArrayIterator( this );
     }
+
+	bool CSortedArray::Swap( size_t swap1, size_t swap2 )
+	{
+		if ( ( swap1 != swap2 ) && ( swap1 < this->m_nElements ) && ( swap2 < m_nElements ) )
+		{
+			CObject *temp = m_apElements[swap1];
+			m_apElements[swap1] = m_apElements[swap2];
+			m_apElements[swap2] = temp;
+			return true;
+		}
+		return false;
+	}
 
 } // End of Namespace IASLib
 

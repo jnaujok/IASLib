@@ -21,17 +21,16 @@ namespace IASLib
 
     IMPLEMENT_OBJECT( CHTTPHeaderList, CHash );
 
-    CHTTPHeaderList::CHTTPHeaderList( void ) 
+    CHTTPHeaderList::CHTTPHeaderList( void )
     : CHash( "SMALL" )
     {
-       
+
     }
 
     CHTTPHeaderList::CHTTPHeaderList( CStream &oStream ) : CHash( "SMALL" )
     {
         CString         strLine;
         CString         strUpcaseName;
-        int             nCount;
         CString         strLastName;
         CHTTPHeader    *pHeader;
         int             nLines = 0;
@@ -48,7 +47,7 @@ namespace IASLib
                 break;
             }
 
-            if ( ( strLine.IndexOf( ':' ) == -1 ) && ( ( strLine[0] == ' ' ) || ( strLine[0] == '\t' ) ) )
+            if ( ( strLine.IndexOf( ':' ) == NOT_FOUND ) && ( ( strLine[0] == ' ' ) || ( strLine[0] == '\t' ) ) )
             {
                 // This is a continuation of the previous header.
                 if ( strLastName.GetLength() != 0 )
@@ -70,13 +69,12 @@ namespace IASLib
                 strLine.Trim();
 
                     // Now we see if this is a name:value pair, or if it's just crapola on the line.
-                if ( strLine.IndexOf( ':' ) != -1 )
+                if ( strLine.IndexOf( ':' ) != NOT_FOUND )
                 {
                         // This is a full-fledged header line with a name:value pair.
                         // There are two possibilities, one: this is a new header altogether,
                         // or two: this is a continuation of a previous tag.
                         //  To find out, we need to search the already parsed tags.
-                    nCount = 0;
                     CString strName = strLine.Substring( 0, (int)strLine.IndexOf( ':' ) );
                     strName.Trim();
                     strUpcaseName = strName;

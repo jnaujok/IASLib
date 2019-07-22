@@ -2,13 +2,13 @@
  * Sparse Array Class
  *
  *  This class provides an array for storing sparse items in an array,
- * in other words, items that may be highly separated in array space. 
+ * in other words, items that may be highly separated in array space.
  * This class does this in a memory efficient means. There is a slight,
  * four byte, overhead per element for storage, but there is no penalty
  * no matter how large the array becomes. So, you could have ten elements
  * populated over a range of 10,000,000 elements, and this class would
  * only have an overhead of 40 bytes.
- *  Access to elements is O(log n) where n is the number of currently 
+ *  Access to elements is O(log n) where n is the number of currently
  * inserted elements.
  *  This class stores pointers to any object derived from CObject.
  *
@@ -69,7 +69,7 @@ namespace IASLib
         CObject *pRetVal = NULL;
         CSparseArrayElement *pElement;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if ( m_nCurrentPos < m_pArray->GetLength() )
         {
             pElement = (CSparseArrayElement *)m_pArray->m_apElements[ m_nCurrentPos ];
             pRetVal = pElement->GetData();
@@ -100,11 +100,11 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if ( m_nCurrentPos < m_pArray->GetLength() )
         {
             bRetVal = true;
         }
-        
+
         return bRetVal;
     }
 

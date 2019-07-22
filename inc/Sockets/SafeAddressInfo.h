@@ -3,8 +3,8 @@
  *
  *      This class encapsulates the standard "c" addrinfo struct into a class
  * that can be safely passed around, copied, and even passed by copy without
- * leaking memory or creating race conditions with potentially awful side 
- * effects. 
+ * leaking memory or creating race conditions with potentially awful side
+ * effects.
  *      In short, all copies of the object are deep copies with their own set
  * of pointers and data, so having one go out of scope doesn't ruin a copy of
  * the data, the same cannot be said for the standard "struct addrinfo" that
@@ -42,8 +42,6 @@
 
 namespace IASLib
 {
-    static struct sockaddr_in dummyAddress;
-
     class CSafeAddressInfo : public CObject
     {
         private:
@@ -76,7 +74,7 @@ namespace IASLib
             }
 
             int getSocktype()
-            { 
+            {
                 return socktype;
             }
 

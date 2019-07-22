@@ -21,7 +21,7 @@ namespace IASLib
     {
         CObject *pRetVal = NULL;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if (  m_nCurrentPos < m_pArray->GetLength() )
         {
             pRetVal = (*m_pArray)[ m_nCurrentPos ];
             m_nCurrentPos++;
@@ -47,11 +47,11 @@ namespace IASLib
     {
         bool bRetVal = false;
 
-        if ( ( m_nCurrentPos >= 0 ) && ( m_nCurrentPos < m_pArray->GetLength() ) )
+        if (  m_nCurrentPos < m_pArray->GetLength() )
         {
             bRetVal = true;
         }
-        
+
         return bRetVal;
     }
 
@@ -128,7 +128,7 @@ namespace IASLib
 
     CObject *CArray::Get( size_t nCount ) const
     {
-        if ( ( nCount >= 0 ) && ( nCount < m_nElements ) )
+        if (  nCount < m_nElements )
         {
             return m_apElements[ nCount ];
         }
@@ -144,7 +144,7 @@ namespace IASLib
     {
         CObject *pRetVal = NULL;
 
-        if ( ( nCount >= 0 ) && ( nCount < m_nElements ) )
+        if ( nCount < m_nElements )
         {
             pRetVal = m_apElements[ nCount ];
 
@@ -168,9 +168,6 @@ namespace IASLib
 
         Resize( true );
 
-        if ( nCount < 0 )
-            nCount = 0;
-
         for ( size_t nIndex = m_nElements; nIndex > nCount ; nIndex-- )
         {
             m_apElements[ nIndex ] = m_apElements[ nIndex - 1 ];
@@ -183,7 +180,7 @@ namespace IASLib
 
     bool CArray::Delete( size_t nCount )
     {
-        if ( ( nCount >= m_nElements ) || ( nCount < 0 ) )
+        if ( nCount >= m_nElements )
             return false;
 
         delete m_apElements[ nCount ];
@@ -243,7 +240,7 @@ namespace IASLib
 
                 // loop through the array until indices cross
                // Watch out for the unsigned wrap-around on "nHi"
-            while ( ( nLo <= nHi ) && ( nHi <= nHigh ) ) 
+            while ( ( nLo <= nHi ) && ( nHi <= nHigh ) )
             {
                     // find the first element that is greater than or equal to
                     // the partition element starting from the left Index.
@@ -283,7 +280,7 @@ namespace IASLib
 	{
 		bool bRetVal = false;
 
-		if ( ( nSwap1 >= 0 ) && ( nSwap1 < GetLength() ) && ( nSwap2 >=0 ) && ( nSwap2 < GetLength() ) && ( nSwap1 != nSwap2 ) )
+		if ( ( nSwap1 < GetLength() ) && ( nSwap2 < GetLength() ) && ( nSwap1 != nSwap2 ) )
 		{
 			CObject *pTemp = m_apElements[ nSwap1 ];
 			m_apElements[ nSwap1 ] = m_apElements[ nSwap2 ];
