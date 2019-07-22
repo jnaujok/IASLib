@@ -158,6 +158,7 @@ namespace IASLib
                     &len );
         pchBuffer[n] = '\0';
         incomingAddress.SetAddress(&remaddr);
+        return n;
     }
 
     int CUDPSocket::Send( const char *pchBuffer, int nBufferSize, const CRemoteAddress &targetAddress )
