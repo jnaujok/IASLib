@@ -23,7 +23,7 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_PTHREAD__
-        sem_init( &m_threadSemaphore, 0, nValue );
+        printf( "Semaphore init returns: %d\n", sem_init( &m_threadSemaphore, 0, nValue ) );
     #endif
 
     #ifdef IASLIB_WIN32__

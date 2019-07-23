@@ -35,7 +35,6 @@ namespace IASLib
     {
         protected:
             SEMAPHORE_T         m_threadSemaphore;
-
         public:
                                 CSemaphore( unsigned int nValue );
             virtual            ~CSemaphore( void );

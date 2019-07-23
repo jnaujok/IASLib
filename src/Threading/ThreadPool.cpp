@@ -61,14 +61,12 @@ namespace IASLib
             CThreadPool * m_pParent;
 
         public:
-            CQueueingThread( size_t nSize, CQueue *pQueue, CThreadPool *parent ) : CThread( "ThreadPoolQueueingThread", true, false, true ),
-                m_semQueueAvailable( nSize )
+            CQueueingThread( CQueue *pQueue, CThreadPool *parent ) : CThread( "ThreadPoolQueueingThread", true, false, true ),
+                m_semQueueAvailable( 0 )
             {
                 m_pQueue = pQueue;
                 m_bShutdown = false;
                 m_pParent = parent;
-                // Release the thread to start running.
-                this->Resume();
             }
 
             virtual void *Run( void )
@@ -112,6 +110,8 @@ namespace IASLib
     CThreadPool::CThreadPool( size_t maximumThreads ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
     {
         m_mutexArray.Lock();
+        m_pQueueingThread = new CQueueingThread( &m_qTaskQueue, this );
+
         for ( size_t nX = 0; nX < maximumThreads; nX++ )
         {
             m_aAvailableThreads.Append( new CPooledThread( this, "Pooled_Thread_", nX ) );
@@ -119,8 +119,11 @@ namespace IASLib
         m_nTotalThreads = maximumThreads;
         m_nCurrentThreads = 0;
         m_nPeakThreads = 0;
-        m_pQueueingThread = new CQueueingThread( m_nTotalThreads, &m_qTaskQueue, this );
+
         m_mutexArray.Unlock();
+
+        // Release the queueing thread to start running.
+        m_pQueueingThread->Resume();
     }
 
     CThreadPool::~CThreadPool(void)

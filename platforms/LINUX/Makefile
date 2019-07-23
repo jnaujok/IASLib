@@ -139,10 +139,10 @@ DEFS    = -Dlinux \
 #
 # Specify the compile-time options.
 #
-OPTIONS =  -ggdb -fvar-tracking -pg -D__THREADED__ -Wall -Wextra
+OPTIONS = -ggdb -fvar-tracking -pg -D__THREADED__ -Wall -Wextra -D_REENTRANT
 #OPTIONS_NO_THREAD = -g0 -pg
 # non-debug version
-#OPTIONS = -O3
+#OPTIONS = -O3 -m32 -D_REENTRANT
 
 #
 # Define the compiler command and compile flags.
@@ -695,6 +695,6 @@ $(OBJDIR)/XMLProperty.o: $(BASEHEADERS) $(XMLHEADERS) $(XMLDIR)/XMLProperty.cpp;
 #
 
 clean:
-	rm $(ALL_LIBS) $(ALL_APPS) $(ALL_OBJS)
+	rm -f $(ALL_LIBS) $(ALL_APPS) $(ALL_OBJS)
 
 
