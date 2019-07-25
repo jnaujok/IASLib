@@ -22,71 +22,71 @@
 
 namespace IASLib
 {
-    DECLARE_OBJECT( CLogFile, CLogSink );
+    IMPLEMENT_OBJECT( CLogFile, CLogSink );
 
-CLogFile::CLogFile( const char *strFileName, bool bDeletePrevious = false ) : m_mutexProtect()
-{
-    m_strFileName = strFileName;
-    if ( ! bDeletePrevious )
+    CLogFile::CLogFile( const char *strFileName, bool bDeletePrevious = false ) : m_mutexProtect()
     {
-        m_fileOutputFile = new CFile( m_strFileName, CFile::APPEND );
+        m_strFileName = strFileName;
+        if ( ! bDeletePrevious )
+        {
+            m_fileOutputFile = new CFile( m_strFileName, CFile::APPEND );
+        }
+        else
+        {
+            m_fileOutputFile = new CFile( m_strFileName, CFile::WRITE );
+        }
     }
-    else
+
+    CLogFile::~CLogFile( void )
     {
-        m_fileOutputFile = new CFile( m_strFileName, CFile::WRITE );
+        if (m_fileOutputFile)
+        {
+            m_fileOutputFile->Close();
+        }
+        m_fileOutputFile = NULL;
     }
-}
 
-CLogFile::~CLogFile( void )
-{
-    if (m_fileOutputFile)
+    bool CLogFile::Entry( ... )
     {
-        m_fileOutputFile->Close();
+        CString output;
+
+        va_list       vaArgList;
+
+        /* format buf using fmt and arguments contained in ap */
+        va_start( vaArgList, m_strLogFormat );
+
+        output.Format( m_strLogFormat, vaArgList );
+
+        va_end( vaArgList );
     }
-    m_fileOutputFile = NULL;
-}
 
-bool CLogFile::Entry( ... )
-{
-    CString output;
+    bool CLogFile::Write( const char *strFormat, ... )
+    {
+        CString output;
 
-    va_list       vaArgList;
+        va_list       vaArgList;
 
-    /* format buf using fmt and arguments contained in ap */
-    va_start( vaArgList, m_strLogFormat );
+        /* format buf using fmt and arguments contained in ap */
+        va_start( vaArgList, strFormat );
 
-    output.Format( m_strLogFormat, vaArgList );
+        output.Format( strFormat, vaArgList );
 
-    va_end( vaArgList );
-}
+        va_end( vaArgList );
+    }
 
-bool CLogFile::Write( const char *strFormat, ... )
-{
-    CString output;
+    bool CLogFile::Open( void )
+    {
 
-    va_list       vaArgList;
+    }
 
-    /* format buf using fmt and arguments contained in ap */
-    va_start( vaArgList, strFormat );
+    bool CLogFile::Close( void )
+    {
 
-    output.Format( strFormat, vaArgList );
+    }
 
-    va_end( vaArgList );
-}
+    bool CLogFile::Clear( void )
+    {
 
-bool CLogFile::Open( void )
-{
-
-}
-
-bool CLogFile::Close( void )
-{
-
-}
-
-bool CLogFile::Clear( void )
-{
-
-}
+    }
 
 } // namespace IASLib

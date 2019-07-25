@@ -20,6 +20,7 @@
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/String_.h"
 #include "../BaseTypes/Date.h"
+#include "LogContext.h"
 
 namespace IASLib
 {
@@ -57,7 +58,7 @@ namespace IASLib
 
             virtual bool        IsOpen( void ) { return false; }
         protected:
-            virtual CString     formatMessage( const char *strFormat, ... );
+            virtual CString     formatMessage( CLogContext &context, const char *strFormat, ... );
     };
 } // namespace IASLib
 #endif // IASLIB_LOGSINK_H__
