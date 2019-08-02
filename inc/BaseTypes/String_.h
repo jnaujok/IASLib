@@ -105,6 +105,9 @@ namespace IASLib
             CString        &operator =( const int  nSource );
             CString        &operator =( const long nSource );
             CString        &operator =( const short nSource );
+            CString        &operator =( const float nSource );
+            CString        &operator =( const double nSource );
+            CString        &operator =( const bool nSource );
 
                             // Typecast Operator - Types a CString to a char *
                             operator const IASLibChar__ *() const;

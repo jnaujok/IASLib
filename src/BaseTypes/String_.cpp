@@ -772,7 +772,77 @@ namespace IASLib
         return *this;
     }
 
-                            // Equality Operators (==) - Compare a string
+    CString &CString::operator =( const float nSource )
+    {
+        CString strSource;
+        strSource.Format( "%f", (double)nSource );
+
+        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
+        {
+            m_pStubData->ChangeSize( strSource.GetLength() );
+            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
+        }
+        else
+        {
+            if ( m_pStubData )
+            {
+                m_pStubData->RemoveRef();
+            }
+
+            m_pStubData = strSource.m_pStubData;
+            m_pStubData->AddRef();
+        }
+        return *this;
+    }
+
+    CString &CString::operator =( const double nSource )
+    {
+        CString strSource;
+        strSource.Format( "%f", nSource );
+
+        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
+        {
+            m_pStubData->ChangeSize( strSource.GetLength() );
+            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
+        }
+        else
+        {
+            if ( m_pStubData )
+            {
+                m_pStubData->RemoveRef();
+            }
+
+            m_pStubData = strSource.m_pStubData;
+            m_pStubData->AddRef();
+        }
+        return *this;
+    }
+
+    CString &CString::operator =( const bool bSource )
+    {
+        CString strSource;
+        strSource = ( bSource ) ? "true" : "false";
+
+        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
+        {
+            m_pStubData->ChangeSize( strSource.GetLength() );
+            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
+        }
+        else
+        {
+            if ( m_pStubData )
+            {
+                m_pStubData->RemoveRef();
+            }
+
+            m_pStubData = strSource.m_pStubData;
+            m_pStubData->AddRef();
+        }
+        return *this;
+    }
+
+
+        // Equality Operators (==) - Compare a string
     bool CString::operator ==( const CString &strString )
     {
         if ( strcmp( (const IASLibChar__ *)(*this), (const IASLibChar__ *)strString ) == 0 )

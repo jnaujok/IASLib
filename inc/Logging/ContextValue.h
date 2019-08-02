@@ -26,35 +26,36 @@ namespace IASLib
     {
         protected:
             CString     m_strName;
-            CVariant    m_varValue;
+            CVariant    m_varValue; 
 
         public:
-                        DEFINE_OBJECT( CLogContext );
-                        CLogContext( void );
-            virtual    ~CLogContext( void );
+                        DEFINE_OBJECT( CContextValue );
+                        CContextValue( void );
+            virtual    ~CContextValue( void );
 
-            virtual void    addValue( const char *name, CString value );
-            virtual void    addValue( const char *name, CDate value );
-            virtual void    addValue( const char *name, int value );
-            virtual void    addValue( const char *name, long value );
-            virtual void    addValue( const char *name, float value );
-            virtual void    addValue( const char *name, double value );
-            virtual void    addValue( const char *name, bool value );
-            virtual void    addValue( const char *name, CArray &value );
-            virtual void    addObject( const char *name, CObject *value );
+            CContextValue( const char *name, CString value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, CDate value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, int value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, long value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, float value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, double value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, bool value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, CArray *value ) { m_strName = name; m_varValue = CVariant( value ); }
+            CContextValue( const char *name, CObject *value ) { m_strName = name; m_varValue = CVariant( value ); }
 
-            virtual CString getStringValue( const char *name );
-            virtual CDate   getDateValue( const char *name );
-            virtual int     getIntValue( const char *name );
-            virtual long    getLongValue( const char *name );
-            virtual float   getFloatValue( const char *name );
-            virtual double  getDoubleValue( const char *name );
-            virtual bool    getBoolValue( const char *name );
-            virtual CArray *getArrayValue( const char *name );
-            virtual CObject *getObjectValue( const char *name );
+            virtual CString getStringValue( void ) { return m_varValue.getString(); }
+            virtual CDate   getDateValue( void )  { return m_varValue.getDate(); }
+            virtual int     getIntValue( void )  { return m_varValue.getInt(); }
+            virtual long    getLongValue( void )  { return m_varValue.getLong(); }
+            virtual float   getFloatValue( void )  { return m_varValue.getFloat(); }
+            virtual double  getDoubleValue( void )  { return m_varValue.getDouble(); }
+            virtual bool    getBoolValue( void )  { return m_varValue.getBoolean(); }
+            virtual CArray *getArrayValue( void )  { return m_varValue.getArray(); }
+            virtual CObject *getObjectValue( void )  { return m_varValue.getObject(); }
 
-            virtual CContextValue *get( const char *name );
+            virtual CVariant &get( void )  { return m_varValue; }
 
+            
     };
 } // namespace IASLib
 

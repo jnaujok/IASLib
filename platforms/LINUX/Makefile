@@ -164,7 +164,7 @@ COMPILE = g++ $(OPTIONS) $(INCLUDE) $(DEFS)
 #
 BASEHEADERS = $(BASEINC)/Object.h $(BASEINC)/String_.h $(BASEINC)/StringTokenizer.h \
               $(BASEINC)/Bool.h $(BASEINC)/StringStub.h $(BASEINC)/Date.h \
-	      $(BASEINC)/DataBlock.h $(BASEINC)/String_Copy.h
+	      $(BASEINC)/DataBlock.h $(BASEINC)/String_Copy.h $(BASEINC)/Variant.h
 
 COLHEADERS  = $(COLINC)/Collection.h $(COLINC)/Array.h $(COLINC)/Cache.h \
 	      $(COLINC)/CacheItem.h $(COLINC)/Hash.h $(COLINC)/HashBucket.h \
@@ -236,7 +236,7 @@ XMLHEADERS  = $(XMLINC)/XMLDocument.h $(XMLINC)/XMLElement.h \
 #
 BASEOBJECTS = $(OBJDIR)/String_.o $(OBJDIR)/StringTokenizer.o $(OBJDIR)/Object.o \
               $(OBJDIR)/StringStub.o $(OBJDIR)/Date.o $(OBJDIR)/DataBlock.o \
-              $(OBJDIR)/String_Copy.o
+              $(OBJDIR)/String_Copy.o $(OBJDIR)/Variant.o
 
 COLOBJECTS  = $(OBJDIR)/Collection.o $(OBJDIR)/Array.o $(OBJDIR)/Cache.o \
 	          $(OBJDIR)/CacheItem.o $(OBJDIR)/Hash.o $(OBJDIR)/HashBucket.o \
@@ -338,6 +338,9 @@ $(OBJDIR)/DataBlock.o:  $(BASEHEADERS) $(BASEDIR)/DataBlock.cpp;
 
 $(OBJDIR)/String_Copy.o:  $(BASEHEADERS) $(BASEDIR)/String_Copy.cpp;
 	$(COMPILE) -c $(BASEDIR)/String_Copy.cpp -o $(OBJDIR)/String_Copy.o
+
+$(OBJDIR)/Variant.o:  $(BASEHEADERS) $(BASEDIR)/Variant.cpp;
+	$(COMPILE) -c $(BASEDIR)/Variant.cpp -o $(OBJDIR)/Variant.o
 
 #
 ##  COLLECTION LIBRARY
