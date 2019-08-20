@@ -253,6 +253,8 @@ namespace IASLib
 
             void        dumpStubMemory( void );
 
+            bool        hasDelimitedTokens( const char *startDelimiter, const char *endDelimiter );
+            CString    &replaceDelimitedToken( const char *startDelimiter, const char *endDelimiter, const char *name, const char *value );
 
         private:
             void        ChangeStub( void );
