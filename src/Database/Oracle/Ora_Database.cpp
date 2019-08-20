@@ -136,11 +136,11 @@ namespace IASLib
         m_bConnected = 0;
     }
 
-    int COracleDatabase::Connect( void )
+    bool COracleDatabase::Connect( void )
     {
         CDatabase::Connect( "Oracle" );
 
-	    return (m_bConnected = true);
+	    return m_bConnected;
     }
 
     CConnection *COracleDatabase::Connection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication, const char *strConName )

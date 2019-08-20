@@ -29,6 +29,8 @@
 #ifndef IASLIB_MEMORYMANAGER_H__
 #define IASLIB_MEMORYMANAGER_H__
 
+#include "../BaseTypes/Object.h"
+
 namespace IASLib
 {
 
@@ -67,10 +69,8 @@ inline void __cdecl operator delete(void *p )
 #endif
 
 #ifdef IASLIB_DEBUG__
-#define DEBUG_NEW new(__FILE__, __LINE__)
-#else
-#define DEBUG_NEW new
+    #define DEBUG_NEW new(__FILE__, __LINE__)
+    #define new DEBUG_NEW
 #endif
-#define new DEBUG_NEW
 
 #endif // IASLIB_MEMORYMANAGER_H__

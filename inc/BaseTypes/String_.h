@@ -251,6 +251,8 @@ namespace IASLib
 
             virtual int hashcode( void );
 
+            void        dumpStubMemory( void );
+
 
         private:
             void        ChangeStub( void );

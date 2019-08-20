@@ -39,7 +39,7 @@ namespace IASLib
     class CDatabase : public CObject
     {
         protected:
-            int                             m_bConnected;
+            bool                            m_bConnected;
             int                             m_nConnections;
             CConnectionArray                m_aConnections;
             CString                         m_strVendor;
@@ -50,8 +50,8 @@ namespace IASLib
 
                                             DEFINE_OBJECT( CDatabase )
 
-            int                             Connect( const char *strVendor );
-            virtual int                     Connect( void ) = 0;
+            bool                            Connect( const char *strVendor );
+            virtual bool                    Connect( void ) = 0;
 
             virtual CConnection            *Connection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication = "", const char *strName = "NoName" ) = 0;
 

@@ -17,11 +17,13 @@
 #include "Object.h"
 #include "String_.h"
 #include "Date.h"
-#include "Array.h"
 #include "Object.h"
 
 namespace IASLib
 {
+    // Forward declaration of Array
+    class CArray;
+    
     class CVariant : public CObject
     {
         enum VARIANT_TYPE

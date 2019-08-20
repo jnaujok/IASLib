@@ -2150,4 +2150,18 @@ namespace IASLib
         return result;
     }
 
+    void CString::dumpStubMemory( void )
+    {
+        if ( m_pStubData )
+        {
+            char *p = (char *)m_pStubData;
+            p -= 128;
+            while ( p < (char *)m_pStubData )
+            {
+                char t = *p++;
+                printf( "%c %02x\n", t, t & 0xff );
+            }
+        }
+    }
+
 } // namespace ISALib

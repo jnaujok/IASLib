@@ -30,19 +30,20 @@ namespace IASLib
 
     CDatabase::CDatabase( const char *strVendor )
     {
-        m_bConnected = 0;
+        m_bConnected = false;
         m_nConnections = 0;
         m_strVendor = strVendor;
     }
 
-    int CDatabase::Connect( const char *strVendor )
+    bool CDatabase::Connect( const char *strVendor )
     {
-        m_bConnected = 0;
+        m_bConnected = false;
         m_nConnections = 0;
         m_aConnections.DeleteAll();
+        //m_strVendor.dumpStubMemory();
         m_strVendor = strVendor;
 
-        return 0;
+        return m_bConnected;
     }
 } // namespace IASLib
 

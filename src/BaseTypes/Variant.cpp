@@ -16,6 +16,7 @@
 
 #include "Variant.h"
 #include "String_.h"
+#include "Array.h"
 
 namespace IASLib
 {

@@ -131,15 +131,17 @@ LIBPATH   = $(LIBDIR) -lm -ldl
 DEFS    = -Dlinux \
 		  -DIASLIB_LINUX__ \
 		  -DIASLIB_NETWORKING__ \
-		  -DIASLIB_MULTI_THREADED__ -DIASLIB_PTHREAD__ \
+		  -DIASLIB_MULTI_THREADED__ \
+		  -DIASLIB_PTHREAD__ \
 		  -DIASLIB_RTTI__ \
-		  -DIASLIB_DATABASE__ -DIASLIB_DB_SQLITE__ \
+		  -DIASLIB_DATABASE__ \
+		  -DIASLIB_DB_SQLITE__ \
 		  -DIASLIB_STD_STREAM_SUPPORT__
 
 #
 # Specify the compile-time options.
 #
-OPTIONS = -ggdb -fvar-tracking -pg -D__THREADED__ -Wall -Wextra -D_REENTRANT
+OPTIONS = -ggdb -fvar-tracking -pg -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
 #OPTIONS_NO_THREAD = -g0 -pg
 # non-debug version
 #OPTIONS = -O3 -m32 -D_REENTRANT

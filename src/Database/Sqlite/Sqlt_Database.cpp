@@ -29,7 +29,8 @@ namespace IASLib
 
     IMPLEMENT_OBJECT( CSQLiteDatabase, CDatabase );
 
-    CSQLiteDatabase::CSQLiteDatabase( void ) : CDatabase( "SQL Lite" )
+
+    void CSQLiteDatabase::initLibrary( void )
     {
         if ( ! m_pSqliteLibrary )
         {
@@ -39,8 +40,10 @@ namespace IASLib
             m_pSqliteLibrary = new CDynamicLibrary( "sqlite3.so" );
 #endif
         }
-        m_strDBFile = "";
-        m_strLastError = "";
+    }
+
+    CSQLiteDatabase::CSQLiteDatabase( void ) : CDatabase( "SQL Lite" )
+    {
     }
     
     CSQLiteDatabase::~CSQLiteDatabase( void ) 
@@ -51,23 +54,15 @@ namespace IASLib
 
     void *CSQLiteDatabase::GetFunction( const char *strName )
     {
-        if ( ! m_pSqliteLibrary )
-        {
-#ifdef IASLIB_WIN32__
-            m_pSqliteLibrary = new CDynamicLibrary( "sqlite3.dll" );
-#else
-            m_pSqliteLibrary = new CDynamicLibrary( "sqlite3.so" );
-#endif
-        }
-
+        initLibrary();
         return m_pSqliteLibrary->GetFunction( strName );
     }
 
-    int CSQLiteDatabase::Connect( void )
+    bool CSQLiteDatabase::Connect( void )
     {
         CDatabase::Connect( "SQL Lite" );
-
-	    return (m_bConnected = true);
+        m_bConnected = true;
+	    return m_bConnected;
     }
 
     CConnection *CSQLiteDatabase::Connection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication, const char *strName )

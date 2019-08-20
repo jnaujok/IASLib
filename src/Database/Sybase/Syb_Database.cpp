@@ -37,7 +37,7 @@ CSybaseDatabase::~CSybaseDatabase( void )
     m_bConnected = 0;
 }
 
-int CSybaseDatabase::Connect( void )
+bool CSybaseDatabase::Connect( void )
 {
     CDatabase::Connect( "Sybase" );
 

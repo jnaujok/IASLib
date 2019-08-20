@@ -40,7 +40,6 @@ namespace IASLib
                 m_bShutdown = false;
                 m_pParent = pParent;
 
-                printf( "Starting Thread: %s:%d\n", name, nNumber );
                 // Start the thread, which will immediately go into a suspend because of the
                 // locked mutex until a task is set.
                 this->Resume();
@@ -48,19 +47,15 @@ namespace IASLib
 
             void *Run( void )
             {
-                printf( "In thread CPooledThread.Run(): %s - Run\n", (const char *)m_strThreadName );
                 while ( ! m_bShutdown )
                 {
-                    printf( "In thread CPooledThread.Run(): %s - Lock\n", (const char *)m_strThreadName );
                     m_RunMutex.Lock();
-                    printf( "In thread CPooledThread.Run(): %s - Work loop\n", (const char *)m_strThreadName );
                     if ( m_pActiveTask )
                     {
                         m_pActiveTask->setRunning();
                         CObject *result = NULL;
                         try
                         {
-                            printf( "In thread CPooledThread.Run(): %s - Run Task\n", (const char *)m_strThreadName );
                             result = m_pActiveTask->Run();
                             m_pActiveTask->setComplete();
                         }
@@ -71,7 +66,6 @@ namespace IASLib
                         }
                         m_pParent->SetResult( result );
                         m_pActiveTask = NULL;
-                        printf( "In thread CPooledThread.Run(): %s - Run Task Complete/Looping\n", (const char *)m_strThreadName );
                     }
                     else
                     {
@@ -83,8 +77,6 @@ namespace IASLib
 
             bool setTask( CThreadTask *pActiveTask )
             {
-                printf( "In thread CPooledThread.setTask(): %s - Setting Active Task\n", (const char *)m_strThreadName );
-
                 if ( m_pActiveTask == NULL )
                 {
                     m_pActiveTask = pActiveTask;

@@ -40,8 +40,8 @@ namespace IASLib
 
                                             DEFINE_OBJECT( CSQLiteDatabase )
 
-            int                             Connect( const char *strVendor );
-            virtual int                     Connect( void );
+            bool                            Connect( const char *strVendor );
+            virtual bool                    Connect( void );
 
             virtual CConnection            *Connection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication = "", const char *strName = "NoName" );
 
@@ -61,6 +61,9 @@ namespace IASLib
 
             virtual bool                    SetTimeout( int nTimeout );
             static void                    *GetFunction( const char *strName );
+
+        private:
+            static void                     initLibrary( void );
     };
 } // namespace IASLib
 

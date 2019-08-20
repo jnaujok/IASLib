@@ -32,7 +32,6 @@
 // using namespace IASLib
 namespace IASLib
 {
-
     CStringStub::CStringStub( void )
     {
         m_bFixedStub = false;
@@ -267,7 +266,7 @@ namespace IASLib
             //throw CStringException( "String Stub deleted while still referenced!", CException::NORMAL );
         }
 
-        if ( m_bDeletable )
+        if ( ( m_bDeletable ) && ( m_strData != NULL ) )
         {
 #ifdef IASLIB_MEMORY_MANAGER__
     #ifdef IASLIB_DEBUG__

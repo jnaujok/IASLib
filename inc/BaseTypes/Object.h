@@ -73,12 +73,17 @@ namespace IASLib
             static void             CallAssertHandler( const char *strFile, int nLine, const char *strCondition );
 
             virtual int             hashcode( void ) { return (int)m_nObjectID; }
+
+            static void            *allocate( size_t size, const char *name );
+            static void             deallocate( void *p, const char *name );
     };
 } // End of Namespace IASLib
 
 #ifdef IASLIB_RTTI__
 #define DEFINE_OBJECT(x) virtual const char *GetType( void ) { return #x; }\
-                         virtual bool        IsType( const char *strName );
+                         virtual bool        IsType( const char *strName ); \
+                         void               *operator new( size_t size ); \
+                         void                operator delete( void *p );
 
 #define DECLARE_OBJECT(x,y) virtual const char *GetType( void ) { return #x; }\
 							virtual bool IsType( const char *strName )\
@@ -88,6 +93,14 @@ namespace IASLib
                                       return true; \
                                   else \
                                       return y::IsType( strName ); \
+                              } \
+                              void *operator new( size_t size ) \
+                              { \
+                                return CObject::allocate( size, #x ); \
+                              } \
+                              void operator delete( void *p ) \
+                              { \
+                                  CObject::deallocate( p, #x ); \
                               }
 
 #define IMPLEMENT_OBJECT(x,y) bool x::IsType( const char *strName )\
@@ -97,7 +110,16 @@ namespace IASLib
                                       return true; \
                                   else \
                                       return y::IsType( strName ); \
+                              } \
+                              void *x::operator new( size_t size ) \
+                              { \
+                                return CObject::allocate( size, #x ); \
+                              } \
+                              void x::operator delete( void *p ) \
+                              { \
+                                  CObject::deallocate( p, #x ); \
                               }
+
 #else
 #define DEFINE_OBJECT(x)
 #define DECLARE_OBJECT(x,y)

@@ -83,7 +83,7 @@ namespace IASLib
 
                                     DEFINE_OBJECT( COracleDatabase )
 
-            int                     Connect( void );
+            bool                    Connect( void );
 
             virtual CConnection    *Connection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication = "", const char *strName = "NoName" );
 

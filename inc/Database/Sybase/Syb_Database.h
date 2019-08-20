@@ -38,7 +38,7 @@ class CSybaseDatabase : public CDatabase
                                 CSybaseDatabase( void );
         virtual                ~CSybaseDatabase( void );
 
-        int                     Connect( void );
+        bool                    Connect( void );
 
         virtual CConnection    *Connection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication = "", const char *strName = "NoName" );
 
