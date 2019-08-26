@@ -67,6 +67,8 @@ namespace IASLib
             virtual CObject        *Run( void ) = 0;
             virtual TASK_STATUS     GetStatus( void ) { return m_currentStatus; }
 
+            virtual CString         GetIdentifier( void ) { return m_strIdentifier; }
+
         private:
             friend class CThreadPool;
             friend class CRunThread;

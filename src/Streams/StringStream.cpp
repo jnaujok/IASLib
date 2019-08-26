@@ -24,18 +24,21 @@ namespace IASLib
     CStringStream::CStringStream( void )
     {
         m_strString = "";
+        m_strOutputString = "";
         m_nCurrentPosition = 0;
     }
 
     CStringStream::CStringStream( const CString &strSource )
     {
         m_strString = strSource;
+        m_strOutputString = "";
         m_nCurrentPosition = 0;
     }
 
     CStringStream::~CStringStream( void )
     {
         m_strString = "";
+        m_strOutputString = "";
         m_nCurrentPosition = 0;
         m_bIsOpen = false;
     }
@@ -80,40 +83,12 @@ namespace IASLib
 
     void CStringStream::PutChar( const char chPut )
     {
-        if ( m_nCurrentPosition == m_strString.GetLength() )
-        {
-            m_strString += chPut;
-        }
-        else
-        {
-            m_strString[ m_nCurrentPosition ] = chPut;
-        }
-        m_nCurrentPosition++;
+        m_strOutputString += chPut;
     }
 	
     void CStringStream::PutLine( const CString &strOutput )
     {
-        if ( m_nCurrentPosition == m_strString.GetLength() )
-        {
-            m_strString += strOutput;
-            m_nCurrentPosition = m_strString.GetLength();
-        }
-        else
-        {
-            if ( ( m_nCurrentPosition + strOutput.GetLength() ) < m_strString.GetLength() )
-            {
-                CString strFront = m_strString.Substring( 0, (int)m_nCurrentPosition );
-                CString strBack = m_strString.Substring( m_nCurrentPosition + strOutput.GetLength() );
-                m_strString = strFront + strOutput + strBack;
-                m_nCurrentPosition += strOutput.Length();
-            }
-            else
-            {
-                CString strFront = m_strString.Substring( 0, (int)m_nCurrentPosition );
-                m_strString = strFront + strOutput;
-                m_nCurrentPosition = m_strString.GetLength();
-            }
-        }
+        m_strOutputString += strOutput;
     }
 
     unsigned char CStringStream::GetUChar( void )
@@ -131,42 +106,14 @@ namespace IASLib
 
     void CStringStream::PutChar( const unsigned char chPut )
     {
-        if ( m_nCurrentPosition == m_strString.GetLength() )
-        {
-            m_strString += chPut;
-        }
-        else
-        {
-            m_strString[ m_nCurrentPosition ] = (char)chPut;
-        }
-        m_nCurrentPosition++;
+        m_strOutputString += chPut;
     }
 
     int CStringStream::PutBuffer( const char *achBuffer, int nLength )
     {
         CString strOutput( achBuffer, nLength );
 
-        if ( m_nCurrentPosition == m_strString.GetLength() )
-        {
-            m_strString += strOutput;
-            m_nCurrentPosition = m_strString.GetLength();
-        }
-        else
-        {
-            if ( ( m_nCurrentPosition + strOutput.GetLength() ) < m_strString.GetLength() )
-            {
-                CString strFront = m_strString.Substring( 0, (int)m_nCurrentPosition );
-                CString strBack = m_strString.Substring( m_nCurrentPosition + strOutput.GetLength() );
-                m_strString = strFront + strOutput + strBack;
-                m_nCurrentPosition += strOutput.Length();
-            }
-            else
-            {
-                CString strFront = m_strString.Substring( 0, (int)m_nCurrentPosition );
-                m_strString = strFront + strOutput;
-                m_nCurrentPosition = m_strString.GetLength();
-            }
-        }
+        m_strOutputString += strOutput;
         return (int)strOutput.Length();
     }
 	

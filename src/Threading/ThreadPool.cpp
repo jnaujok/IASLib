@@ -107,8 +107,10 @@ namespace IASLib
             }
     };
 
-    CThreadPool::CThreadPool( size_t maximumThreads ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
+    CThreadPool::CThreadPool( size_t maximumThreads, bool storeResults, bool retainTasks ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
     {
+        m_bRetainTasks = retainTasks;
+        m_bStoreResults = storeResults;
         m_mutexArray.Lock();
         m_pQueueingThread = new CQueueingThread( &m_qTaskQueue, this );
 
@@ -202,6 +204,20 @@ namespace IASLib
         CThreadTask *pTask = thread->GetTask();
         CObject *result = thread->GetResult();
 
+        if ( m_bStoreResults )
+        {
+            this->m_hashResults.Push( pTask->GetIdentifier(), result );
+        }
+        else
+        {
+            delete result;
+        }
+        
+        if ( ! m_bRetainTasks )
+        {
+            delete pTask;
+        }
+        
         thread->ResetThread();
 
         if ( m_nCurrentThreads > 0 )

@@ -34,11 +34,7 @@ namespace IASLib
     {
         if ( ! m_pSqliteLibrary )
         {
-#ifdef IASLIB_WIN32__
-            m_pSqliteLibrary = new CDynamicLibrary( "sqlite3.dll" );
-#else
-            m_pSqliteLibrary = new CDynamicLibrary( "sqlite3.so" );
-#endif
+            m_pSqliteLibrary = new CDynamicLibrary( "sqlite3" );
         }
     }
 

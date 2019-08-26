@@ -65,11 +65,14 @@ namespace IASLib
 #ifdef IASLIB_DATABASE__
                             CHash( CCursor *pData, const char *strKey, const char *strData );
 #endif
+                            CHash( const CHash &oSource );
 
             virtual        ~CHash( void );
 
                             DEFINE_OBJECT( CHash )
 
+            CHash          &operator =( const CHash &oSource );
+            
             void            Push( const char *strKey, CObject *pElement, bool bDeleteCurrent = true );
             CObject        *Get( const char *strKey );
             void            Delete( const char *strKey );

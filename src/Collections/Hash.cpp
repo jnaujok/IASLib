@@ -279,6 +279,27 @@ namespace IASLib
     }
 #endif // IASLIB_DATABASE__
 
+    CHash::CHash( const CHash &oSource )
+    {
+        m_nArraySize = oSource.m_nArraySize;
+        m_nHashKey = oSource.m_nHashKey;
+        m_strSize = oSource.m_strSize;
+        m_aHashTable = new CHashBucket *[ m_nArraySize ];
+        for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
+            m_aHashTable[ nCount ] = NULL;
+
+        m_nElements = oSource.m_nElements;
+
+        for ( size_t nX = 0; nX < m_nArraySize; nX++ )
+        {
+            if ( oSource.m_aHashTable[nX] )
+            {
+                CHashBucket *temp = new CHashBucket( *oSource.m_aHashTable[nX] );
+                m_aHashTable[nX] = temp;
+            }
+        }
+    }
+
     CHash::~CHash( void )
     {
         DeleteAll();
@@ -288,6 +309,31 @@ namespace IASLib
         delete m_aHashTable;
         m_nElements = 0;
         m_nArraySize = 0;
+    }
+
+    CHash &CHash::operator =( const CHash &oSource )
+    {
+        if ( &oSource != this )
+        {
+            m_nArraySize = oSource.m_nArraySize;
+            m_nHashKey = oSource.m_nHashKey;
+            m_strSize = oSource.m_strSize;
+            m_aHashTable = new CHashBucket *[ m_nArraySize ];
+            for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
+                m_aHashTable[ nCount ] = NULL;
+
+            m_nElements = oSource.m_nElements;
+
+            for ( size_t nX = 0; nX < m_nArraySize; nX++ )
+            {
+                if ( oSource.m_aHashTable[nX] )
+                {
+                    CHashBucket *temp = new CHashBucket( *oSource.m_aHashTable[nX] );
+                    m_aHashTable[nX] = temp;
+                }
+            }
+        }
+        return *this;
     }
 
     /************************************************************************************

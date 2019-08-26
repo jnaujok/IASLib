@@ -29,6 +29,7 @@ namespace IASLib
         protected:
             CString                 m_strString;
             size_t                  m_nCurrentPosition;
+            CString                 m_strOutputString;
         public:
                                     CStringStream( void );
                                     CStringStream( const CString &strSource );
@@ -48,6 +49,8 @@ namespace IASLib
             virtual bool            IsEOS( void ) { return ( m_nCurrentPosition == m_strString.GetCount() ); }
 
             virtual void            Close( void ) { m_strString = ""; m_nCurrentPosition = 0; m_bIsOpen = false; }
+
+            virtual CString         GetString( void ) { return m_strOutputString; }
     }; // class CStringStream
 } // namespace IASLib
 

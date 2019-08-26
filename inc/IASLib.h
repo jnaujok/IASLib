@@ -47,6 +47,10 @@
 //  BASE TYPES
 //**************
 
+    // Boolean support 
+    // Define IASLIB_DEFINE_BOOL__ if you need to define Boolean values on your platform
+#include "BaseTypes/Bool.h"
+
     // Base object for all library classes
 #include "BaseTypes/Object.h"
 
@@ -63,6 +67,12 @@
 
     // Data Blocks
 #include "BaseTypes/DataBlock.h"
+
+    // UUID Support
+#include "BaseTypes/Uuid.h"
+
+    // Variant Support
+#include "BaseTypes/Variant.h"
 
 //***************
 //  COLLECTIONS

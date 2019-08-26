@@ -166,10 +166,11 @@ COMPILE = g++ $(OPTIONS) $(INCLUDE) $(DEFS)
 #
 BASEHEADERS = $(BASEINC)/Object.h $(BASEINC)/String_.h $(BASEINC)/StringTokenizer.h \
               $(BASEINC)/Bool.h $(BASEINC)/StringStub.h $(BASEINC)/Date.h \
-	      $(BASEINC)/DataBlock.h $(BASEINC)/String_Copy.h $(BASEINC)/Variant.h
+	          $(BASEINC)/DataBlock.h $(BASEINC)/String_Copy.h $(BASEINC)/Variant.h \
+		      $(BASEINC)/Uuid.h
 
 COLHEADERS  = $(COLINC)/Collection.h $(COLINC)/Array.h $(COLINC)/Cache.h \
-	      $(COLINC)/CacheItem.h $(COLINC)/Hash.h $(COLINC)/HashBucket.h \
+	          $(COLINC)/CacheItem.h $(COLINC)/Hash.h $(COLINC)/HashBucket.h \
               $(COLINC)/HashSlat.h $(COLINC)/IntArray.h $(COLINC)/Iterator.h \
               $(COLINC)/List.h $(COLINC)/Queue.h $(COLINC)/SortedArray.h \
               $(COLINC)/SparseArray.h $(COLINC)/Stack.h $(COLINC)/StringArray.h
@@ -238,7 +239,7 @@ XMLHEADERS  = $(XMLINC)/XMLDocument.h $(XMLINC)/XMLElement.h \
 #
 BASEOBJECTS = $(OBJDIR)/String_.o $(OBJDIR)/StringTokenizer.o $(OBJDIR)/Object.o \
               $(OBJDIR)/StringStub.o $(OBJDIR)/Date.o $(OBJDIR)/DataBlock.o \
-              $(OBJDIR)/String_Copy.o $(OBJDIR)/Variant.o
+              $(OBJDIR)/String_Copy.o $(OBJDIR)/Variant.o $(OBJDIR)/Uuid.o
 
 COLOBJECTS  = $(OBJDIR)/Collection.o $(OBJDIR)/Array.o $(OBJDIR)/Cache.o \
 	          $(OBJDIR)/CacheItem.o $(OBJDIR)/Hash.o $(OBJDIR)/HashBucket.o \
@@ -343,6 +344,9 @@ $(OBJDIR)/String_Copy.o:  $(BASEHEADERS) $(BASEDIR)/String_Copy.cpp;
 
 $(OBJDIR)/Variant.o:  $(BASEHEADERS) $(BASEDIR)/Variant.cpp;
 	$(COMPILE) -c $(BASEDIR)/Variant.cpp -o $(OBJDIR)/Variant.o
+
+$(OBJDIR)/Uuid.o:  $(BASEHEADERS) $(BASEDIR)/Uuid.cpp;
+	$(COMPILE) -c $(BASEDIR)/Uuid.cpp -o $(OBJDIR)/Uuid.o
 
 #
 ##  COLLECTION LIBRARY

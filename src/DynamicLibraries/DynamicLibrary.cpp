@@ -23,21 +23,22 @@ namespace IASLib
     CDynamicLibrary::CDynamicLibrary( const char *strLibPath )
     {
         m_LibHandle = NULL;
+        CString libName;
 
-    #ifdef IASLIB_DEC__
-        m_LibHandle = dlopen( strLibPath, RTLD_LAZY );
-    #endif
-
+        // TODO: Update to do intelligent path handling.
     #ifdef IASLIB_SUN__
-        m_LibHandle = dlopen( strLibPath, RTLD_LAZY );
+        libName.Format( "lib%s.so", strLibPath );
+        m_LibHandle = dlopen( libName, RTLD_LAZY );
     #endif
 
     #ifdef IASLIB_LINUX__
-        m_LibHandle = dlopen( strLibPath, RTLD_LAZY );
+        libName.Format( "lib%s.so", strLibPath );
+        m_LibHandle = dlopen( libName, RTLD_LAZY );
     #endif
 
     #ifdef IASLIB_WIN32__
-        m_LibHandle = LoadLibrary( strLibPath );
+        libName.Format( "%s.dll", strLibPath );
+        m_LibHandle = LoadLibrary( libName );
     #endif
     }
 

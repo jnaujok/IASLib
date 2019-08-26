@@ -33,7 +33,11 @@ namespace IASLib
         : CConnection( strName )
     {
         m_fnSqlOpen     = (open_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_open" );
+#ifdef IASLIB_LINUX__
+        m_fnSqlFree     = (free_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_free" );
+#else
         m_fnSqlFree     = (free_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_freemem" );
+#endif
         m_fnSqlBusyTime = (busy_func_type *) CSQLiteDatabase::GetFunction( "sqlite3_busy_timeout" );
         m_fnSqlClose    = (close_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_close" );
         m_fnSqlErrMsg   = (error_msg_func_type *)CSQLiteDatabase::GetFunction( "sqlite3_errmsg" );

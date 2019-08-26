@@ -72,11 +72,13 @@ class CThreadPool : public CObject
         CHash m_hashResults;
         CHash m_hashTaskIds;
         CQueueingThread *m_pQueueingThread;
+        bool    m_bStoreResults;
+        bool    m_bRetainTasks;
 
         static bool m_bInitialized;
 
     public:
-        CThreadPool(size_t maximumThreads = 16);
+        CThreadPool(size_t maximumThreads = 16, bool storeResults=false, bool retainTasks=false );
         virtual ~CThreadPool(void);
 
         DEFINE_OBJECT(CThreadPool);
