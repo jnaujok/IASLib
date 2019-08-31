@@ -98,11 +98,15 @@ IMPLEMENT_OBJECT( CThreadMonitor, CThread );
 **      Creates the thread monitor.
 **
 ***********************************************************************/
-CThreadMonitor::CThreadMonitor( void ) : CThread( "Thread Monitor", true )
+CThreadMonitor::CThreadMonitor( void ) : 
+    CThread( "Thread Monitor", true ),  
+    m_aThreads(16), 
+    m_nTotalThreads(0), 
+    m_nCurrentThreads(0),  
+    m_nPeakThreads(0),
+    m_mutexArray()
+
 {
-    m_nPeakThreads = 0;
-    m_nTotalThreads = 0; 
-    m_nCurrentThreads = 0;
     m_bInitialized = true;
     m_pThreadMonitor = this;
     AddThread( this, "Thread Monitor" );
@@ -139,7 +143,11 @@ CThreadMonitor::~CThreadMonitor( void )
         pThread = (CThread *)aDeleteList.Get( nCount );
         try
         {
-            delete pThread;
+            // Thread monitor is already being deleted... deleting it again is bad.
+            if ( strcmp( pThread->GetName(), "Thread Monitor" ) ) 
+            {
+                delete pThread;
+            }
         }
         catch ( CException *pException )
         {
@@ -159,15 +167,12 @@ CThreadMonitor::~CThreadMonitor( void )
 ***********************************************************************/
 CThreadMonitor *CThreadMonitor::GetThreadMonitor( void )
 {
-    if ( m_bInitialized )
+    if ( ! m_bInitialized )
     {
-        return m_pThreadMonitor;
+        m_bInitialized = true;
+            // The assignment isn't necessary, but it looks really weird without it.
+        m_pThreadMonitor = new CThreadMonitor();
     }
-
-    m_bInitialized = true;
-
-        // The assignment isn't necessary, but it looks really weird without it.
-    m_pThreadMonitor = new CThreadMonitor();
 
     return m_pThreadMonitor;
 }
@@ -191,8 +196,6 @@ void *CThreadMonitor::Run( void )
     while ( ! IsShutdown() )
     {
         nCount = 0;
-
-        aDeleteList.EmptyAll();
 
         m_mutexArray.Lock();
 
@@ -239,7 +242,7 @@ void *CThreadMonitor::Run( void )
                         nElapsed = dttNow.Elapsed( pStorage->m_dttStartTime );
                         if ( nElapsed > pStorage->m_nTimeout )
                         {
-//                            InfoLog( "Thread Monitor: Timeout on thread [%s] Elapsed time: %d.%03d", pStorage->m_strIdentifier, (nElapsed / 1000), (nElapsed % 1000) );
+                            printf( "Thread Monitor: Timeout on thread [%s] Elapsed time: %d.%03d", (const char *)pStorage->m_strIdentifier, (nElapsed / 1000), (nElapsed % 1000) );
                             pThread->Kill();
                             aDeleteList.Push( pThread );
                         }
@@ -267,6 +270,8 @@ void *CThreadMonitor::Run( void )
             nCount++;
         }
 
+        aDeleteList.EmptyAll();
+
         Sleep( 1 );
     }
 
@@ -284,6 +289,7 @@ bool CThreadMonitor::AddThread( CThread *pThread, const char *strIdentifier )
 {
     CThreadStorage *pStorage;
 
+    // Check that we don't already have this thread in the active thread array.
     if ( ! IsThreadActive( pThread ) )
     {
         m_mutexArray.Lock();
@@ -637,6 +643,10 @@ CThread *CThreadMonitor::GetThread( int nThread )
 
     return pRetVal;
 }
+
+int CThreadMonitor::GetThreadCount( void ) { return m_nCurrentThreads; }
+int CThreadMonitor::GetPeakThreads( void ) { return m_nPeakThreads; }
+int CThreadMonitor::GetTotalThreads( void ) { return m_nTotalThreads; }
 
 } // namespace IASLib
 #endif //IASLIB_MULTI_THREADED

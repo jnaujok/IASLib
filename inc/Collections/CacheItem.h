@@ -53,8 +53,9 @@ namespace IASLib
                                     DEFINE_OBJECT(CCacheItem);
 
             virtual CCacheItem     *GetItem( void ) = 0;
+            virtual CString         GetKey( void ) const = 0;
             
-            virtual int            &Compare( const CCacheItem *pCompare ) const = 0;
+            virtual int             Compare( const CCacheItem *pCompare ) const = 0;
 
             inline bool             operator ==( const CCacheItem &oCompare )
                                     {

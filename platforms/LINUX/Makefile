@@ -132,16 +132,18 @@ DEFS    = -Dlinux \
 		  -DIASLIB_LINUX__ \
 		  -DIASLIB_NETWORKING__ \
 		  -DIASLIB_MULTI_THREADED__ \
-		  -DIASLIB_PTHREAD__ \
 		  -DIASLIB_RTTI__ \
+		  -DIASLIB_PTHREAD__ \
 		  -DIASLIB_DATABASE__ \
 		  -DIASLIB_DB_SQLITE__ \
 		  -DIASLIB_STD_STREAM_SUPPORT__
 
+
 #
 # Specify the compile-time options.
 #
-OPTIONS = -ggdb -fvar-tracking -pg -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
+#OPTIONS = -ggdb -fvar-tracking -pg -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
+OPTIONS = -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
 #OPTIONS_NO_THREAD = -g0 -pg
 # non-debug version
 #OPTIONS = -O3 -m32 -D_REENTRANT
@@ -167,7 +169,7 @@ COMPILE = g++ $(OPTIONS) $(INCLUDE) $(DEFS)
 BASEHEADERS = $(BASEINC)/Object.h $(BASEINC)/String_.h $(BASEINC)/StringTokenizer.h \
               $(BASEINC)/Bool.h $(BASEINC)/StringStub.h $(BASEINC)/Date.h \
 	          $(BASEINC)/DataBlock.h $(BASEINC)/String_Copy.h $(BASEINC)/Variant.h \
-		      $(BASEINC)/Uuid.h
+		      $(BASEINC)/Uuid.h $(BASEINC)/Random.h
 
 COLHEADERS  = $(COLINC)/Collection.h $(COLINC)/Array.h $(COLINC)/Cache.h \
 	          $(COLINC)/CacheItem.h $(COLINC)/Hash.h $(COLINC)/HashBucket.h \

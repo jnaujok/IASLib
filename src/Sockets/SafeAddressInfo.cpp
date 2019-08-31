@@ -78,6 +78,7 @@ namespace IASLib
         if ( next )
             delete( next );
         delete addr;
+        addr = NULL;
     }
 
     CSafeAddressInfo &CSafeAddressInfo::operator =( const CSafeAddressInfo &oSource )
@@ -107,6 +108,37 @@ namespace IASLib
         return *this;
     }
 
+    void CSafeAddressInfo::setPort( int nPort )
+    {
+        if ( family == AF_INET )
+        {
+            struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+            saddr->sin_port = htons( (uint16_t)nPort );
+        }
+        else if ( family == AF_INET6 )
+        {
+            struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+            saddr->sin6_port = htons( (uint16_t)nPort );
+        }
+    }
+
+    int CSafeAddressInfo::getPort( void )
+    {
+        if ( family == AF_INET )
+        {
+            struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+            return ntohs( saddr->sin_port );
+        }
+        else if ( family == AF_INET6 )
+        {
+            struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+            return ntohs( saddr->sin6_port );
+        }
+        else
+        {
+            return -1;
+        }
+    }
 };
 
 #endif // IASLIB_NETWORKING__

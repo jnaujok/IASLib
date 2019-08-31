@@ -40,8 +40,12 @@ namespace IASLib
             CObject           **m_apElements;
             size_t              m_nSize;
             size_t              m_nScale;
+#ifdef IASLIB_MULTI_THREADED__
+            mutable CMutex      m_mutex;
+#endif
         public:
                                 CArray( size_t nScale = 4 );
+                                CArray( const CArray &oSource );
             virtual            ~CArray( void );
 
                                 DEFINE_OBJECT( CArray );
@@ -49,18 +53,18 @@ namespace IASLib
             virtual size_t      Append( CObject *pNew ) { return Push( pNew ); }
             virtual size_t      Prepend( CObject *pNew ) { return Insert( 0, pNew ); }
 
-            virtual size_t      Insert( size_t nCount, CObject *pNew );
+            virtual size_t      Insert( size_t nIndex, CObject *pNew );
 
             virtual size_t      Push( CObject *pNew );
 
             virtual size_t      Set( size_t nIndex, CObject *pSet );
 
-            virtual CObject    *Get( size_t nCount ) const;
-            virtual CObject    *operator []( size_t nCount ) const;
+            virtual CObject    *Get( size_t nIndex ) const;
+            virtual CObject    *operator []( size_t nIndex ) const;
 
-            virtual CObject    *Remove( size_t nCount );
+            virtual CObject    *Remove( size_t nIndex );
 
-            virtual bool        Delete( size_t nCount );
+            virtual bool        Delete( size_t nIndex );
 
             virtual void        DeleteAll( void );
             virtual void        EmptyAll( void );

@@ -10,7 +10,7 @@
  *	Log:
  *	  $LOG$
  *
- * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
@@ -21,7 +21,7 @@ namespace IASLib
     IMPLEMENT_OBJECT( CCache, CCollection );
 
 	CCache::CCache( size_t nMaxEntries, bool bUseExpiration )
-		: m_aEntries( CCacheItem::SortCompare, ( nMaxEntries < 1024 ) ? nMaxEntries : 1024 )
+		: m_hashEntries( CHash::LARGE )
 	{
         m_pListFirst = NULL;
         m_pListLast = NULL;
@@ -36,8 +36,11 @@ namespace IASLib
 
     bool CCache::AddItem( CCacheItem *pItem )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
             // Make sure there is room in the Cache
-        while ( ( m_pListLast ) && ( m_aEntries.GetLength() >= m_nQueueMax ) )
+        while ( ( m_pListLast ) && ( m_hashEntries.GetLength() >= m_nQueueMax ) )
         {
             CCacheItem *pOldest = m_pListLast;
 
@@ -46,12 +49,16 @@ namespace IASLib
 
             pOldest->m_pPrevItem = NULL;
 
-            m_aEntries.Delete( m_aEntries.Find( pOldest ) );
+            m_hashEntries.Delete( pOldest->GetKey() );
         }
 
-        m_aEntries.Push( pItem );
+        m_hashEntries.Push( pItem->GetKey(), pItem );
         pItem->m_pNextItem = m_pListFirst;
         m_pListFirst = pItem;
+        pItem->m_pPrevItem = NULL;
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
 
         return true;
     }
@@ -59,80 +66,56 @@ namespace IASLib
     bool CCache::RemoveItem( CCacheItem *pKey )
     {
         bool        bRetVal = false;
-        size_t      nIndex = m_aEntries.Find( pKey );
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
+        CCacheItem *pRemove = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
 
-        if ( nIndex != IASLib::NOT_FOUND )
+        if ( pRemove )
         {
-            CCacheItem *pRemove = (CCacheItem *)m_aEntries.Get( nIndex );
-
-            // Remove the item from the LRU list.
-            if ( pRemove->m_pPrevItem )
-            {
-                pRemove->m_pPrevItem->m_pNextItem = pRemove->m_pNextItem;
-            }
-            else
-            {
-                m_pListFirst = pRemove->m_pNextItem;
-            }
-
-            if ( pRemove->m_pNextItem )
-            {
-                pRemove->m_pNextItem->m_pPrevItem = pRemove->m_pPrevItem;
-            }
-            else
-            {
-                m_pListLast = pRemove->m_pPrevItem;
-            }
-
-            m_aEntries.Delete( nIndex );
+            RemoveFromList( pRemove );
+            m_hashEntries.Delete( pKey->GetKey() );
 
             bRetVal = true;
         }
 
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
         return bRetVal;
     }
 
     CCacheItem *CCache::Get( CCacheItem *pKey )
     {
         CCacheItem *pRetVal = NULL;        
-        size_t      nIndex = m_aEntries.Find( pKey );
 
-        if ( nIndex != IASLib::NOT_FOUND )
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
+        pRetVal = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
+
+        if ( pRetVal )
         {
-            pRetVal = (CCacheItem *)m_aEntries.Get( nIndex );
-
             if ( m_bUseExpiration )
             {
                 if ( pRetVal->IsExpired() )
                 {
-                    if ( pRetVal->m_pNextItem )
-                    {
-                        pRetVal->m_pNextItem->m_pPrevItem = pRetVal->m_pPrevItem;
-                    }
-                    else
-                    {
-                        m_pListLast = pRetVal->m_pPrevItem;
-                    }
-
-                    if ( pRetVal->m_pPrevItem )
-                    {
-                        pRetVal->m_pPrevItem->m_pNextItem = pRetVal->m_pNextItem;
-                    }
-                    else
-                    {
-                        m_pListFirst = pRetVal->m_pNextItem;
-                    }
-
+                    RemoveFromList( pRetVal );
+                    m_hashEntries.Delete( pKey->GetKey() );
                     pRetVal = NULL;
-                    m_aEntries.Delete( nIndex );
                 }
             }
+
+            // It wasn't expired            
             if ( pRetVal )
             {
                 pRetVal->Hit( this );
             }
         }
 
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
         return pRetVal;
     }
 
@@ -140,17 +123,21 @@ namespace IASLib
     {
         bool        bRetVal = false;
         CCacheItem *pItem = NULL;        
-        size_t      nIndex = m_aEntries.Find( pKey );
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
+        pItem = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
 
-        if ( nIndex != IASLib::NOT_FOUND )
+        if ( pItem )
         {
-            pItem = (CCacheItem *)m_aEntries.Get( nIndex );
-
             pItem->Hit( this );
 
             bRetVal = true;
         }
 
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
         return bRetVal;
     }
 
@@ -158,102 +145,123 @@ namespace IASLib
     {
         bool        bRetVal = false;
         CCacheItem *pItem = NULL;        
-        size_t      nIndex = m_aEntries.Find( pKey );
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
+        pItem = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
 
-        if ( nIndex != IASLib::NOT_FOUND )
+        if ( pItem )
         {
-            pItem = (CCacheItem *)m_aEntries.Get( nIndex );
-
             MoveToTail( pItem );
             bRetVal = true;
         }
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
         return bRetVal;
     }
 
     void CCache::ClearExpired( void )
     {
-        size_t nIndex = 0;
-
-        while ( nIndex < m_aEntries.GetCount() )
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
+        CCacheItem *pItem = m_pListFirst;
+        while ( pItem )
         {
-            CCacheItem *pItem = (CCacheItem *)m_aEntries.Get( nIndex );
-
             if ( pItem->IsExpired() )
             {
-                m_aEntries.Delete( nIndex );
+                RemoveFromList(pItem);
+                m_hashEntries.Delete( pItem->GetKey() );
             }
-            else
-            {
-                nIndex++;
-            }
+            pItem = pItem->m_pNextItem;
         }
+
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
     }
 
     void CCache::ClearExpired( CDate &dttCompare )
     {
-        size_t nIndex = 0;
-
-        while ( nIndex < m_aEntries.GetCount() )
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
+        CCacheItem *pItem = m_pListFirst;
+        while ( pItem )
         {
-            CCacheItem *pItem = (CCacheItem *)m_aEntries.Get( nIndex );
-
             if ( pItem->IsExpired( dttCompare ) )
             {
-                m_aEntries.Delete( nIndex );
+                RemoveFromList(pItem);
+                m_hashEntries.Delete( pItem->GetKey() );
             }
-            else
-            {
-                nIndex++;
-            }
+            pItem = pItem->m_pNextItem;
         }
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
     }
 
     void CCache::DeleteAll( void )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
         DetatchList( );
-		m_aEntries.DeleteAll();
+		m_hashEntries.DeleteAll();
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
     }
 
     void CCache::EmptyAll( void )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Lock();
+#endif
         DetatchList( );
-		m_aEntries.EmptyAll();
+		m_hashEntries.EmptyAll();
+#ifdef IASLIB_MULTI_THREADED__
+        cacheMutex.Unlock();
+#endif
     }
 
     CIterator *CCache::Enumerate( void )
     {
-        return m_aEntries.Enumerate();
+        return m_hashEntries.Enumerate();
     }
 
     void CCache::MoveToHead( CCacheItem *pItem )
     {
-        if ( m_pListFirst != pItem )
+        // Skip if already at the head of the list.
+        if ( pItem->m_pPrevItem )
         {
+            // Move to head of LRU list
+            CCacheItem *pTemp = m_pListFirst;
+            m_pListFirst = pItem;
             if ( pItem->m_pNextItem )
             {
                 pItem->m_pNextItem->m_pPrevItem = pItem->m_pPrevItem;
             }
             else
             {
+                // At the tail of the list, so set the tail to the prior item
                 m_pListLast = pItem->m_pPrevItem;
             }
-
+            
             pItem->m_pPrevItem->m_pNextItem = pItem->m_pNextItem;
-
-            if ( m_pListFirst )
-            {
-                m_pListFirst->m_pPrevItem = pItem;
-            }
-            pItem->m_pNextItem = m_pListFirst;
             pItem->m_pPrevItem = NULL;
-            m_pListFirst = pItem;
+            pItem->m_pNextItem = pTemp;
         }
     }
 
     void CCache::MoveToTail( CCacheItem *pItem )
     {
-        if ( m_pListLast != pItem )
+        if ( pItem->m_pNextItem )
         {
+            CCacheItem *pTemp = m_pListLast;
+            m_pListLast = pItem;
+
             pItem->m_pNextItem->m_pPrevItem = pItem->m_pPrevItem;
 
             if ( pItem->m_pPrevItem )
@@ -265,13 +273,38 @@ namespace IASLib
                 m_pListFirst = pItem->m_pNextItem;
             }
 
-            if ( m_pListLast )
+            if ( pTemp )
             {
-                m_pListLast->m_pNextItem = pItem;
+                pTemp->m_pNextItem = pItem;
             }
-            pItem->m_pPrevItem = m_pListLast;
+            pItem->m_pPrevItem = pTemp;
             pItem->m_pNextItem = NULL;
-            m_pListLast = pItem;
+        }
+    }
+
+    void CCache::RemoveFromList( CCacheItem *pRemove )
+    {
+        // Remove the item from the LRU list.
+        if ( pRemove->m_pPrevItem )
+        {
+            pRemove->m_pPrevItem->m_pNextItem = pRemove->m_pNextItem;
+        }
+        else
+        {
+            m_pListFirst = pRemove->m_pNextItem;
+        }
+
+        if ( pRemove->m_pNextItem )
+        {
+            pRemove->m_pNextItem->m_pPrevItem = pRemove->m_pPrevItem;
+        }
+        else
+        {
+            m_pListLast = pRemove->m_pPrevItem;
+            if ( pRemove->m_pPrevItem )
+            {
+                pRemove->m_pPrevItem->m_pNextItem = NULL;
+            }
         }
     }
 
@@ -289,6 +322,7 @@ namespace IASLib
             
             pItem = m_pListFirst;
         }
+
         m_pListFirst = NULL;
         m_pListLast = NULL;
     }

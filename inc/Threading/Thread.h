@@ -122,7 +122,7 @@
 
                 void                    SetTimeout( int nSeconds );
 
-                void                    RequestShutdown( void ) { m_bShutdown = true; }
+                virtual void            RequestShutdown( void ) { m_bShutdown = true; }
                 bool                    IsShutdown( void ) { return m_bShutdown; }
 
                 static CThread         *Self( void );
@@ -132,7 +132,7 @@
                 void                    Sleep( int nSeconds );
                 void                    Millisleep( int milliseconds );
 
-                virtual unsigned long   GetCapabilities( void ) = 0;
+                virtual unsigned long   GetCapabilities( void ) { return CapabilityFlags::THREADS; };
 
                 static void             EnterCriticalSection( void ) { m_mutexCriticalSection.Lock(); }
                 static void             LeaveCriticalSection( void ) { m_mutexCriticalSection.Unlock(); }

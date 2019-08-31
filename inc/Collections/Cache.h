@@ -19,7 +19,7 @@
 #define IASLIB_CACHE_H__
 
 #include "../BaseTypes/String_.h"
-#include "SortedArray.h"
+#include "Hash.h"
 #include "CacheItem.h"
 
 namespace IASLib
@@ -31,9 +31,14 @@ namespace IASLib
         protected:
             CCacheItem             *m_pListFirst;   // Used for LRU determination
             CCacheItem             *m_pListLast;
-            CSortedArray            m_aEntries;
+            CHash                   m_hashEntries;
+            
             size_t                  m_nQueueMax;
 			bool					m_bUseExpiration;
+#ifdef IASLIB_MULTI_THREADED__
+            CMutex                  cacheMutex;
+#endif
+
 
         public:
                                     CCache( size_t nMaxEntries, bool bUseExpiration = false );
@@ -63,7 +68,7 @@ namespace IASLib
             void                    MoveToHead( CCacheItem *pItem );
             void                    MoveToTail( CCacheItem *pItem );
             void                    DetatchList( void );
-
+            void                    RemoveFromList( CCacheItem *pItem );
     };
 
 } // namespace IASLib

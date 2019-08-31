@@ -165,10 +165,18 @@ namespace IASLib
     {
         size_t retVal = 0;
 
-        retVal = sendto( m_hSocket, (const char *)pchBuffer, nBufferSize,
-            MSG_CONFIRM, (const struct sockaddr *)targetAddress,
-                sizeof(struct sockaddr));
-                
+        if ( targetAddress.isValid() )
+        {
+            retVal = sendto( m_hSocket, (const char *)pchBuffer, nBufferSize,
+                MSG_CONFIRM, (const struct sockaddr *)targetAddress,
+                    sizeof(struct sockaddr));
+            
+            if ( retVal == NOT_FOUND )
+            {
+                printf( "SendTo RetVal: %d\n", (int) retVal );
+                printf( "Errno: %d - %s\n", errno, strerror( errno ) );
+            }
+        }
         return retVal;
     }
 

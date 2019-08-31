@@ -80,9 +80,9 @@ namespace IASLib
 
             bool                    IsThreadActive( CThread *pThread );
 
-            int                     GetThreadCount( void ) { return m_nCurrentThreads; }
-            int                     GetPeakThreads( void ) { return m_nPeakThreads; }
-            int                     GetTotalThreads( void ) { return m_nTotalThreads; }
+            int                     GetThreadCount( void );
+            int                     GetPeakThreads( void );
+            int                     GetTotalThreads( void );
 
             const char             *GetThreadIdentifier( int nThread );
             const char             *GetThreadIdentifier( CThread *pThread );

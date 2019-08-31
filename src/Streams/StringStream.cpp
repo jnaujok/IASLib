@@ -30,7 +30,8 @@ namespace IASLib
 
     CStringStream::CStringStream( const CString &strSource )
     {
-        m_strString = strSource;
+        // Force a deep copy of the string.
+        m_strString = CString((const char *)strSource);
         m_strOutputString = "";
         m_nCurrentPosition = 0;
     }

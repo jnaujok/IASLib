@@ -63,7 +63,7 @@ extern "C"
         pThread->SetRunning( true );
 
 #ifdef IASLIB_PTHREAD__
-			// Here we play a trick on DECs to start suspended
+			// Here we play a trick on PThreads to start suspended
 		pThread->m_mutexStartSuspended.Lock();
         sleep(0);
 		pThread->m_mutexStartSuspended.Unlock();
@@ -93,11 +93,24 @@ extern "C"
 namespace IASLib
 {
 
-CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetached, bool bNoDelete, bool bDaemon )
+CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetached, bool bNoDelete, bool bDaemon ) : m_strThreadName( strThreadName )
 {
+    m_ptThreadID = 0;
+    m_bIsRunning = false;
+    m_nReturnCode = -1;
+    m_bDetached = false;
+    m_bShutdown = false;
+    m_bContained = false;
+    m_bNoDelete = false;
+    m_bDaemon = false;
+    
+#ifdef IASLIB_PTHREAD__
+    memset( &m_stAttributes, 0, sizeof( m_stAttributes ) );
+#endif
+
 #ifdef IASLIB_MULTI_THREADED__
-    CThreadMonitor *pMonitor;
-    int nRetCode;
+    CThreadMonitor *pMonitor = NULL;
+    int nRetCode = 0;
 
 #ifdef IASLIB_PTHREAD__
 	if ( bStartSuspended )
@@ -483,10 +496,6 @@ CThread *CThread::Self( void )
     ptThreadID = pthread_self();
 #endif
 
-#ifdef IASLIB_PTHREAD__
-    ptThreadID = pthread_self();
-#endif
-
 #ifdef IASLIB_WIN32__
     ptThreadID = GetCurrentThread();
 #endif
@@ -504,13 +513,6 @@ bool CThread::Equals( THREAD_T ptThread1, THREAD_T ptThread2 )
 #ifdef IASLIB_MULTI_THREADED__
 #ifdef IASLIB_SUN__
     if ( ptThread1 == ptThread2 )
-    {
-        return true;
-    }
-#endif
-
-#ifdef IASLIB_PTHREAD__
-    if ( pthread_equal( ptThread1, ptThread2 ) )
     {
         return true;
     }

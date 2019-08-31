@@ -74,6 +74,7 @@ class CThreadPool : public CObject
         CQueueingThread *m_pQueueingThread;
         bool    m_bStoreResults;
         bool    m_bRetainTasks;
+        bool    m_bInShutdown;
 
         static bool m_bInitialized;
 

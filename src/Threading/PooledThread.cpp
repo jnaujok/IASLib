@@ -12,9 +12,10 @@
 
 #ifdef IASLIB_MULTI_THREADED__
 
-    #include "PooledThread.h"
-    #include "ThreadPool.h"
-    #include "../../inc/BaseTypes/Date.h"
+#include "PooledThread.h"
+#include "ThreadPool.h"
+#include "Date.h"
+#include "ThreadException.h"
 
 namespace IASLib
 {
@@ -27,10 +28,9 @@ namespace IASLib
             CMutex          m_RunMutex;
             unsigned int    m_nTimeout;
             CDate           m_dttStartTime;
-            bool            m_bShutdown;
             CPooledThread  *m_pParent;
 
-            CRunThread( CPooledThread *pParent, const char *name, int nNumber ) : CThread( (const char *)CString::FormatString("Pooled_Thread_%s_%d", (const char *)name, nNumber ), true, false, true, false )
+            CRunThread( CPooledThread *pParent, const char *name, int nNumber ) : CThread( (const char *)CString::FormatString("%s_%d", (const char *)name, nNumber ), true, true, false, false )
             {
                 m_pActiveTask = NULL;
                 // We always lock the mutex to start, to ensure we'll block waiting for a task.
@@ -57,7 +57,7 @@ namespace IASLib
                         try
                         {
                             result = m_pActiveTask->Run();
-                            m_pActiveTask->setComplete();
+                            m_pActiveTask->setComplete(); 
                         }
                         catch(const std::exception& e)
                         {
@@ -69,9 +69,17 @@ namespace IASLib
                     }
                     else
                     {
-                        printf( "In thread CPooledThread.Run(): %s - Thread unlocked without active task.\n", (const char *)m_strThreadName );
+                        if ( ! m_bShutdown )
+                            printf( "In thread CPooledThread.Run(): %s - Thread unlocked without active task.\n", (const char *)m_strThreadName );
+                        else
+                        {
+                            printf( "Worker Thread %s shutting down.\n", (const char *)m_strThreadName );
+                        }
                     }
                 }
+                //printf( "Thread exiting.\n" );
+                m_pParent->m_bThreadInShutdown = true;
+                Millisleep(50);
                 return NULL;
             }
 
@@ -91,9 +99,9 @@ namespace IASLib
                 return CapabilityFlags::STATE | CapabilityFlags::SLEEP | CapabilityFlags::SUSPEND;
             }
 
-            void shutdown( void )
+            virtual void RequestShutdown( void )
             {
-                m_bShutdown = true;
+                CThread::RequestShutdown();
                 if ( ! m_pActiveTask )
                     m_RunMutex.Unlock();
             }
@@ -125,7 +133,7 @@ namespace IASLib
      void CPooledThread::ShutdownThread()
     {
         m_bThreadInShutdown = true;
-        m_ptThread->shutdown();
+        m_ptThread->RequestShutdown();
     }
 
     void CPooledThread::ExitThread( int errorCode )
@@ -155,7 +163,8 @@ namespace IASLib
     void CPooledThread::SetResult( CObject *pResult )
     {
         m_pResult = pResult;
-        m_pParent->taskComplete( this );
+        if ( ! m_bThreadInShutdown )
+            m_pParent->taskComplete( this );
     }
 
 } // Namespace IASLib

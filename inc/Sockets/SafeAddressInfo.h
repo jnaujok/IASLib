@@ -88,6 +88,9 @@ namespace IASLib
                 return addrlen;
             }
 
+            void setPort( int nPort );
+            int getPort( void );
+
             struct sockaddr *getAddr()
             {
                 return addr;

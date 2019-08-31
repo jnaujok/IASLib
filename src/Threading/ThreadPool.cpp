@@ -57,7 +57,6 @@ namespace IASLib
         private:
             CSemaphore  m_semQueueAvailable;
             CQueue     *m_pQueue;
-            bool        m_bShutdown;
             CThreadPool * m_pParent;
 
         public:
@@ -74,22 +73,25 @@ namespace IASLib
                 while ( ! m_bShutdown )
                 {
                     m_semQueueAvailable.Wait();
-                    if ( m_pParent->GetIdleThreads() )
+                    if ( ! m_bShutdown )
                     {
-                        CThreadTask *task = (CThreadTask *)m_pQueue->Pop();
-                        if ( ! m_pParent->startTask( task ) )
+                        if ( m_pParent->GetIdleThreads() )
                         {
-                            // Failed to allocate a thread -- push the task back
-                            // onto the queue and re-signal the semaphore.
-                            m_pQueue->Push(task);
+                            CThreadTask *task = (CThreadTask *)m_pQueue->Pop();
+                            if ( ! m_pParent->startTask( task ) )
+                            {
+                                // Failed to allocate a thread -- push the task back
+                                // onto the queue and re-signal the semaphore.
+                                m_pQueue->Push(task);
+                                m_semQueueAvailable.Post();
+                            }
+                        }
+                        else
+                        {
+                            // There's no idle threads available. Wait 50 milliseconds and try again.
+                            Millisleep(50);
                             m_semQueueAvailable.Post();
                         }
-                    }
-                    else
-                    {
-                        // There's no idle threads available. Wait 50 milliseconds and try again.
-                        Millisleep(50);
-                        m_semQueueAvailable.Post();
                     }
                 }
 
@@ -109,6 +111,7 @@ namespace IASLib
 
     CThreadPool::CThreadPool( size_t maximumThreads, bool storeResults, bool retainTasks ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
     {
+        m_bInShutdown = false;
         m_bRetainTasks = retainTasks;
         m_bStoreResults = storeResults;
         m_mutexArray.Lock();
@@ -130,13 +133,36 @@ namespace IASLib
 
     CThreadPool::~CThreadPool(void)
     {
-        for ( size_t nX = 0; nX < m_aBusyThreads.Length(); nX++ )
+        m_bInShutdown = true;
+        CQueueingThread *pQ = m_pQueueingThread;
+
+        m_pQueueingThread = NULL;
+
+        pQ->RequestShutdown();
+        pQ->signalQueue();
+        pQ->Join();
+
+        delete pQ;
+
+        CArray aTempThreads( m_aBusyThreads );
+        m_aBusyThreads.EmptyAll();
+        for ( size_t nX = 0; nX < aTempThreads.Length(); nX++ )
         {
-            CPooledThread *work = (CPooledThread *)m_aBusyThreads.Get( nX );
+            CPooledThread *work = (CPooledThread *)aTempThreads.Get( nX );
+            work->ShutdownThread();
+        }
+        aTempThreads.EmptyAll();
+        
+        m_mutexArray.Lock();
+        for ( size_t nX = 0; nX < m_aAvailableThreads.Length(); nX ++ )
+        {
+            CPooledThread *work = (CPooledThread *)m_aAvailableThreads.Get( nX );
             work->ShutdownThread();
             work->Join();
-            delete work;
         }
+        m_aAvailableThreads.EmptyAll();
+        m_mutexArray.Unlock();
+        m_qTaskQueue.DeleteAll();
     }
 
     IMPLEMENT_OBJECT(CThreadPool, CObject);
@@ -145,12 +171,15 @@ namespace IASLib
     {
         bool retVal = false;
 
-        m_mutexArray.Lock();
-        m_qTaskQueue.Push( task );
-        if ( m_aAvailableThreads.GetLength() )
-            retVal = true;
-        m_mutexArray.Unlock();
-        m_pQueueingThread->signalQueue();
+        if ( ! m_bInShutdown )
+        {
+            m_mutexArray.Lock();
+            m_qTaskQueue.Push( task );
+            if ( m_aAvailableThreads.GetLength() )
+                retVal = true;
+            m_mutexArray.Unlock();
+            m_pQueueingThread->signalQueue();
+        }
         return retVal;
     }
 
@@ -178,22 +207,27 @@ namespace IASLib
     bool CThreadPool::startTask( CThreadTask *task )
     {
         bool retVal = false;
-        m_mutexArray.Lock();
 
-        if ( m_aAvailableThreads.Length() )
+        if ( ! m_bInShutdown )
         {
-            CPooledThread *workThread = (CPooledThread *)m_aAvailableThreads.Remove(1);
-            m_aBusyThreads.Push( workThread );
-            m_nCurrentThreads++;
-            if ( m_nCurrentThreads > this->m_nPeakThreads )
-            {
-                m_nPeakThreads = m_nCurrentThreads;
-            }
+            m_mutexArray.Lock();
 
-            workThread->SetTask( task );
-            retVal = true;
+            if ( m_aAvailableThreads.GetCount() )
+            {
+                CPooledThread *workThread = (CPooledThread *)m_aAvailableThreads.Remove(0);
+                m_aBusyThreads.Push( workThread ); 
+                m_nCurrentThreads++;
+                if ( m_nCurrentThreads > this->m_nPeakThreads )
+                {
+                    m_nPeakThreads = m_nCurrentThreads;
+                }
+
+                workThread->SetTask( task );
+                retVal = true;
+            }
+            m_mutexArray.Unlock();
         }
-        m_mutexArray.Unlock();
+
         return retVal;
     }
 
@@ -220,24 +254,27 @@ namespace IASLib
         
         thread->ResetThread();
 
-        if ( m_nCurrentThreads > 0 )
+        if ( ! m_bInShutdown )
         {
-            for ( size_t nX = 0; nX < m_aBusyThreads.Length(); nX++ )
+            if ( m_nCurrentThreads > 0 )
             {
-                if ( m_aBusyThreads[nX] == thread )
+                for ( size_t nX = 0; nX < m_aBusyThreads.Length(); nX++ )
                 {
-                    m_aBusyThreads.Remove( nX );
-                    m_nCurrentThreads--;
-                    break;
+                    if ( m_aBusyThreads[nX] == thread )
+                    {
+                        m_aBusyThreads.Remove( nX );
+                        m_nCurrentThreads--;
+                        break;
+                    }
                 }
-            }
 
-            m_aAvailableThreads.Push( thread );
-        }
-        else
-        {
-            m_mutexArray.Unlock();
-            IASLIB_THROW_THREAD_EXCEPTION( "An attempt was made to release an unknown thread to the thread pool.");
+                m_aAvailableThreads.Push( thread );
+            }
+            else
+            {
+                m_mutexArray.Unlock();
+                IASLIB_THROW_THREAD_EXCEPTION( "An attempt was made to release an unknown thread to the thread pool.");
+            }
         }
 
         m_mutexArray.Unlock();

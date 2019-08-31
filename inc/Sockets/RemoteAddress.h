@@ -87,6 +87,8 @@ namespace IASLib
             static CSafeAddressInfo *resolveAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
             static CSafeAddressInfo *resolveAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
             static int getPort( const struct sockaddr *address );
+
+            virtual bool isValid( void ) const { return m_bIsValid; }
     };
 } // namespace IASLib
 

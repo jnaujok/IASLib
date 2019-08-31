@@ -107,6 +107,7 @@ namespace IASLib
         if ( m_sockAddressList != NULL )
         {
             delete m_sockAddressList;
+            m_sockAddressList = NULL;
         }
     }
 
@@ -136,15 +137,18 @@ namespace IASLib
         if (m_sockAddressList)
         {
             delete m_sockAddressList;
+            m_sockAddressList = NULL;
         }
         m_sockAddressList = CRemoteAddress::resolveAddress( hostname, (const char *)NULL, SOCK_STREAM );
     }
 
     void CRemoteAddress::SetAddress( const struct sockaddr *sockAddress )
     {
+        m_bIsValid = false;
         if (m_sockAddressList)
         {
             delete m_sockAddressList;
+            m_sockAddressList = NULL;
         }
         m_strHostname = addressToString( sockAddress );
 
@@ -152,11 +156,22 @@ namespace IASLib
 
         m_sockAddressList = CRemoteAddress::resolveAddress(m_strHostname, m_strService, SOCK_RAW );
         m_bIsValid = (m_sockAddressList != NULL );
+
+        // Set the port on all the addresses
+        if ( m_bIsValid )
+        {
+            CSafeAddressInfo *addr = m_sockAddressList;
+            while ( addr )
+            {
+                addr->setPort( getPort(sockAddress) );
+                addr = addr->getNext();
+            }
+        }
     }
 
     struct sockaddr *CRemoteAddress::GetAddress( void ) const
     {
-        if (m_bIsValid)
+        if ((m_bIsValid) && ( m_sockAddressList ))
         {
             return m_sockAddressList->getAddr();
         }
@@ -263,11 +278,11 @@ namespace IASLib
             switch(address->sa_family) {
                 case AF_INET: {
                     const struct sockaddr_in *addr_in = (const struct sockaddr_in *)address;
-                    return addr_in->sin_port;
+                    return ntohs((uint16_t)addr_in->sin_port);
                 }
                 case AF_INET6: {
                     const struct sockaddr_in6 *addr_in6 = (const struct sockaddr_in6 *)address;
-                    return addr_in6->sin6_port;
+                    return ntohs((uint16_t)addr_in6->sin6_port);
                 }
                 default:
                     break;
@@ -291,7 +306,18 @@ namespace IASLib
         pHints->ai_addr = NULL;
         pHints->ai_next = NULL;
 
-        int nRet = getaddrinfo( hostname, service, pHints, &retList );
+        int nRet;
+        CString strService(service);
+        
+        if ( ( socketType == SOCK_DGRAM ) || ( strService.IsDigits() ) )
+        {
+            nRet = getaddrinfo( hostname, NULL, pHints, &retList );
+        }
+        else
+        {
+            nRet = getaddrinfo( hostname, service, pHints, &retList );
+        }
+        
 
         delete pHints;
         if ( nRet == 0 )

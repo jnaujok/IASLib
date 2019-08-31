@@ -66,6 +66,18 @@ namespace IASLib
         m_apElements = NULL;
     }
 
+    CArray::CArray( const CArray &oSource )
+    {
+        m_nScale = oSource.m_nScale;
+        m_nSize = oSource.m_nSize;
+        m_nElements = oSource.m_nElements;
+        m_apElements = new CObject *[ m_nSize ];
+        for ( size_t nX = 0; nX < m_nElements; nX ++ )
+        {
+            m_apElements[nX] = oSource.m_apElements[nX];
+        }
+    }
+
     CArray::~CArray( void )
     {
         DeleteAll();
@@ -109,30 +121,53 @@ namespace IASLib
 
     size_t CArray::Push( CObject *pNew )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         Resize( true );
         m_apElements[ m_nElements ] = pNew;
         m_nElements++;
-
-        return ( m_nElements - 1 );
+        size_t retVal = m_nElements - 1;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
+        return retVal;
     }
 
     size_t CArray::Set( size_t nIndex, CObject *pSet )
     {
+        size_t retVal = nIndex;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         if ( nIndex >= m_nElements )
         {
-           return Push( pSet );
+            Resize( true );
+            m_apElements[ m_nElements ] = pSet;
+            m_nElements++;
+            retVal = m_nElements - 1;
         }
         m_apElements[ nIndex ] = pSet;
-        return nIndex;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
+        return retVal;
     }
 
     CObject *CArray::Get( size_t nCount ) const
     {
+        CObject *retVal = NULL;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         if (  nCount < m_nElements )
         {
-            return m_apElements[ nCount ];
+            retVal = m_apElements[ nCount ];
         }
-        return NULL;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
+        return retVal;
     }
 
     CObject *CArray::operator []( size_t nCount ) const
@@ -144,6 +179,9 @@ namespace IASLib
     {
         CObject *pRetVal = NULL;
 
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         if ( nCount < m_nElements )
         {
             pRetVal = m_apElements[ nCount ];
@@ -155,46 +193,71 @@ namespace IASLib
             m_nElements--;
             Resize( false );
         }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
 
         return pRetVal;
     }
 
     size_t CArray::Insert( size_t nCount, CObject *pNew )
     {
+        size_t retVal = nCount;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         if ( nCount >= m_nElements )
         {
-           return CArray::Push( pNew );
+            Resize( true );
+            m_apElements[ m_nElements ] = pNew;
+            m_nElements++;
+            retVal = m_nElements - 1;
         }
-
-        Resize( true );
-
-        for ( size_t nIndex = m_nElements; nIndex > nCount ; nIndex-- )
+        else
         {
-            m_apElements[ nIndex ] = m_apElements[ nIndex - 1 ];
-        }
-        m_apElements[ nCount ] = pNew;
-        m_nElements++;
+            Resize( true );
 
-        return nCount;
+            for ( size_t nIndex = m_nElements; nIndex > nCount ; nIndex-- )
+            {
+                m_apElements[ nIndex ] = m_apElements[ nIndex - 1 ];
+            }
+            m_apElements[ nCount ] = pNew;
+            m_nElements++;
+        }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
+        return retVal;
     }
 
     bool CArray::Delete( size_t nCount )
     {
-        if ( nCount >= m_nElements )
-            return false;
-
-        delete m_apElements[ nCount ];
-        for ( size_t nIndex = nCount; nIndex < (m_nElements - 1) ; nIndex++ )
+        bool retVal = false;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
+        if (! ( nCount >= m_nElements ) )
         {
-            m_apElements[ nIndex ] = m_apElements[ nIndex + 1 ];
+            delete m_apElements[ nCount ];
+            for ( size_t nIndex = nCount; nIndex < (m_nElements - 1) ; nIndex++ )
+            {
+                m_apElements[ nIndex ] = m_apElements[ nIndex + 1 ];
+            }
+            m_nElements--;
+            Resize( false );
+            retVal = true;
         }
-        m_nElements--;
-        Resize( false );
-        return true;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
+        return retVal;
     }
 
     void CArray::DeleteAll( void )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         if ( m_nSize )
         {
             for ( size_t nCount = 0; nCount < m_nElements ; nCount++ )
@@ -208,22 +271,41 @@ namespace IASLib
             m_nSize = 0;
             m_apElements = NULL;
         }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
     }
 
     void CArray::EmptyAll( void )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         if ( m_nSize )
         {
+            for ( size_t nCount = 0; nCount < m_nElements ; nCount++ )
+            {
+                m_apElements[ nCount ] = NULL;
+            }            
             delete [] m_apElements;
-            m_nElements = 0;
             m_nSize = 0;
             m_apElements = NULL;
+            m_nElements = 0;
         }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
     }
 
     void CArray::Sort( int (*fnCompare)(const CObject *, const CObject *, void *), void *pCallback )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         QuickSort( 0, m_nElements - 1, fnCompare, pCallback );
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
     }
 
 

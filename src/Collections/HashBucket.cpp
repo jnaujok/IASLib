@@ -218,7 +218,7 @@ namespace IASLib
         {
             delete m_aSlats[ nCount ];
         }
-        delete m_aSlats;
+        delete [] m_aSlats;
         m_aSlats = NULL;
         m_nSlats = 0;
     }

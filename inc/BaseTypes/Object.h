@@ -72,7 +72,7 @@ namespace IASLib
             static void             SetAssertHandler();
             static void             CallAssertHandler( const char *strFile, int nLine, const char *strCondition );
 
-            virtual int             hashcode( void ) { return (int)m_nObjectID; }
+            virtual int             hashCode( void ) const { return (int)m_nObjectID; }
 
             static void            *allocate( size_t size, const char *name );
             static void             deallocate( void *p, const char *name );

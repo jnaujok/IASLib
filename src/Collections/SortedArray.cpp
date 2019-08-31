@@ -49,7 +49,7 @@ namespace IASLib
 		size_t nInsertPoint = Find( pNew );
 
       	if ( nInsertPoint >= ( GetCount() + 1 ) )
-		    CArray::Append( pNew );
+		    CArray::Push( pNew );
 			return GetCount();
 
 		return CArray::Insert( nInsertPoint, pNew );

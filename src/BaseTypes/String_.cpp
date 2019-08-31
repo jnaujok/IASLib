@@ -2120,18 +2120,25 @@ namespace IASLib
         return true;
     }
 
-    CString CString::FormatString( const char *fmt, ... )
+    CString CString::FormatString( const char *strFormat, ... )
     {
-        CString ret;
+        va_list       vaArgList;
+        IASLibChar__ *szBuffer = (IASLibChar__ *)CObject::allocate( 65536, "CString::FormatString" );
 
-        va_list ap;
-        va_start(ap, fmt);
+        /* format buf using fmt and arguments contained in ap */
+        va_start( vaArgList, strFormat );
+#ifdef IASLIB_WIN32__
+        StringCbVPrintf( szBuffer, 65536, strFormat, vaArgList );
+#else
+        vsprintf( szBuffer, strFormat, vaArgList );
+#endif
+        va_end( vaArgList );
 
-        ret.Format( fmt, ap );
+        CString retVal( szBuffer, strlen(szBuffer) );
 
-        va_end(ap);
+        CObject::deallocate( szBuffer, "CString::FormatString" );
 
-        return ret;
+        return retVal;
     }
 
     // For proper hashing of strings, we redefine the hashcode function so

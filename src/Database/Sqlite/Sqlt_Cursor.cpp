@@ -48,7 +48,7 @@ namespace IASLib
             m_aastrData[nStep]->DeleteAll();
             delete m_aastrData[ nStep ];
         }
-        delete m_aastrData;
+        delete [] m_aastrData;
         while ( m_nRows % GROW_BY ) m_nRows++;
 
         m_nRows = 0;
@@ -129,7 +129,7 @@ namespace IASLib
             CStringArray  **aaTemp = new CStringArray *[pCursor->m_nRows + GROW_BY];
             for (size_t nStep = 0; nStep < pCursor->m_nRows ; nStep++ )
                 aaTemp[ nStep ] = pCursor->m_aastrData[ nStep ];
-            delete pCursor->m_aastrData;
+            delete [] pCursor->m_aastrData;
             pCursor->m_aastrData = aaTemp;
         }
 

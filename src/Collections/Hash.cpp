@@ -306,7 +306,7 @@ namespace IASLib
         for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
             m_aHashTable[ nCount ] = NULL;
 
-        delete m_aHashTable;
+        delete [] m_aHashTable;
         m_nElements = 0;
         m_nArraySize = 0;
     }

@@ -14,6 +14,10 @@
 
 #include "Object.h"
 #include "String_.h"
+#include "Random.h"
+#ifdef IASLIB_MULTI_THREADED__
+    #include "../Threading/Mutex.h"
+#endif
 
 namespace IASLib 
 {
@@ -21,6 +25,10 @@ namespace IASLib
     {
         private:
             static bool bSeeded;
+            static TRandom< (8), __uint32_t > *m_pRandomGenerator;
+#ifdef IASLIB_MULTI_THREADED__
+            static CMutex randomMutex;
+#endif
             unsigned char bytes[32];
             CString       strUUID;
             bool            m_IsValid;
