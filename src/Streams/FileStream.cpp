@@ -179,4 +179,10 @@ namespace IASLib
 
         return nReceived;
     }
+
+    size_t CFileStream::bytesRemaining( void )
+    {
+        return (m_pFile->GetSize() - m_pFile->GetPos());
+    }
+
 } // namespace IASLib

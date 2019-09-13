@@ -28,6 +28,10 @@
 
 #include "Object.h"
 
+#ifdef IASLIB_MULTI_THREADED__
+#include "../Threading/Mutex.h"
+#endif            
+
 namespace IASLib
 {
     class CStringStub
@@ -39,6 +43,9 @@ namespace IASLib
             int         m_nReferences;
             bool        m_bFixedStub;
             bool        m_bDeletable;
+#ifdef IASLIB_MULTI_THREADED__
+            CMutex      m_mutex;
+#endif            
 
                         CStringStub( void );
                         CStringStub( int nLength );//throw (CStringException);
@@ -53,7 +60,7 @@ namespace IASLib
             void        AddRef( void );
             void        RemoveRef( void );// throw (CException);
 
-            int         GetRefCount( void ) { return m_nReferences; }
+            int         GetRefCount( void );
 
             void        ChangeSize( size_t nLength );
     };

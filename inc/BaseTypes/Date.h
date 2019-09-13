@@ -107,7 +107,8 @@ namespace IASLib
                 DF_ORACLE               = 0x0009,
                 DF_YYYYMMDD             = 0x000A,
                 DF_ISO_9601             = 0x000B,
-                DF_ISO_9601_MS          = 0x000C
+                DF_ISO_9601_MS          = 0x000C,
+                DF_HHMMSS               = 0x000D
 		    };
 
                                 CDate();
@@ -173,7 +174,7 @@ namespace IASLib
             int                 Elapsed( const CDate &oThen );
             int                 ElapsedDays( const CDate &oThen ) { return (int)(oThen.m_lEpochDay - m_lEpochDay); }
             CDate               OffsetDays( int nDays ) { CDate dttRet( *this ); dttRet.m_lEpochDay += (long)nDays; return dttRet; }
-            void                Add( int nDays, int nMinutes = 0, int nSeconds = 0 );
+            CDate              &Add( int nDays, int nMinutes = 0, int nSeconds = 0 );
 
             static void         SynchronizeToTimeServer( unsigned long lServerTime );
             static long         GetOffsetSeconds( void ) { return m_lOffsetSeconds; }
@@ -184,6 +185,9 @@ namespace IASLib
 
             void                TZAdjust( int nOffset );
             void                SetToGMT( int nOffset );
+
+            CDate              &StartOfDay( void ) { m_lOffsetSeconds = 0; return *this; }
+            CDate              &StartOfHour( void ) { m_lOffsetSeconds = m_lOffsetSeconds - ( m_lOffsetSeconds % 3600 ); return *this; }
 
         private:
             static long         GetHMS( const char *strTime, tm_type &tmTemp );
@@ -201,7 +205,6 @@ namespace IASLib
             static bool         ScanTokens( Token_Type *aTokens, int nLength, CString strCompare, long &lValue );
             static int          FixAMPM( int nHour, int nAMPM );
             static void         AdjustTime( tm_type &tmVals, long gmtoff );
-
     };
 } // namespace IASLib
 #endif // IASLIB_DATE_H__

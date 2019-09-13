@@ -7,8 +7,8 @@
 ** consume log messages and store them in the sink. By building a generic
 ** log sink, we can abstract away the actual storage of the messages.
 **
-**  $AUTHOR$
-**  $LOG$
+**  Author: Jeffrey R. Naujok
+**  Created: June 1, 2019
 **
 ** Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
 ** [A division of BlackStar Enterprises, LLC.]
@@ -24,41 +24,45 @@
 
 namespace IASLib
 {
-    #define DEFAULT_LOG_FORMAT "{Date} [{File}:{Line}] - {Message}"
-
     class CLogSink : public CObject
     {
+        public:
+            enum Level
+            {
+                TRACE,
+                DEBUG,
+                INFO,
+                WARN,
+                ERROR,
+                FATAL
+            };
+
         protected:
-            CString     m_strLogFormat;
-            int         m_nDateFormat;
-            bool        m_bTimeStamp;
+            static CLogSink *m_instance;
+            Level   m_level;
 
         public:
-                        CLogSink( void );
-            virtual    ~CLogSink( void );
+                                CLogSink( Level level );
+            virtual            ~CLogSink( void );
 
                                 DEFINE_OBJECT( CLogSink );
 
-            virtual void        SetTimeStamp( bool bActivated ) { m_bTimeStamp = bActivated; }
-            virtual bool        IsTimeStamped( void ) { return m_bTimeStamp; }
+            static CLogSink    *getInstance( void );
 
-            virtual void        SetDateFormat( int nDateFormat ) { m_nDateFormat = nDateFormat; }
-            virtual int         GetDateFormat( void ) { return m_nDateFormat; }
+            virtual bool        writeLog( Level logLevel, const char *strFilename, int nLineNum, const char *strFormat, ... );
 
-            virtual void        SetLogFormat( const char *strLogFormat ) { m_strLogFormat = strLogFormat; }
-            virtual const char *GetLogFormat( void ) { return (const char *)m_strLogFormat; }
-
-            virtual bool        Entry( ... ) = 0;
-            virtual bool        Write( const char *strFormat, ... ) = 0;
-
-            virtual bool        Open( void ) = 0;
-            virtual bool        Close( void ) = 0;
-
-            virtual bool        Clear( void ) { return false; }
-
-            virtual bool        IsOpen( void ) { return false; }
+            virtual bool        writeLine( const char *message ) = 0;
         protected:
-            virtual CString     formatMessage( CLogContext &context, const char *strFormat, ... );
+            //virtual CString     formatMessage( CLogContext &context, const char *strFormat, ... );
+            const char         *logLevelToString( Level level );
     };
+
+    #define TRACE_LOG( ... ) if ( CLogSink::getInstance() )  { CLogSink::getInstance()->writeLog( CLogSink::Level::TRACE, __FILE__, __LINE__, __VA_ARGS__ ); }
+    #define DEBUG_LOG( ... ) if ( CLogSink::getInstance() )  { CLogSink::getInstance()->writeLog( CLogSink::Level::DEBUG, __FILE__, __LINE__, __VA_ARGS__ ); }
+    #define  INFO_LOG( ... ) if ( CLogSink::getInstance() )  { CLogSink::getInstance()->writeLog( CLogSink::Level::INFO,  __FILE__, __LINE__, __VA_ARGS__ ); }
+    #define  WARN_LOG( ... ) if ( CLogSink::getInstance() )  { CLogSink::getInstance()->writeLog( CLogSink::Level::WARN,  __FILE__, __LINE__, __VA_ARGS__ ); }
+    #define ERROR_LOG( ... ) if ( CLogSink::getInstance() )  { CLogSink::getInstance()->writeLog( CLogSink::Level::ERROR, __FILE__, __LINE__, __VA_ARGS__ ); }
+    #define FATAL_LOG( ... ) if ( CLogSink::getInstance() )  { CLogSink::getInstance()->writeLog( CLogSink::Level::FATAL, __FILE__, __LINE__, __VA_ARGS__ ); }
+
 } // namespace IASLib
 #endif // IASLIB_LOGSINK_H__

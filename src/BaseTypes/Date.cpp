@@ -629,7 +629,11 @@ static CMutex g_mutexSingleThread;
                 break;
 
             case CDate::DF_ISO_9601_MS:
-                strRetVal.Format( "%04d%02d%02d %02d:%02d:%02d.%03s", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
+                strRetVal.Format( "%04d-%02d-%02d %02d:%02d:%02d.%03d", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
+                break;
+
+            case CDate::DF_HHMMSS:
+                strRetVal.Format( "%02d%02d%02d", nHour, nMinute, nSecond );
                 break;
 
             default:
@@ -1062,7 +1066,7 @@ static CMutex g_mutexSingleThread;
         return (nDays * 86400000) + nMillis;
     }
 
-    void CDate::Add( int nDays, int nMinutes, int nSeconds )
+    CDate &CDate::Add( int nDays, int nMinutes, int nSeconds )
     {
         m_lEpochDay += nDays;
         while ( nMinutes > 1440 )
@@ -1104,6 +1108,8 @@ static CMutex g_mutexSingleThread;
             m_lEpochDay--;
             m_lMilliseconds += 86400000;
         }
+
+        return *this;
     }
 
     /***********************************************************************************

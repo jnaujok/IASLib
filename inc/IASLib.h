@@ -210,7 +210,12 @@
 //  LOGGING
 //***********
 
+#include "Logging/LogSink.h"
 #include "Logging/LogFile.h"
+#include "Logging/RotatingLogFile.h"
+#include "Logging/ConsoleLog.h"
+#include "Logging/LogContext.h"
+#include "Logging/ContextValue.h"
 
 //******************
 //  MEMORY MANAGER

@@ -48,6 +48,7 @@ SQLTDIR =   $(DBDIR)/Sqlite
 DYNLDIR =   $(APPDIR)/src/DynamicLibraries
 FILEDIR =   $(APPDIR)/src/Files
 JSONDIR =   $(APPDIR)/src/JSON
+LOGDIR  =   $(APPDIR)/src/Logging
 NETDIR  =   $(APPDIR)/src/NetworkServices
 SOCKDIR =   $(APPDIR)/src/Sockets
 STATDIR =   $(APPDIR)/src/Stats
@@ -68,6 +69,7 @@ SQLTINC =   $(DBINC)/Sqlite
 DYNLINC =   $(APPDIR)/inc/DynamicLibraries
 FILEINC =   $(APPDIR)/inc/Files
 JSONINC =   $(APPDIR)/inc/JSON
+LOGINC  =   $(APPDIR)/inc/Logging
 NETINC  =   $(APPDIR)/inc/NetworkServices
 SOCKINC =   $(APPDIR)/inc/Sockets
 STATINC =   $(APPDIR)/inc/Stats
@@ -79,12 +81,12 @@ XMLINC  =   $(APPDIR)/inc/XML
 ALLDIRS = $(BASEDIR) $(XCPTDIR) $(COLDIR)  $(CONFDIR) $(DBDIR) \
           $(METADIR) $(ORADIR)  $(SYBDIR)  $(SQLTDIR) $(DYNLDIR) \
           $(JSONDIR) $(FILEDIR) $(NETDIR)  $(SOCKDIR) $(STATDIR) \
-		  $(STUSDIR) $(STRMDIR) $(THRDDIR) $(XMLDIR)
+		  $(STUSDIR) $(STRMDIR) $(THRDDIR) $(XMLDIR)  $(LOGDIR)
 
 ALLINCS = -I$(BASEINC) -I$(XCPTINC) -I$(COLINC)  -I$(CONFINC) -I$(DBINC)   \
           -I$(METAINC) -I$(ORAINC)  -I$(SYBINC)  -I$(SQLTINC) -I$(DYNLINC) \
           -I$(JSONINC) -I$(FILEINC) -I$(NETINC)  -I$(SOCKINC) -I$(STATINC) \
-		  -I$(STUSINC) -I$(STRMINC) -I$(THRDINC) -I$(XMLINC)
+		  -I$(STUSINC) -I$(STRMINC) -I$(THRDINC) -I$(XMLINC)  -I$(LOGINC)
 
 #SYBHOME   = $(SYBASE)/include           # Sybase include file directory
 #ORAHOME   = $(ORACLE_HOME)/rdbms/demo   # Oracle include file directory
@@ -142,8 +144,8 @@ DEFS    = -Dlinux \
 #
 # Specify the compile-time options.
 #
-#OPTIONS = -ggdb -fvar-tracking -pg -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
-OPTIONS = -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
+OPTIONS = -ggdb -fvar-tracking -pg -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
+#OPTIONS = -pthread -D__THREADED__ -Wall -Wextra -D_REENTRANT -lpthread -Wl,--no-as-needed
 #OPTIONS_NO_THREAD = -g0 -pg
 # non-debug version
 #OPTIONS = -O3 -m32 -D_REENTRANT
@@ -206,6 +208,9 @@ DYNLHEADERS = $(DYNLINC)/DynamicLibrary.h
 
 JSONHEADERS = $(JSONINC)/JsonNode.h $(JSONINC)/ObjectNode.h $(JSONINC)/ArrayNode.h \
               $(JSONINC)/ValueNode.h $(JSONINC)/MissingNode.h
+
+LOGHEADERS  = $(LOGINC)/LogSink.h $(LOGINC)/ConsoleLog.h $(LOGINC)/LogFile.h \
+              $(LOGINC)/RotatingLogFile.h $(LOGINC)/ContextValue.h $(LOGINC)/LogContext.h
 
 FILEHEADERS = $(FILEINC)/File.h $(FILEINC)/FileStat.h $(FILEINC)/Directory.h \
               $(FILEINC)/DirectoryEntry.h $(FILEINC)/RWFile.h
@@ -270,6 +275,10 @@ SQLTOBJECTS = $(OBJDIR)/Sqlt_Connection.o $(OBJDIR)/Sqlt_Cursor.o \
 
 DYNLOBJECTS = $(OBJDIR)/DynamicLibrary.o
 
+LOGOBJECTS  = $(OBJDIR)/LogSink.o $(OBJDIR)/ConsoleLog.o \
+              $(OBJDIR)/LogFile.o $(OBJDIR)/RotatingLogFile.o \
+			  $(OBJDIR)/ContextValue.o $(OBJDIR)/LogContext.o
+
 XCPTOBJECTS = $(OBJDIR)/Exception.o $(OBJDIR)/CollectionException.o \
               $(OBJDIR)/FileException.o $(OBJDIR)/SocketException.o \
               $(OBJDIR)/StringException.o $(OBJDIR)/XMLException.o \
@@ -307,9 +316,9 @@ XMLOBJECTS  = $(OBJDIR)/XMLDocument.o $(OBJDIR)/XMLChunk.o $(OBJDIR)/XMLData.o \
 
 ALL_OBJS    = $(BASEOBJECTS) $(COLOBJECTS)  $(CONFOBJECTS) $(XCPTOBJECTS) \
               $(DBOBJECTS)   $(ORAOBJECTS)  $(SYBOBJECTS)  $(SQLTOBJECTS) \
-              $(DYNLOBJECTS) $(JSONOBJECTS) $(FILEOBJECTS) $(NETOBJECTS)  \
-			  $(SOCKOBJECTS) $(STATOBJECTS) $(STUSOBJECTS) $(STRMOBJECTS) \
-			  $(THRDOBJECTS) $(XMLOBJECTS)
+              $(DYNLOBJECTS) $(JSONOBJECTS) $(LOGOBJECTS)  $(FILEOBJECTS) \
+			  $(NETOBJECTS)  $(SOCKOBJECTS) $(STATOBJECTS) $(STUSOBJECTS) \
+			  $(STRMOBJECTS) $(THRDOBJECTS) $(XMLOBJECTS)
 
 #
 # 'make all' builds all of the components
@@ -540,6 +549,27 @@ $(OBJDIR)/ValueNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/ValueNode.cpp;
 $(OBJDIR)/MissingNode.o: $(BASEHEADERS) $(JSONHEADERS) $(JSONDIR)/MissingNode.cpp;
 	$(COMPILE) -c $(JSONDIR)/MissingNode.cpp -o $(OBJDIR)/MissingNode.o
 
+#
+## LOG OBJECTS
+#
+
+$(OBJDIR)/LogSink.o: $(BASEHEADERS) $(LOGHEADERS) $(LOGDIR)/LogSink.cpp;
+	$(COMPILE) -c $(LOGDIR)/LogSink.cpp -o $(OBJDIR)/LogSink.o
+
+$(OBJDIR)/ConsoleLog.o: $(BASEHEADERS) $(LOGHEADERS) $(LOGDIR)/ConsoleLog.cpp;
+	$(COMPILE) -c $(LOGDIR)/ConsoleLog.cpp -o $(OBJDIR)/ConsoleLog.o
+
+$(OBJDIR)/LogFile.o: $(BASEHEADERS) $(LOGHEADERS) $(LOGDIR)/LogFile.cpp;
+	$(COMPILE) -c $(LOGDIR)/LogFile.cpp -o $(OBJDIR)/LogFile.o
+
+$(OBJDIR)/RotatingLogFile.o: $(BASEHEADERS) $(LOGHEADERS) $(LOGDIR)/RotatingLogFile.cpp;
+	$(COMPILE) -c $(LOGDIR)/RotatingLogFile.cpp -o $(OBJDIR)/RotatingLogFile.o
+
+$(OBJDIR)/ContextValue.o: $(BASEHEADERS) $(LOGHEADERS) $(LOGDIR)/ContextValue.cpp;
+	$(COMPILE) -c $(LOGDIR)/ContextValue.cpp -o $(OBJDIR)/ContextValue.o
+
+$(OBJDIR)/LogContext.o: $(BASEHEADERS) $(LOGHEADERS) $(LOGDIR)/LogContext.cpp;
+	$(COMPILE) -c $(LOGDIR)/LogContext.cpp -o $(OBJDIR)/LogContext.o
 
 #
 ## FILE OBJECTS

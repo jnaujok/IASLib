@@ -24,6 +24,7 @@
 
 #include "StringStub.h"
 #include "StringException.h"
+#include "LogSink.h"
 
 #ifdef IASLIB_MEMORY_MANAGER__
 #include "MemoryManager.h"
@@ -48,6 +49,7 @@ namespace IASLib
         m_bDeletable = true;
         if ( nLength <= 0 )
         {
+            ERROR_LOG( "Sized String Stub set to zero (or negative) length!" );
             throw CStringException( "Sized String Stub set to zero (or negative) length!", CException::NORMAL );
         }
 
@@ -73,6 +75,7 @@ namespace IASLib
         m_bDeletable = true;
         if ( nLength <= 0 )
         {
+            ERROR_LOG( "Sized String Stub set to zero (or negative) length!" );
             throw CStringException( "Sized String Stub set to zero (or negative) length!", CException::NORMAL );
         }
 
@@ -126,6 +129,7 @@ namespace IASLib
             }
             else
             {
+                ERROR_LOG( "Out of memory while allocating String Stub of length %d", nLength );
                 throw CException( "Out of memory while allocating String Stub", CException::FATAL );
             }
         }
@@ -172,12 +176,13 @@ namespace IASLib
             if ( m_strData )
             {
                     // Copy the string
-                memcpy( m_strData, strData, nLength );
+                memcpy( m_strData, strData, m_nLength );
                     // Apply the nul terminator
                 m_strData[ m_nLength ] = 0;
             }
             else
             {
+                ERROR_LOG( "Out of memory while allocating String Stub of length %d", nLength );
                 throw CException( "Out of memory while allocating String Stub", CException::FATAL );
             }
         }
@@ -205,6 +210,7 @@ namespace IASLib
     {
         if ( strData == NULL )
         {
+            ERROR_LOG( "Cannot set a fixed string stub to NULL!" );
             throw CStringException( "Cannot set a fixed string stub to NULL!", CException::NORMAL );
         }
 
@@ -244,6 +250,7 @@ namespace IASLib
             }
             else
             {
+                ERROR_LOG( "Out of memory while allocating String Stub of length %d.", oSource.m_nLength );
                 throw CException( "Out of memory while allocating String Stub", CException::FATAL );
             }
             m_nLength = oSource.m_nLength;
@@ -262,7 +269,7 @@ namespace IASLib
     {
         if ( m_nReferences != 0 )
         {
-            printf( "String Stub deleted while still referenced!" );
+            ERROR_LOG( "String Stub deleted while still referenced!" );
             //throw CStringException( "String Stub deleted while still referenced!", CException::NORMAL );
         }
 
@@ -285,30 +292,57 @@ namespace IASLib
 
     void CStringStub::AddRef( void )
     {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         m_nReferences++;
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
     }
 
     void CStringStub::RemoveRef( void ) // throw (CStringException)
     {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
+
         if ( m_nReferences > 0 )
         {
             m_nReferences--;
         }
         else
         {
+            ERROR_LOG( "String stub containing data %s dropped below zero references!", this->m_strData );
             throw CStringException( "String Stub dropped below zero references!", CException::NORMAL );
         }
 
         if ( ( m_nReferences == 0 ) && ( ! m_bFixedStub ) )
         {
+#ifdef IASLIB_MULTI_THREADED__
+            m_mutex.Unlock();
+#endif
             delete this;
         }
+#ifdef IASLIB_MULTI_THREADED__
+        else
+        {
+            m_mutex.Unlock();
+        }
+#endif
     }
 
     void CStringStub::ChangeSize( size_t nLength ) // throw (CStringException)
     {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+#endif
         if ( ( m_nReferences > 1 ) && ( ! m_bFixedStub ) )
         {
+            ERROR_LOG( "Cannot change size of String Stub with multiple references!" );
+#ifdef IASLIB_MULTI_THREADED__
+            m_mutex.Unlock();
+#endif
             throw CStringException( "Cannot change size of String Stub with multiple references!", CException::NORMAL );
         }
 
@@ -379,12 +413,34 @@ namespace IASLib
                 }
                 if ( ! m_strData )
                 {
+#ifdef IASLIB_MULTI_THREADED__
+                    m_mutex.Unlock();
+#endif
+                    ERROR_LOG( "Out of memory while allocating String Stub of length %d", nLength );
                     throw CException( "Could not allocate memory for String Stub!", CException::FATAL );
                 }
             }
             m_nLength = nLength;
             m_strData[ m_nLength ] = 0;
         }
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Unlock();
+#endif
     }
+
+    int CStringStub::GetRefCount( void )
+    {
+#ifdef IASLIB_MULTI_THREADED__
+        m_mutex.Lock();
+        int retVal = m_nReferences;
+        m_mutex.Unlock();
+        return retVal;
+#else
+        return m_nReferences;
+#endif
+
+    }
+
+
 }   // namespace IASLib
 

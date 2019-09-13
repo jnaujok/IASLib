@@ -49,6 +49,7 @@ namespace IASLib
 			virtual CSocket    *GetSocket( void ) { return m_pSocket; }
 
             void                SetNoDelete( void ) { m_bNoDelete = true; }
+			virtual size_t		bytesRemaining( void ) { return 1024; }
 
             virtual bool        IsEOS( void );
 

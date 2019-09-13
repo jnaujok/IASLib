@@ -7,9 +7,12 @@
  * and time stamp each entry. It is also possible to set the default
  * format for the log entry.
  *
- *  $AUTHOR$
- *  $LOG$
+ *  Author: Jeffrey R. Naujok
+ *  Created: June 1, 2019
  *
+ *
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
  */
 
 
@@ -24,7 +27,10 @@ namespace IASLib
 {
     IMPLEMENT_OBJECT( CLogFile, CLogSink );
 
-    CLogFile::CLogFile( const char *strFileName, bool bDeletePrevious = false ) : m_mutexProtect()
+    CLogFile::CLogFile( Level level, const char *strFileName, bool bDeletePrevious ) : CLogSink( level )
+#ifdef IASLIB_MULTI_THREADED__            
+        , m_mutexProtect()
+#endif
     {
         m_strFileName = strFileName;
         if ( ! bDeletePrevious )
@@ -46,47 +52,21 @@ namespace IASLib
         m_fileOutputFile = NULL;
     }
 
-    bool CLogFile::Entry( ... )
+    bool CLogFile::writeLine( const char *message )
     {
-        CString output;
+        if ( m_fileOutputFile )
+        {
+#ifdef IASLIB_MULTI_THREADED__            
+            m_mutexProtect.Lock();
+#endif
+            m_fileOutputFile->WriteString( message );
+            m_fileOutputFile->WriteString( "\n" );
+#ifdef IASLIB_MULTI_THREADED__            
+            m_mutexProtect.Unlock();
+#endif
+        }
 
-        va_list       vaArgList;
-
-        /* format buf using fmt and arguments contained in ap */
-        va_start( vaArgList, m_strLogFormat );
-
-        output.Format( m_strLogFormat, vaArgList );
-
-        va_end( vaArgList );
+        return true;
     }
-
-    bool CLogFile::Write( const char *strFormat, ... )
-    {
-        CString output;
-
-        va_list       vaArgList;
-
-        /* format buf using fmt and arguments contained in ap */
-        va_start( vaArgList, strFormat );
-
-        output.Format( strFormat, vaArgList );
-
-        va_end( vaArgList );
-    }
-
-    bool CLogFile::Open( void )
-    {
-
-    }
-
-    bool CLogFile::Close( void )
-    {
-
-    }
-
-    bool CLogFile::Clear( void )
-    {
-
-    }
-
+   
 } // namespace IASLib

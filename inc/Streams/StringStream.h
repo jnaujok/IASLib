@@ -45,6 +45,7 @@ namespace IASLib
 			virtual void            PutChar( const unsigned char chPut );
 			virtual int             PutBuffer( const char *achBuffer, int nLength );
 			virtual int             GetBuffer( char *achBuffer, int nLength );
+			virtual size_t		    bytesRemaining( void ) { return m_strString.Length() - m_nCurrentPosition; }
 
             virtual bool            IsEOS( void ) { return ( m_nCurrentPosition == m_strString.GetCount() ); }
 

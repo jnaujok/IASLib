@@ -1,5 +1,5 @@
 /***********************************************************************
-**  Log File Class
+**  Rotating Log File Class
 **
 **  Description:
 **      This class defines a log file that can be written to for
@@ -7,13 +7,15 @@
 ** and time stamp each entry. It is also possible to set the default
 ** format for the log entry.
 **
-**  $AUTHOR$
-**  $LOG$
+**  Author: Jeffrey R. Naujok
+**  Created: August 1, 2019
 **
+** Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+** [A division of BlackStar Enterprises, LLC.]
 ***********************************************************************/
 
-#ifndef IASLIB_LOGFILE_H__
-#define IASLIB_LOGFILE_H__
+#ifndef IASLIB_ROTATINGLOGFILE_H__
+#define IASLIB_ROTATINGLOGFILE_H__
 
 #include "LogSink.h"
 #include "../Threading/Mutex.h"
@@ -25,27 +27,44 @@ namespace IASLib
 {
     class CRotatingLogFile : public CLogSink
     {
+        public:
+            enum Interval
+            {
+                HOURLY,
+                DAILY,
+                WEEKLY,
+                MONTHLY
+            };
+
+
         protected:
-            CDate       m_lastChanged;
-            size_t      m_nInterval;
-            CFile      *m_fileOutputFile;
-            CMutex      m_mutexProtect;
-            CString     m_strFileNameTemplate;
+            CDate               m_lastChanged;
+            size_t              m_nInterval;
+            CFile              *m_fileOutputFile;
+#ifdef IASLIB_MULTI_THREADED__            
+            CMutex              m_mutexProtect;
+#endif
+            CString             m_strFileNameTemplate;
+            size_t              m_nFilesToKeep;
+            bool                m_bAutoFlush;
+            Interval            m_rotationInterval;
+            int                 m_nCurrentDOW;
+            int                 m_nCurrentMonth;
+            int                 m_nCurrentDay;
+            int                 m_nCurrentHour;
 
         public:
-                        DEFINE_OBJECT( CRotatingLogFile );
-                        CRotatingLogFile( const char *strFileNameTemplate, bool bDeletePrevious = false );
-            virtual    ~CRotatingLogFile( void );
+                                DEFINE_OBJECT( CRotatingLogFile );
+                                CRotatingLogFile( Level level, const char *strFileNameTemplate, Interval rotationInterval = Interval::DAILY, int nFilesToKeep = 3, bool bAutoFlush = false );
+            virtual            ~CRotatingLogFile( void );
 
-            virtual bool        Entry( ... );
-            virtual bool        Write( const char *strFormat, ... );
+            virtual bool        writeLine( const char *message );
 
-            virtual bool        Open( void );
-            virtual bool        Close( void );
+            void                setAutoFlush( bool bAutoFlush );
 
-            virtual bool        Clear( void );
-
-            virtual bool        IsOpen( void ) { return m_fileOutputFile->IsOpen(); }
+        private:
+            void                rotateLog( void );
+            bool                isPastRotation( void );
     };
 } // namespace IASLib
-#endif // IASLIB_LOGFILE_H__
+#endif // IASLIB_ROTATINGLOGFILE_H__

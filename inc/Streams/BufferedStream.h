@@ -47,6 +47,7 @@ namespace IASLib
 			virtual void        PutChar( const unsigned char chPut );
 			virtual int         PutBuffer( const char *achBuffer, int nLength );
 			virtual int         GetBuffer( char *achBuffer, int nLength );
+			virtual size_t		bytesRemaining( void );
 
             virtual bool        IsEOS( void );
 

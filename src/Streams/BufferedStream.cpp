@@ -193,5 +193,10 @@ namespace IASLib
             m_bIsOpen = false;
         }
     }
+
+    size_t CBufferedStream::bytesRemaining( void )
+    {
+        return m_oStream.bytesRemaining() + (size_t)( m_nBufferRead - m_nReadPointer );
+    }
 } // namespace IASLib
 
