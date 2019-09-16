@@ -3953,4 +3953,35 @@ static CMutex g_mutexSingleThread;
             m_bIsGMT = true;
         }
     }
+    
+    // need the long/long conversion methods
+#include <string>
+
+    CString CDate::EpochTimestamp( void )
+    {
+        CDate dttNow;
+        dttNow.SetToCurrent();
+        static CDate dttEpoch( 01, 01, 1970, 00, 00, 00 );
+
+        int days = dttNow.ElapsedDays( dttEpoch );
+        unsigned long long epoch = ( (unsigned long long)days * (unsigned long long)86400 ) + (unsigned long long)dttNow.m_lOffsetSeconds;
+
+        CString retVal( (const char *)(std::to_string( epoch )).c_str() );
+
+        return retVal;
+    }
+
+    CString CDate::NTPTimestamp( void )
+    {
+        CDate dttNow;
+        dttNow.SetToCurrent();
+        static CDate dttNTPEpoch( 01, 01, 1900, 00, 00, 00 );
+
+        int days = dttNow.ElapsedDays( dttNTPEpoch );
+        unsigned long long epoch = ( (unsigned long long)days * (unsigned long long)86400 ) + (unsigned long long)dttNow.m_lOffsetSeconds;
+
+        CString retVal( (const char *)(std::to_string( epoch )).c_str() );
+
+        return retVal;
+    }
 } // namespace IASLib

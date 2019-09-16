@@ -148,10 +148,13 @@ void CRotatingLogFile::rotateLog( void )
 {
     CDate now;
     now.SetToCurrent();
+    CDate temp = m_lastChanged;
+    temp.Add( 0, 0, m_nInterval );
+    
     if ( ( m_fileOutputFile == NULL ) 
          || 
          ( 
-            ( now >= m_lastChanged.Add( 0, 0, m_nInterval ) ) 
+            ( now >= temp ) 
                && 
             isPastRotation() 
          ) 

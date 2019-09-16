@@ -189,6 +189,9 @@ namespace IASLib
             CDate              &StartOfDay( void ) { m_lOffsetSeconds = 0; return *this; }
             CDate              &StartOfHour( void ) { m_lOffsetSeconds = m_lOffsetSeconds - ( m_lOffsetSeconds % 3600 ); return *this; }
 
+            static CString      EpochTimestamp( void );
+            static CString      NTPTimestamp( void );
+
         private:
             static long         GetHMS( const char *strTime, tm_type &tmTemp );
             static CDate        GetAlphaDate( const char *strValue );
