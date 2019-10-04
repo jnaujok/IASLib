@@ -256,9 +256,15 @@ namespace IASLib
             bool        hasDelimitedTokens( const char *startDelimiter, const char *endDelimiter );
             CString    &replaceDelimitedToken( const char *startDelimiter, const char *endDelimiter, const char *name, const char *value );
 
+            bool        isBlank( void );
+            CString     base64Encode( bool bUrlSafe = false );
+            CString     base64Decode( void );
+
         private:
-            void        ChangeStub( void );
-            void        ResizeString( int nNewSize );
+            void            ChangeStub( void );
+            void            ResizeString( int nNewSize );
+            bool            isBase64( unsigned char ch );
+            unsigned char   findBase64( unsigned char ch );
     };
 
 }   // namespace IASLib

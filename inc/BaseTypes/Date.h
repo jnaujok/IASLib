@@ -108,7 +108,8 @@ namespace IASLib
                 DF_YYYYMMDD             = 0x000A,
                 DF_ISO_9601             = 0x000B,
                 DF_ISO_9601_MS          = 0x000C,
-                DF_HHMMSS               = 0x000D
+                DF_HHMMSS               = 0x000D,
+                DF_ISO_9601_MS_PACKED   = 0x000E
 		    };
 
                                 CDate();
