@@ -20,7 +20,13 @@
 #ifndef IASLIB__
 #define IASLIB__
 
+// IASLib uses tight packing of classes for memory corruption detection. 
+// This saves the current packing level, and restores it after including
+// all of IASLib.
 #pragma pack(push, 1)
+
+	// Include CMake derived values and versions
+#include "IASLibConfig.h"
 
 #ifndef IASLIB_WIN32__
 #ifndef IASLIB_SUN__

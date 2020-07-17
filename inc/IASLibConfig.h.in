@@ -1,0 +1,3 @@
+// the cmakelists.txt configured options and settings for IASLib
+#define IASLib_VERSION_MAJOR @IASLib_VERSION_MAJOR@
+#define IASLib_VERSION_MINOR @IASLib_VERSION_MINOR@
