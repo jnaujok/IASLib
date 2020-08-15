@@ -14,3 +14,11 @@ The library includes things like memory debugging and leak detection, including 
 Overall, this library has been majorly helpful, right up to the present day where I was able to implement a working SIP server (SBC) in just a few weeks using the code in the library (and extending some of it, of course) to produce what I think is a very helpful framework for delivering cross-platform solutions. 
 
 All without caring what platform you're running on.
+
+##Why "Irene Adler"?
+Irene Adler appears in the Sherlock Holmes story "A Scandal in Bohemia" published in 1891. In the story, we find that there is one time, and one time only, where Sherlock Holmes has been outwitted, and that was by Miss Adler, who forever afterwards was referred to by Holmes merely as, "The Woman".
+
+I always considered this cross-platform library as a clever bit of coding, so I went looking for a clever person to use as a name without it being too obvious. I found Miss Adler, and decided that my "Clever Little Library" should be named for her.
+
+It was years later that the movie "Sherlock Holmes", and the TV series of "Sherlock", and "Elementary" all decided to make her a central character, front and center to the movies and the shows. So, now my choice of name is far less obscure than it used to be. 
+ 
