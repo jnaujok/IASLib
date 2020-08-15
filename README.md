@@ -15,7 +15,8 @@ Overall, this library has been majorly helpful, right up to the present day wher
 
 All without caring what platform you're running on.
 
-##Why "Irene Adler"?
+## Why "Irene Adler"?
+
 Irene Adler appears in the Sherlock Holmes story "A Scandal in Bohemia" published in 1891. In the story, we find that there is one time, and one time only, where Sherlock Holmes has been outwitted, and that was by Miss Adler, who forever afterwards was referred to by Holmes merely as, "The Woman".
 
 I always considered this cross-platform library as a clever bit of coding, so I went looking for a clever person to use as a name without it being too obvious. I found Miss Adler, and decided that my "Clever Little Library" should be named for her.
