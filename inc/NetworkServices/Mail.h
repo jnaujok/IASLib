@@ -14,12 +14,14 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-#ifndef __MAIL_H__
-#define __MAIL_H__
+#ifdef IASLIB_NETWORKING__
 
-#include "Object.h"
-#include "Bool.h"
-#include "String_.h"
+#ifndef IASLIB_MAIL_H__
+#define IASLIB_MAIL_H__
+
+#include "BaseTypes/Object.h"
+#include "BaseTypes/Bool.h"
+#include "BaseTypes/String_.h"
 
 namespace IASLib
 {
@@ -50,4 +52,7 @@ namespace IASLib
 			bool                Send( void );
 	};
 } // namespace IASLib
-#endif // __MAIL_H__
+
+#endif // IASLIB_MAIL_H__
+
+#endif // IASLIB_NETWORKING__

@@ -14,11 +14,12 @@
 #include "Date.h"
 #include "StringTokenizer.h"
 #include "Mutex.h"
-#include <time.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <ctime>
+#include <cstdlib>
+#include <cstdio>
+#include <string>
 #ifndef IASLIB_WIN32__
-    #include <sys/time.h>
+    #include <sys/time.h> // NOLINT(modernize-deprecated-headers)
 #else
     #include <sys/types.h>
     #include <sys/timeb.h>
@@ -37,7 +38,7 @@ namespace IASLib
 {
 #ifndef IASLIB_WIN32__
 #ifdef IASLIB_MULTI_THREADED__
-static CMutex g_mutexSingleThread;
+static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 #endif
 #endif
     long CDate::m_lOffsetSeconds = 0;
@@ -51,10 +52,10 @@ static CMutex g_mutexSingleThread;
     static long anSumLeapDays[ 12 ]  = { 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 };
     static long anSum1582Days[ 12 ]  = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 293, 323 };
 
-    static CString strMonths         = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec ";
-    static CString strHTTPMonths     = "JanFebMarAprMayJunJulAugSepOctNovDec";
-    static CString strWeekDays       = "SunMonTueWedThuFriSat";
-    static CString strWeekDaysLong   = "Sunday   Monday   Tuesday  WednesdayThursday Friday   Saturday ";
+    static CString strMonths         = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec ";  // NOLINT(cert-err58-cpp)
+    static CString strHTTPMonths     = "JanFebMarAprMayJunJulAugSepOctNovDec";  // NOLINT(cert-err58-cpp)
+    static CString strWeekDays       = "SunMonTueWedThuFriSat";  // NOLINT(cert-err58-cpp)
+    static CString strWeekDaysLong   = "Sunday   Monday   Tuesday  WednesdayThursday Friday   Saturday ";  // NOLINT(cert-err58-cpp)
 
     IMPLEMENT_OBJECT( CDate, CObject );
 
@@ -624,20 +625,24 @@ static CMutex g_mutexSingleThread;
                 strRetVal.Format( "%04d%02d%02d", nYear, nMonth, nDay );
                 break;
 
-            case CDate::DF_ISO_9601:
+            case CDate::DF_ISO_8601:
                 strRetVal.Format( "%04d-%02d-%02d %02d:%02d:%02d", nYear, nMonth, nDay, nHour, nMinute, nSecond );
                 break;
 
-            case CDate::DF_ISO_9601_MS:
+            case CDate::DF_ISO_8601_MS:
                 strRetVal.Format( "%04d-%02d-%02d %02d:%02d:%02d.%03d", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
+                break;
+
+            case CDate::DF_ISO_8601_MS_PACKED:
+                strRetVal.Format( "%04d%02d%02d%02d%02d%02d.%03d", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
                 break;
 
             case CDate::DF_HHMMSS:
                 strRetVal.Format( "%02d%02d%02d", nHour, nMinute, nSecond );
                 break;
 
-            case CDate::DF_ISO_9601_MS_PACKED:
-                strRetVal.Format( "%04d%02d%02d%02d%02d%02d%03d", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
+            case CDate::DF_RFC7231:
+                strRetVal.Format( "%3s, %02d %3s %d %02d:%02d:%02d GMT", (const char *)strDOWShort, nDay, (const char *)strMonth, nYear, nHour, nMinute, nSecond );
                 break;
 
             default:
@@ -667,6 +672,9 @@ static CMutex g_mutexSingleThread;
 
 		    case DB_SQLITE:
                 return FormatDate( CDate::DF_SQLITE );
+
+            case DB_MYSQL:
+                return FormatDate( CDate::DF_ISO_8601_MS );
 
 		    default:
                 return FormatDate( CDate::DF_PRETTY );
@@ -3958,9 +3966,6 @@ static CMutex g_mutexSingleThread;
         }
     }
     
-    // need the long/long conversion methods
-#include <string>
-
     CString CDate::EpochTimestamp( void )
     {
         CDate dttNow;
@@ -3988,4 +3993,5 @@ static CMutex g_mutexSingleThread;
 
         return retVal;
     }
+
 } // namespace IASLib

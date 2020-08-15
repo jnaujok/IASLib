@@ -14,6 +14,8 @@
 #include <exception>
 #include <stdexcept>
 
+#ifdef IASLIB_MULTI_THREADED__
+
 namespace IASLib
 {
     CSemaphore::CSemaphore( unsigned int nValue )
@@ -98,3 +100,5 @@ namespace IASLib
         return false;
     }
 } // namespace IASLib
+
+#endif

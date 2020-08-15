@@ -12,10 +12,11 @@
 
 #ifdef IASLIB_MULTI_THREADED__
 
+#include <exception>
+#include <iostream>
 #include "PooledThread.h"
 #include "ThreadPool.h"
 #include "Date.h"
-#include "ThreadException.h"
 
 namespace IASLib
 {

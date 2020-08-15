@@ -11,6 +11,8 @@
 
 #include "Uuid.h"
 #include <arpa/inet.h>
+#include <ctime>
+#include <cctype>
 
 namespace IASLib 
 {

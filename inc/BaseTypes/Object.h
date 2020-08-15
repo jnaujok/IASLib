@@ -80,6 +80,7 @@ namespace IASLib
 } // End of Namespace IASLib
 
 #ifdef IASLIB_RTTI__
+#ifdef IASLIB_MEMORY_DEBUGGING__
 #define DEFINE_OBJECT(x) virtual const char *GetType( void ) { return #x; }\
                          virtual bool        IsType( const char *strName ); \
                          void               *operator new( size_t size ); \
@@ -106,10 +107,8 @@ namespace IASLib
 #define IMPLEMENT_OBJECT(x,y) bool x::IsType( const char *strName )\
                               { \
                                   IASLib::CString strTemp = strName; \
-                                  if ( strTemp == #x ) \
-                                      return true; \
-                                  else \
-                                      return y::IsType( strName ); \
+                                  if ( strTemp == #x ) return true; \
+                                  else return y::IsType( strName ); \
                               } \
                               void *x::operator new( size_t size ) \
                               { \
@@ -119,7 +118,29 @@ namespace IASLib
                               { \
                                   CObject::deallocate( p, #x ); \
                               }
+#else
+#define DEFINE_OBJECT(x) virtual const char *GetType( void ) { return #x; }\
+                         virtual bool        IsType( const char *strName );
 
+#define DECLARE_OBJECT(x,y) virtual const char *GetType( void ) { return #x; }\
+							virtual bool IsType( const char *strName )\
+                              { \
+                                  IASLib::CString strTemp = strName; \
+                                  if ( strTemp == #x ) \
+                                      return true; \
+                                  else \
+                                      return y::IsType( strName ); \
+                              }
+
+#define IMPLEMENT_OBJECT(x,y) bool x::IsType( const char *strName )\
+                              { \
+                                  IASLib::CString strTemp = strName; \
+                                  if ( strTemp == #x ) \
+                                      return true; \
+                                  else \
+                                      return y::IsType( strName ); \
+                              }
+    #endif // #ifdef IASLIB_MEMORY_DEBUGGING__
 #else
 #define DEFINE_OBJECT(x)
 #define DECLARE_OBJECT(x,y)

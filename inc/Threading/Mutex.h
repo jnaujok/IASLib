@@ -26,20 +26,9 @@
 #define IASLIB_MUTEX_H__
 
 #ifndef IASLIB_MULTI_THREADED__
-    #pragma message( "Mutex Type for Non-threaded" )
     #define MUTEX_T int
 #else
-    #ifdef IASLIB_SUN__
-        #include <thread.h>
-        #define MUTEX_T mutex_t
-    #endif
-
-    #ifdef IASLIB_DEC__
-        #include <pthread.h>
-        #define MUTEX_T pthread_mutex_t
-    #endif
-
-    #ifdef IASLIB_PTHREAD__
+     #ifdef IASLIB_LINUX__
         #include <pthread.h>
         #define MUTEX_T pthread_mutex_t
     #endif

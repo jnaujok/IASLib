@@ -30,4 +30,9 @@ namespace IASLib
     CXMLData::~CXMLData( void )
     {
     }
+
+    CString CXMLData::toString(int offset, int indent ) const
+    {
+        return m_strData.Pad(offset, ' ', false );
+    }
 } // namespace IASLib

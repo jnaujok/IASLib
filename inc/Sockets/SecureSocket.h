@@ -46,7 +46,7 @@ namespace IASLib
             virtual int             Send( const char *pchBuffer, int nBufferSize );
             virtual int             GetPort( void ) { return m_nPort; }
             virtual unsigned long   GetAddress( void ) { return m_addrIPAddress; }
-            virtual const char     *GetAddressString( bool bRemoteAddress=true, bool bIncludePort=false );
+            virtual const char     *GetAddressString( bool bInternetAddress=true, bool bIncludePort=false );
             virtual void            Close( void );
             virtual void            SetNonBlocking( bool bDontBlock );
             virtual bool            HasData( void );

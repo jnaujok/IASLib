@@ -18,45 +18,32 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
+#ifdef IASLIB_NETWORKING__
+
 #ifndef IASLIB_GENERICCLIENT_H__
 #define IASLIB_GENERICCLIENT_H__
 
-#ifdef IASLIB_NETWORKING__
-
-#include "../Sockets/ClientSocket.h"
-#include "Header.h"
-#include "HeaderList.h"
+#include "Sockets/ClientSocket.h"
+#include "GenericRequest.h"
+#include "GenericResponse.h"
 
 namespace IASLib
 {
     class CGenericClient : public CClientSocket
     {
         protected:
-            bool            m_bUseHTTP11;
-            bool            m_bUseKeepalive;
-            bool            m_bConnected;
-            CHTTPHeaderList m_hlHeaders;
-            int             m_nLastResponseCode;
+            bool                        m_bConnected;
+            bool                        m_bSecure;
+            bool                        m_bSecureHandshakeComplete;
         public:
-	                        CHTTPClient( const char *strRemoteHost, int nHTTPPort=80 );
-	        virtual        ~CHTTPClient( void );
+                                        CGenericClient( const char *strRemoteHost, int nPort, bool bUseSSL = false );
+            virtual                    ~CGenericClient( void );
 
-                            DEFINE_OBJECT( CHTTPClient )
+                                        DEFINE_OBJECT( CGenericClient );
 
-            void            AddHeader( const char *strName, const char *strValue );
-            CHTTPHeader    *GetHeader( const char *strName );
-
-            bool            Get( const char *strURI );
-            bool            Put( const char *strURI, void *pData, size_t nLength );
-            bool            Head( const char *strURI );
-            bool            Post( const char *strURI, void *pData, size_t nLength );
-            bool            Options( const char *strURI );
-            bool            Trace( const char *strURI, void *pData, size_t nLength );
-            bool            Delete( const char *strURI );
-        private:
-            CString         BuildRequest( const char *strType, const char *strURI, void *pData = NULL, size_t nLength = 0 );
+            virtual CGenericResponse   *executeRequest( CGenericRequest *request ) = 0;
     };
 } // namespace IASLib
 
+#endif // IASLIB_GENERICCLIENT_H__
 #endif // IASLIB_NETWORKING__
-#endif // IASLIB_HTTPCLIENT_H__

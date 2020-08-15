@@ -18,6 +18,8 @@
 #include "HTTPHeader.h"
 #include "StringTokenizer.h"
 
+#ifdef IASLIB_NETWORKING__
+
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CHTTPHeader, CObject );
@@ -80,3 +82,4 @@ namespace IASLib
         m_strHeaderValue += strValue;
     }
 } // Namespace IASLib
+#endif // IASLIB_NETWORKING__

@@ -22,6 +22,7 @@
 #include <memory>
 #include "DataBlock.h"
 #include "Exception.h"
+#include "MemoryManager.h"
 
 namespace IASLib
 {

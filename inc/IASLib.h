@@ -20,13 +20,7 @@
 #ifndef IASLIB__
 #define IASLIB__
 
-// IASLib uses tight packing of classes for memory corruption detection. 
-// This saves the current packing level, and restores it after including
-// all of IASLib.
 #pragma pack(push, 1)
-
-	// Include CMake derived values and versions
-#include "IASLibConfig.h"
 
 #ifndef IASLIB_WIN32__
 #ifndef IASLIB_SUN__
@@ -41,6 +35,8 @@
 #endif
 #endif
 #endif
+
+#include "IASLibConfig.h"
 
     // Older compilers do not define the boolean type. If you get lots of errors
     // about "bool is undefined," then define the value "IASLIB_DEFINE_BOOL__" to
@@ -79,6 +75,13 @@
 
     // Variant Support
 #include "BaseTypes/Variant.h"
+
+//***************
+//  BLOCKCHAIN
+//***************
+
+#include "Blockchain/Block.h"
+#include "Blockchain/Blockchain.h"
 
 //***************
 //  COLLECTIONS
@@ -184,7 +187,7 @@
 //  ENCRYPTION
 //**************
 
-#include "Encryption/Encrypt.h"
+#include "Encryption/Sha256.h"
 
 //**************
 //  EXCEPTIONS
@@ -235,9 +238,54 @@
 //  NETWORK SERVICES
 //********************
 
-#include "NetworkServices/HTTPClient.h"
-//#include "NetworkServices/HTTPServer.h"
-//#include "NetworkServices/SMTPMail.h"
+#include "NetworkServices/Entity.h"
+#include "NetworkServices/GenericClient.h"
+#include "NetworkServices/GenericHandler.h"
+#include "NetworkServices/GenericListener.h"
+#include "NetworkServices/GenericRequest.h"
+#include "NetworkServices/GenericResponse.h"
+#include "NetworkServices/GenericServer.h"
+#include "NetworkServices/Header.h"
+#include "NetworkServices/HeaderList.h"
+#include "NetworkServices/Mail.h"
+
+#include "NetworkServices/Entities/NullEntity.h"
+#include "NetworkServices/Entities/SdpEntity.h"
+#include "NetworkServices/Entities/TextPlainEntity.h"
+
+#include "NetworkServices/HTTP/HttpClient.h"
+#include "NetworkServices/HTTP/HttpHeader.h"
+#include "NetworkServices/HTTP/HttpHeaderList.h"
+#include "NetworkServices/HTTP/HttpListener.h"
+#include "NetworkServices/HTTP/HttpRequest.h"
+#include "NetworkServices/HTTP/HttpResponse.h"
+#include "NetworkServices/HTTP/HttpServer.h"
+
+#include "NetworkServices/HTTP/Handlers/HttpHandler.h"
+#include "NetworkServices/HTTP/Handlers/HttpHandlerFactory.h"
+#include "NetworkServices/HTTP/Handlers/BaseHttpHandlerFactory.h"
+#include "NetworkServices/HTTP/Handlers/HttpGetHandler.h"
+#include "NetworkServices/HTTP/Handlers/HttpHeadHandler.h"
+#include "NetworkServices/HTTP/Handlers/HttpPostHandler.h"
+#include "NetworkServices/HTTP/Handlers/HttpOptionsHandler.h"
+
+#include "NetworkServices/SIP/SipClient.h"
+#include "NetworkServices/SIP/SipHeader.h"
+#include "NetworkServices/SIP/SipHeaderList.h"
+#include "NetworkServices/SIP/SipListener.h"
+#include "NetworkServices/SIP/SipRequest.h"
+#include "NetworkServices/SIP/SipResponse.h"
+#include "NetworkServices/SIP/SipServer.h"
+
+#include "NetworkServices/SIP/Handlers/SipHandler.h"
+#include "NetworkServices/SIP/Handlers/SipHandlerFactory.h"
+#include "NetworkServices/SIP/Handlers/BaseSipHandlerFactory.h"
+#include "NetworkServices/SIP/Handlers/SipAckHandler.h"
+#include "NetworkServices/SIP/Handlers/SipByeHandler.h"
+#include "NetworkServices/SIP/Handlers/SipCancelHandler.h"
+#include "NetworkServices/SIP/Handlers/SipInviteHandler.h"
+#include "NetworkServices/SIP/Handlers/SipOptionsHandler.h"
+#include "NetworkServices/SIP/Handlers/SipRegisterHandler.h"
 
 //*************
 //  RESOURCES
@@ -257,7 +305,7 @@
 #include "Sockets/SecureSocket.h"
 #include "Sockets/SecureClientSocket.h"
 #include "Sockets/Socket.h"
-#include "Sockets/RemoteAddress.h"
+#include "Sockets/InternetAddress.h"
 #include "Sockets/UDPSocket.h"
 
 //*********

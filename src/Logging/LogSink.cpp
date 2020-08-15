@@ -66,7 +66,7 @@ namespace IASLib
                 filename = filename.Substring( filename.LastIndexOf( '/' ) + 1 );
             CDate   now;
             CString workString;
-            workString.Format( "%s: [%s] - %s:%d - %s", (const char *)now.FormatDate( CDate::DF_ISO_9601_MS ), logLevelToString( logLevel ), (const char *)filename, nLineNum, szBuffer );
+            workString.Format( "%s: [%s] - %s:%d - %s", (const char *)now.FormatDate( CDate::DF_ISO_8601_MS ), logLevelToString( logLevel ), (const char *)filename, nLineNum, szBuffer );
             return writeLine( workString );
         }
         return false;

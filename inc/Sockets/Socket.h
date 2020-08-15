@@ -42,7 +42,7 @@
 namespace IASLib
 {
     // Forward definition
-    class CRemoteAddress; 
+    class CInternetAddress; 
 
     class CSocket : public CObject
     {
@@ -60,7 +60,7 @@ namespace IASLib
             CString         m_strLocalAddress;
             CString         m_strSocketName;
             bool            m_bBlocking;
-            CRemoteAddress *m_remoteAddress;
+            CInternetAddress *m_internetAddress;
         public:
                             CSocket( CSocketConfig config, const char *strConnectTo, int nPort );
                             CSocket( CSocketConfig config, int nBindPort, const char *strBindIP = NULL );
@@ -79,8 +79,8 @@ namespace IASLib
             virtual int             Send( const char *pchBuffer, int nBufferSize );
             virtual int             GetPort( void ) { return m_nPort; }
             virtual unsigned long   GetAddress( void ) { return m_addrIPAddress; }
-            virtual const char     *GetAddressString( bool bRemoteAddress=true, bool bIncludePort=false );
-            virtual CRemoteAddress &getRemoteAddress( void ) { return *m_remoteAddress; }
+            virtual const char     *GetAddressString( bool bInternetAddress=true, bool bIncludePort=false );
+            virtual CInternetAddress &getInternetAddress( void ) { return *m_internetAddress; }
             virtual void            Close( void );
             virtual void            SetNonBlocking( bool bDontBlock );
             virtual bool            HasData( void );
@@ -93,7 +93,7 @@ namespace IASLib
             static const char *inet_ntop( int iAddrFamily, unsigned long *addrConvert, char *strBuffer, int nMaxLen );
 
         private:
-            void                    setRemoteAddress( void );
+            void                    setInternetAddress( void );
     };
 } // namespace IASLib
 

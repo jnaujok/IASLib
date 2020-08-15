@@ -26,7 +26,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
-#include "RemoteAddress.h"
+#include "InternetAddress.h"
 
 #ifdef IASLIB_WIN32__
 namespace IASLib
@@ -157,7 +157,7 @@ namespace IASLib
                 m_nPort = ntohs( connect_addr.sin_port );
                 m_addrIPAddress = ntohl( connect_addr.sin_addr.s_addr );
             }
-            setRemoteAddress();
+            setInternetAddress();
 
             struct in_addr addrConvert;
             addrConvert.s_addr = htonl( m_addrIPAddress );
@@ -233,7 +233,7 @@ namespace IASLib
             setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, &temp, sizeof(int));
             temp = config.getBacklogSize();
 
-            CRemoteAddress localListen( strBoundAddress, nPort, SOCK_STREAM );
+            CInternetAddress localListen( strBoundAddress, nPort, SOCK_STREAM );
 
             if ( bind( m_hSocket, localListen, sizeof(struct sockaddr_in) ) == SOCKET_ERROR )
             {
@@ -325,7 +325,7 @@ namespace IASLib
                     m_addrLocalIPAddress = ntohl( connect_addr.sin_addr.s_addr );
                 }
 
-                setRemoteAddress();
+                setInternetAddress();
             }
             else
             {
@@ -341,7 +341,7 @@ namespace IASLib
                     m_addrIPAddress = ntohl( connect_addr.sin_addr.s_addr );
                 }
 
-                setRemoteAddress();
+                setInternetAddress();
             }
 
             char strIPBuff[ INET_ADDRSTRLEN ];
@@ -507,7 +507,7 @@ namespace IASLib
                 m_addrIPAddress = ntohl( connect_addr.sin_addr.s_addr );
             }
 
-            setRemoteAddress();
+            setInternetAddress();
 
             struct in_addr addrConvert;
             addrConvert.s_addr = htonl( m_addrIPAddress );
@@ -662,18 +662,18 @@ namespace IASLib
      *
      * This method converts an IP address into a human readable string.
      *
-     * @param bRemoteAddress
+     * @param bInternetAddress
      *      Convert the remote address instead of the local address.
      * @param bIncludePort
      *      Include the port number on the end of the IP address.
      */
-    const char *CSocket::GetAddressString( bool bRemoteAddress, bool bIncludePort )
+    const char *CSocket::GetAddressString( bool bInternetAddress, bool bIncludePort )
     {
         struct in_addr addrConvert;
         char    strIPBuff[ INET_ADDRSTRLEN ];
         int     nPort = 0;
 
-        if ( bRemoteAddress )
+        if ( bInternetAddress )
         {
             addrConvert.s_addr = htonl( m_addrIPAddress );
             nPort = m_nPort;
@@ -805,7 +805,7 @@ namespace IASLib
         return ::inet_ntop( iAddrFamily, addrConvert, strBuffer, nMaxLen );
     }
 
-    void CSocket::setRemoteAddress( void )
+    void CSocket::setInternetAddress( void )
     {
         if ( m_hSocket )
         {
@@ -816,7 +816,7 @@ namespace IASLib
 
                 if ( getpeername( m_hSocket, (sockaddr *)&connect_addr, &nNameSize ) != SOCKET_ERROR )
                 {
-                    m_remoteAddress = new CRemoteAddress( connect_addr );
+                    m_internetAddress = new CInternetAddress( connect_addr );
                 }
 
                 free( connect_addr );

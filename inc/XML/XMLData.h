@@ -37,6 +37,8 @@ namespace IASLib
 
             virtual bool    IsElement( void ) const { return false; }
             virtual bool    IsData( void ) const { return true; }
+
+            virtual CString toString(int offset = 0, int indent = 0 ) const;
     };
 } // namespace IASLib
 

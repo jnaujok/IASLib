@@ -18,6 +18,7 @@
 
 #include "UDPSocket.h"
 #include "SocketException.h"
+#include <cerrno>
 
 namespace IASLib
 {
@@ -65,7 +66,7 @@ namespace IASLib
             }
 
             m_nPort = nPort;
-            m_addrIPAddress = new CRemoteAddress( &listen_addr );
+            m_addrIPAddress = new CInternetAddress( &listen_addr );
                 // Now that we've bound the correct socket, we need to un-set the reuse-address option,
                 // because otherwise the accept call creates a socket that matches this one, apparently,
                 // that includes re-using the same address, which is really, really bad. We can get
@@ -122,9 +123,9 @@ namespace IASLib
                 m_hSocket = NULL_SOCKET;
                 IASLIB_THROW_SOCKET_EXCEPTION(errno);
             }
-            m_nPort = CRemoteAddress::getPort( &listen_addr );
+            m_nPort = CInternetAddress::getPort( &listen_addr );
 
-            m_addrIPAddress = new CRemoteAddress( &listen_addr );
+            m_addrIPAddress = new CInternetAddress( &listen_addr );
             m_strAddress = m_addrIPAddress->toStringWithPort();
         }
         else
@@ -149,7 +150,7 @@ namespace IASLib
 
     IMPLEMENT_OBJECT( CUDPSocket, CObject )
 
-    int CUDPSocket::Read( char *pchBuffer, int nBufferSize, CRemoteAddress &incomingAddress )
+    int CUDPSocket::Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress )
     {
         struct sockaddr remaddr;
         socklen_t len = sizeof( struct sockaddr);
@@ -161,7 +162,7 @@ namespace IASLib
         return n;
     }
 
-    int CUDPSocket::Send( const char *pchBuffer, int nBufferSize, const CRemoteAddress &targetAddress )
+    int CUDPSocket::Send( const char *pchBuffer, int nBufferSize, const CInternetAddress &targetAddress )
     {
         size_t retVal = 0;
 

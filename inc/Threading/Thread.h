@@ -29,21 +29,15 @@
 
 #ifdef IASLIB_MULTI_THREADED__
 
-    #ifdef IASLIB_SUN__
-        #include <thread.h>
-        #include <sched.h>
-        #define THREAD_T thread_t
+    #ifdef IASLIB_WIN32__
+        #include <windows.h>
+        #define THREAD_T HANDLE
     #else
-        #ifdef IASLIB_WIN32__
-            #include <windows.h>
-            #define THREAD_T HANDLE
+        #ifdef IASLIB_LINUX__
+            #include <pthread.h>
+            #define THREAD_T pthread_t
         #else
-            #ifdef IASLIB_PTHREAD__
-                #include <pthread.h>
-                #define THREAD_T pthread_t
-            #else
-                #error No Thread type defined, but multi-threading is active!
-            #endif
+            #error No Thread type defined, but multi-threading is active!
         #endif
     #endif
 

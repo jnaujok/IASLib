@@ -29,6 +29,8 @@
 #ifndef IASLIB_MEMORYMANAGER_H__
 #define IASLIB_MEMORYMANAGER_H__
 
+#ifdef IASLIB_MEMORY_MANAGER__
+
 #include "../BaseTypes/Object.h"
 
 namespace IASLib
@@ -51,20 +53,20 @@ namespace IASLib
 
             virtual void    Collect( void );
 
-            CMemoryManager *GetNewAllocator( void ) { return m_pNewAllocator; }
-            void            SetNewAllocator( CMemoryManager *pNewAllocator );
+            static CMemoryManager *GetNewAllocator( void ) { return m_pNewAllocator; }
+            static void            SetNewAllocator( CMemoryManager *pNewAllocator );
     };
 }
 
 #ifdef IASLIB_DEBUG__
-inline void * __cdecl operator new(unsigned int size, const char *file, int line)
+inline void * __cdecl operator new(size_t size, const char *file, int line)
 {
-    return IASLib::CMemoryManager::AllocateDebug( size, file, line );
+    return IASLib::CMemoryManager::GetNewAllocator()->AllocateDebug( size, file, line );
 };
 
 inline void __cdecl operator delete(void *p )
 {
-    IASLib::CMemoryManager::ReleaseDebug( p );
+    IASLib::CMemoryManager::GetNewAllocator()->ReleaseDebug( p );
 };
 #endif
 
@@ -72,5 +74,7 @@ inline void __cdecl operator delete(void *p )
     #define DEBUG_NEW new(__FILE__, __LINE__)
     #define new DEBUG_NEW
 #endif
+
+#endif // IASLIB Memory Manager
 
 #endif // IASLIB_MEMORYMANAGER_H__

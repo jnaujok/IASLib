@@ -90,6 +90,8 @@ extern "C"
 #endif
 #endif // IASLIB_MULTI_THREADED__
 
+#ifdef IASLIB_MULTI_THREADED__
+
 namespace IASLib
 {
 
@@ -534,5 +536,5 @@ bool CThread::Equals( THREAD_T ptThread1, THREAD_T ptThread2 )
 #endif
     return false;
 }
-
 } // namespace IASLib
+#endif // IASLIB_MULTI_THREADED__

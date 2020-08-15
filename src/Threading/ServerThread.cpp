@@ -21,6 +21,7 @@
 #include "SocketException.h"
 #include "ServerThread.h"
 
+#ifdef IASLIB_MULTI_THREADED__
 namespace IASLib
 {
     CServerThread::CServerThread( const char *strThreadName, int nPortNumber, int nMaxBacklog ) : CThread( strThreadName, true )
@@ -91,3 +92,4 @@ namespace IASLib
         return NULL;
     }
 }; // namespace IASLib
+#endif // IASLIB_MULTI_THREADED__

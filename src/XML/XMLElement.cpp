@@ -593,5 +593,46 @@ namespace IASLib
         return nRetVal;
     }
 
+    CString CXMLElement::toString( int offset, int indent) const {
+        CString element;
+        if ( m_bCommentTag )
+        {
+            element += "<!--";
+            element += GetData();
+            element += "-->";
+        }
+        else
+        {
+            element += "<";
+            element += GetName();
+            for ( int nProp = 0; nProp < GetPropertyCount(); nProp ++ )
+            {
+                auto prop = GetProperty(nProp);
+                element += " ";
+                element += prop->GetName();
+                element += "=\"";
+                element += prop->GetValue();
+                element += "\"";
+            }
+            if ( m_bSelfClosingTag ){
+                element += "/";
+            }
+            element += ">";
+            if ( ( ! m_bSelfClosingTag ) && ( GetSubElementCount() > 0 )) {
+                for ( int nSub = 0; nSub < GetSubElementCount(); nSub++ ) {
+                    auto chunk = GetSubElement(nSub);
+                    if ( indent != 0 ) element += "\n";
+                    element += chunk->toString(offset + indent, indent);
+
+                }
+
+            }
+        }
+        if ( offset > 0 ) {
+            element = element.Pad(offset, ' ', false);
+        }
+        return element;
+    }
+
 } // namespace IASLib
 

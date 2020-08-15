@@ -102,6 +102,7 @@ namespace IASLib
             CString        &operator =( const CString &strSource );
             CString        &operator =( const IASLibChar__ *strSource );
             CString        &operator =( const IASLibChar__ chSource );
+            CString        &operator =( const unsigned int nSource );
             CString        &operator =( const int  nSource );
             CString        &operator =( const long nSource );
             CString        &operator =( const short nSource );
@@ -235,7 +236,7 @@ namespace IASLib
 
             bool        WildcardCompare( const IASLibChar__ *strPattern, bool bCaseSensitive = true );
 
-            CString     Pad( size_t nLength, IASLibChar__ chPadChar = ' ', bool bLeftAlign = true );
+            CString     Pad( size_t nLength, IASLibChar__ chPadChar = ' ', bool bLeftAlign = true ) const;
 
             bool        Contains(const CString &strSearch ) const;
             bool        Contains(const IASLibChar__ *strSearch ) const;
@@ -256,15 +257,11 @@ namespace IASLib
             bool        hasDelimitedTokens( const char *startDelimiter, const char *endDelimiter );
             CString    &replaceDelimitedToken( const char *startDelimiter, const char *endDelimiter, const char *name, const char *value );
 
-            bool        isBlank( void );
-            CString     base64Encode( bool bUrlSafe = false );
-            CString     base64Decode( void );
+            unsigned char *getBytes( void );
 
         private:
-            void            ChangeStub( void );
-            void            ResizeString( int nNewSize );
-            bool            isBase64( unsigned char ch );
-            unsigned char   findBase64( unsigned char ch );
+            void        ChangeStub( void );
+            void        ResizeString( int nNewSize );
     };
 
 }   // namespace IASLib

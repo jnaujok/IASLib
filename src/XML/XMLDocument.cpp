@@ -19,30 +19,32 @@
 #include "XMLElement.h"
 #include "XMLProperty.h"
 #include "XMLException.h"
-#include <iostream>
 
 namespace IASLib
 {
-    CXMLDocument::CXMLDocument( void )
+    CXMLDocument::CXMLDocument( )
     {
-        m_pInput = NULL;
+        m_pInput = nullptr;
     }
 
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "EmptyDeclOrStmt"
     CXMLDocument::CXMLDocument(CStream *pInput)
     {
-        m_pInput = NULL;
+        m_pInput = nullptr;
         if ( ! Read( pInput ) )
         {
             IASLIB_THROW_XML_EXCEPTION( "Could not read input stream." );
         }
     }
+#pragma clang diagnostic pop
 
-    CXMLDocument::~CXMLDocument( void )
+    CXMLDocument::~CXMLDocument( )
     {
         // Nothing to do here, the XMLIndex is self-cleaning, and
         // we shouldn't delete the stream. So, we just clear the
         // stream's pointer.
-        m_pInput = NULL;
+        m_pInput = nullptr;
     }
 
     bool CXMLDocument::Read( CStream *pInput )
@@ -51,8 +53,8 @@ namespace IASLib
 
         char                        chCurrent;
         CString                     strCurrentData;
-        CXMLElement                *pElement = NULL;
-        CXMLData                   *pData = NULL;
+        CXMLElement                *pElement = nullptr;
+        CXMLData                   *pData = nullptr;
         bool                        bTagOpen = false;
         CXMLDocument::TagReturns    trRetVal = CXMLDocument::OPEN_TAG;
 
@@ -60,70 +62,53 @@ namespace IASLib
         {
             chCurrent = m_pInput->GetChar();
 
-            switch ( chCurrent )
-            {
-                case '<':
-                    if ( strCurrentData.GetLength() > 0 )
-                    {
-                        if ( pElement == NULL )
-                        {
-                            pData = new CXMLData( strCurrentData );
-                            m_xiIndex.AddData( pData );
-                        }
-                        else
-                        {
-                            pElement->AddData( strCurrentData );
-                        }
-                        strCurrentData = "";
+            if (chCurrent == '<' ) {
+                if (strCurrentData.GetLength() > 0) {
+                    if (pElement == nullptr) {
+                        pData = new CXMLData(strCurrentData);
+                        m_xiIndex.AddData(pData);
+                    } else {
+                        pElement->AddData(strCurrentData);
                     }
+                    strCurrentData = "";
+                }
 
-                    m_stackTags.Push( pElement );
-                    if ( ! bTagOpen )
-                    {
-                        pElement = new CXMLElement();
-                        m_xiIndex.AddElement( pElement );
+                m_stackTags.Push(pElement);
+                if (!bTagOpen) {
+                    pElement = new CXMLElement();
+                    m_xiIndex.AddElement(pElement);
 
-                        trRetVal = StartTag( *m_pInput, pElement );
-                    }
-                    else
-                    {
-                        CXMLElement *pTemp = new CXMLElement();
+                    trRetVal = StartTag(*m_pInput, pElement);
+                } else {
+                    auto *pTemp = new CXMLElement();
 
-                        trRetVal = StartTag( *m_pInput, pTemp );
+                    trRetVal = StartTag(*m_pInput, pTemp);
 
-                        if ( trRetVal != CXMLDocument::END_TAG )
-                        {
-                            pElement->AddSubElement( pTemp );
+                    if (trRetVal != CXMLDocument::END_TAG) {
+                        pElement->AddSubElement(pTemp);
 
-                            if ( trRetVal != CXMLDocument::SELF_CLOSE )
-                            {
-                                pElement = pTemp;
-                            }
+                        if (trRetVal != CXMLDocument::SELF_CLOSE) {
+                            pElement = pTemp;
                         }
                     }
+                }
 
 
-                    if ( trRetVal == OPEN_TAG )
-                    {
+                if (trRetVal == OPEN_TAG) {
+                    bTagOpen = true;
+                } else {
+                    pElement = (CXMLElement *) m_stackTags.Pop();
+                    if (pElement != nullptr) {
                         bTagOpen = true;
+                    } else {
+                        bTagOpen = false;
                     }
-                    else
-                    {
-                        pElement = (CXMLElement *)m_stackTags.Pop();
-                        if ( pElement != NULL )
-                        {
-                            bTagOpen = true;
-                        }
-                        else
-                        {
-                            bTagOpen = false;
-                        }
-                    }
-                    break;
-
-                default:
-                    strCurrentData += chCurrent;
-                    break;
+                }
+            }
+            else
+            {
+                strCurrentData += chCurrent;
+                break;
             }
         }
 
@@ -135,13 +120,21 @@ namespace IASLib
         return true;
     }
 
-    size_t CXMLDocument::Write( CStream *pOutput )
+    size_t CXMLDocument::Write( CStream *pOutput, int indent )
     {
         size_t nLength = 0;
+        int offset = 0;
 
         CStream &oStream = *pOutput;
 
-        oStream << "<!-- Written -->\n";
+        for ( int nTopLevel = 0; nTopLevel < m_xiIndex.GetChunkCount(); nTopLevel++ )
+        {
+            auto element = m_xiIndex.GetChunk(nTopLevel);
+            auto strOut = element->toString( offset, indent );
+            oStream << strOut;
+        }
+
+        oStream << "\n<!-- Written by IASLib -->\n";
         return nLength;
     }
 

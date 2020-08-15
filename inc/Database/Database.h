@@ -70,7 +70,6 @@ namespace IASLib
             virtual int                     ReleaseConnection( CConnection *pCon ) = 0;
 
             virtual bool                    SetTimeout( int nTimeout ) = 0;
-            virtual bool                    IsConnected( void ) { return m_bConnected; }
     };
 } // namespace IASLib
 

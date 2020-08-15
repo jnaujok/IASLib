@@ -23,7 +23,7 @@
 #include "Bool.h"
 #endif
 
-#include <time.h>
+#include <ctime>
 
 namespace IASLib
 {
@@ -80,11 +80,15 @@ namespace IASLib
     #define DATE_FORMAT_YYYYMMDD    10
     #define DATE_FORMAT_ISO_9601    11
     #define DATE_FORMAT_ISO_9601_MS 12
+    #define DATE_FORMAT_HHMMSS      13
+    #define DATE_FORMAT_ISO_9601_MS_PACKED 14
+    #define DATE_FORMAT_RFC7231     15
 
     #define DB_UNKNOWN				0
     #define DB_ORACLE				1
     #define DB_SYBASE				2
     #define DB_SQLITE				3
+    #define DB_MYSQL                4
 
     class CDate : public CObject
     {
@@ -93,6 +97,7 @@ namespace IASLib
             long                m_lEpochDay;
             long                m_lMilliseconds;
             bool                m_bIsGMT;
+            CString             m_castBuffer;
         public:
             enum FormatFlags {
                 DF_UNDEFINED            = 0x0000,
@@ -106,10 +111,11 @@ namespace IASLib
                 DF_SQLITE		        = 0x0008,
                 DF_ORACLE               = 0x0009,
                 DF_YYYYMMDD             = 0x000A,
-                DF_ISO_9601             = 0x000B,
-                DF_ISO_9601_MS          = 0x000C,
+                DF_ISO_8601             = 0x000B,
+                DF_ISO_8601_MS          = 0x000C,
                 DF_HHMMSS               = 0x000D,
-                DF_ISO_9601_MS_PACKED   = 0x000E
+                DF_ISO_8601_MS_PACKED   = 0x000E,
+                DF_RFC7231              = 0x000F,
 		    };
 
                                 CDate();

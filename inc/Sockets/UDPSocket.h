@@ -20,7 +20,7 @@
 #ifdef IASLIB_NETWORKING__
 
 #include "Socket.h"
-#include "RemoteAddress.h"
+#include "InternetAddress.h"
 
 namespace IASLib
 {
@@ -33,7 +33,7 @@ namespace IASLib
     #endif
             SOCKET          m_hSocket;
             int             m_nPort;
-            CRemoteAddress *m_addrIPAddress;
+            CInternetAddress *m_addrIPAddress;
             CString         m_strAddress;
             CString         m_strSocketName;
         public:
@@ -48,10 +48,10 @@ namespace IASLib
             virtual void setName( const char *name ) { m_strSocketName = name; }
             virtual CString getName( void ) { return m_strSocketName; }
             virtual bool            IsConnected( void ) { return (m_hSocket != NULL_SOCKET ) ? true:false; }
-            virtual int             Read( char *pchBuffer, int nBufferSize, CRemoteAddress &incomingAddress );
-            virtual int             Send( const char *pchBuffer, int nBufferSize, const CRemoteAddress &targetAddress );
+            virtual int             Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress );
+            virtual int             Send( const char *pchBuffer, int nBufferSize, const CInternetAddress &targetAddress );
             virtual int             GetPort( void ) { return m_nPort; }
-            virtual const CRemoteAddress &GetAddress( void ) const { return *m_addrIPAddress; }
+            virtual const CInternetAddress &GetAddress( void ) const { return *m_addrIPAddress; }
             virtual void            Close( void );
     };
 } // namespace IASLib

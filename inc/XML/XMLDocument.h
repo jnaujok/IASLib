@@ -45,7 +45,7 @@ namespace IASLib
                         DECLARE_OBJECT(CXMLDocument,CObject);
 
             bool        Read( CStream *pInput );
-            size_t      Write( CStream *pOutput );
+            size_t      Write( CStream *pOutput, int indent = 0 );
 
             CXMLIndex  *GetIndex( void ) { return &m_xiIndex; }
 

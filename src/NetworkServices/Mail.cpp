@@ -18,6 +18,8 @@
 #include "StringTokenizer.h"
 #include "Date.h"
 
+#ifdef IASLIB_NETWORKING__
+
 namespace IASLib
 {
 	CString CMail::m_strMailServer = "pop.mail.com";
@@ -186,3 +188,5 @@ namespace IASLib
 		return bRetVal;
 	}
 } // namespace IASLib
+
+#endif // IASLIB_NETWORKING

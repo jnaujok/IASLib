@@ -26,14 +26,14 @@ namespace IASLib
     CMemMappedFile::CMemMappedFile()
     {
         m_bIsOpen = false;
-        m_fpFile = NULL;
+        m_fpFile = nullptr;
         m_bInput = false;
         m_bOutput = false;
         m_bAppend = false;
         m_bBinary = false;
         m_lFileSize = 0;
-        m_hFileHandle = NULL;
-        m_hMemoryMap = NULL;
+        m_hFileHandle = 0;
+        m_hMemoryMap = 0;
         m_nReadPointer = 0;
         m_nWritePointer = 0;
         m_bSyncPointers = true;
