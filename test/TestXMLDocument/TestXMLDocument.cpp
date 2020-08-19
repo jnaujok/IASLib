@@ -1,61 +1,11 @@
 // TestXMLDocument.cpp : Defines the entry point for the console application.
 //
 
-#include "stdafx.h"
+#include "IASLib.h"
 #include <iostream>
 using namespace IASLib;
 
-void DumpSubElements( const CXMLElement *pTag, int nDepth )
-{
-   int nPad = 0;
-   while ( nPad < nDepth )
-   {
-      std::cout << " ";
-      nPad++;
-   }
-
-   std::cout << "<" << pTag->GetName();
-   int nProps = 0;
-   while ( nProps < pTag->GetPropertyCount() )
-   {
-      CXMLProperty *pProp = pTag->GetProperty( nProps );
-
-      std::cout << " " << pProp->GetName() << "=\"" << pProp->GetValue() << "\"";
-      nProps++;
-   }
-   std::cout << ">"; 
-   
-   int nCount = 0;
-   while ( nCount < pTag->GetSubElementCount() )
-   {
-      const CXMLElement *pDump = pTag->GetSubElement( nCount );
-      if ( pDump )
-      {
-         DumpSubElements( pDump, nDepth + 3 );
-      }
-      nCount++;
-   }
-
-   int nData = 0;
-   while ( nData < pTag->GetDataCount() )
-   {
-      std::cout << pTag->GetData( nData );
-      nData++;
-   }
-
-
-   std::cout << "</" << pTag->GetName() << ">" << std::endl;
-}
-
-
-#ifdef IASLIB_WIN32__
-int _tmain(int argc, _TCHAR* argv[])
-#else
-int main( int argc, char *argv[] )
-#endif
-{
-
-/*
+bool testMemoryStream() {
     try
     {
         std::cout << "TESTING XMLDocument from In-Memory Stream" << std::endl;
@@ -71,34 +21,27 @@ int main( int argc, char *argv[] )
 
         std::cout << "Index loaded-> " << pIndex->GetElementCount() << " elements found -- Should be 4." << std::endl;
 
-        CXMLElement  *pTag;
-        size_t       nCount = 0;
+        auto outDoc = xDoc.toString( 4 );
 
-        while ( nCount < pIndex->GetElementCount() )
-        {
-            pTag = pIndex->GetElement( nCount );
-            if ( pTag )
-            {
-               DumpSubElements( pTag, 0 );
-            }
-            nCount++;
-        }
+        std::cout << (const char *)outDoc << std::endl << std::endl;
+
         std::cout << "TESTING COMPLETE" << std::endl << std::endl;
     }
     catch (CXMLException &oE )
     {
         std::cout << oE.DumpStack() << std::endl;
     }
-*/
+}
 
+bool testFileStream( int argc, char *argv[] ) {
     std::cout << "TESTING XMLDocument Class" << std::endl;
 
-    CString strFileName = "DatabaseLayout.xml";
+    CString strFileName = "./DatabaseLayout.xml";
     if ( argc > 1 )
     {
         strFileName = argv[1];
     }
-    
+
     CFile  *pFile1 = new CFile( strFileName, CFile::READ );
     CFileStream osInput2( pFile1 );
 
@@ -118,23 +61,25 @@ int main( int argc, char *argv[] )
         std::cout << "Index loaded-> " << pIndex->GetElementCount() << " elements found." << std::endl;
         std::cout.flush();
 
-        CXMLElement  *pTag;
-        size_t       nCount = 0;
+        auto outDoc = xDoc.toString( 4 );
 
-        while ( nCount < pIndex->GetElementCount() )
-        {
-            pTag = pIndex->GetElement( nCount );
-            if ( pTag )
-            {
-//               DumpSubElements( pTag, 0 );
-            }
-            nCount++;
-        }
+        std::cout << (const char *)outDoc << std::endl << std::endl;
     }
     catch (CXMLException &oE )
     {
         std::cout << oE.DumpStack() << std::endl;
     }
+}
+
+#ifdef IASLIB_WIN32__
+int _tmain(int argc, _TCHAR* argv[])
+#else
+int main( int argc, char *argv[] )
+#endif
+{
+    testMemoryStream();
+    testFileStream(argc,argv);
+
 
 /*
     try

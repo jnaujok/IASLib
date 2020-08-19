@@ -108,34 +108,35 @@ namespace IASLib
             else
             {
                 strCurrentData += chCurrent;
-                break;
             }
         }
 
         if ( bTagOpen )
         {
-            IASLIB_THROW_XML_EXCEPTION( "Stream ended with an unclosed tag." );
+            IASLIB_THROW_XML_EXCEPTION( "Stream ended with an unclosed tag." )
         }
 
         return true;
     }
 
-    size_t CXMLDocument::Write( CStream *pOutput, int indent )
-    {
-        size_t nLength = 0;
-        int offset = 0;
+    size_t CXMLDocument::Write( CStream *pOutput, int indent ) {
+        CString strDump = toString( indent );
 
-        CStream &oStream = *pOutput;
+        *pOutput << strDump;
+
+        return strDump.GetLength();
+    }
+
+    CString CXMLDocument::toString( int indent ) {
+        CString strRetVal;
 
         for ( int nTopLevel = 0; nTopLevel < m_xiIndex.GetChunkCount(); nTopLevel++ )
         {
-            auto element = m_xiIndex.GetChunk(nTopLevel);
-            auto strOut = element->toString( offset, indent );
-            oStream << strOut;
+            auto pChunk = m_xiIndex.GetChunk(nTopLevel);
+            auto strOut = pChunk->toString(0, indent );
+            strRetVal += strOut;
         }
-
-        oStream << "\n<!-- Written by IASLib -->\n";
-        return nLength;
+        return strRetVal;
     }
 
     CXMLDocument::TagReturns  CXMLDocument::StartTag( CStream &oStream, CXMLElement *pTag )
@@ -160,6 +161,7 @@ namespace IASLib
                     if ( strTagName.GetLength() == 0 )
                     {
                         bIsSelfClose = true;
+                        pTag->SetSelfClose( bIsSelfClose );
                         pTag->SetMetaTag();
                     }
                     else
@@ -168,7 +170,7 @@ namespace IASLib
 
                         if ( chChar != '>' )
                         {
-                            IASLIB_THROW_XML_EXCEPTION( "No matching end tag found for <?" + strTagName );
+                            IASLIB_THROW_XML_EXCEPTION( "No matching end tag found for <?" + strTagName )
                         }
                         pTag->SetName( strTagName );
                         bTagFound = true;
@@ -180,6 +182,7 @@ namespace IASLib
                     if ( strTagName.GetLength() > 0 )
                     {
                         bIsSelfClose = true;
+                        pTag->SetSelfClose( bIsSelfClose );
                     }
                     bIsEndTag = true;
                     break;
@@ -190,7 +193,7 @@ namespace IASLib
                 case '\r':
                     if ( strTagName.GetLength() == 0 )
                     {
-                        // This is whitespace *berfore* the tag name
+                        // This is whitespace *before* the tag name
                         // horrible coding, but marginally allowed by
                         // the standard. We just ignore it.
                         break;
@@ -209,6 +212,7 @@ namespace IASLib
                                 {
                                     bTagClosed = true;
                                     bIsSelfClose = true;
+                                    pTag->SetSelfClose( bIsSelfClose );
                                     bIsEndTag = true;
                                 }
                                 else
@@ -228,12 +232,13 @@ namespace IASLib
                         {
                             if ( strTagName != pTag->GetName() )
                             {
-                                IASLIB_THROW_XML_EXCEPTION( "Mismatched tag names." );
+                                IASLIB_THROW_XML_EXCEPTION( "Mismatched tag names." )
                             }
                         }
                         else
                         {
                             pTag->SetName( strTagName );
+                            pTag->SetHasClosingTag(true);
                         }
                         bTagFound = true;
                     }
@@ -245,7 +250,7 @@ namespace IASLib
                     {
                         if ( strTagName.GetLength() == 0 )
                         {
-                            IASLIB_THROW_XML_EXCEPTION( "Tag is missing name!" );
+                            IASLIB_THROW_XML_EXCEPTION( "Tag is missing name!" )
                         }
                         bTagFound = true;
                     }
@@ -253,7 +258,7 @@ namespace IASLib
                     {
                         // This is an end tag, we need to compare it to the last *open*
                         // tag, which should be on the top of the stack
-                        CXMLElement *pTemp = (CXMLElement *)m_stackTags.Pop();
+                        auto *pTemp = (CXMLElement *)m_stackTags.Pop();
 
                         if ( strTagName != pTemp->GetName() )
                         {
@@ -262,11 +267,12 @@ namespace IASLib
                             strException += "] != [";
                             strException += pTemp->GetName();
                             strException += "]";
-                            IASLIB_THROW_XML_EXCEPTION( strException );
+                            IASLIB_THROW_XML_EXCEPTION( strException )
                         }
 
                         delete pTag;
                         pTag = pTemp;
+                        pTemp->SetHasClosingTag(true);
                     }
                     else
                     {
@@ -282,7 +288,7 @@ namespace IASLib
 
         if ( ! bTagFound )
         {
-            IASLIB_THROW_XML_EXCEPTION( "Unclosed Tag Found." );
+            IASLIB_THROW_XML_EXCEPTION( "Unclosed Tag Found." )
         }
 
         if ( bTagClosed )
@@ -319,16 +325,17 @@ namespace IASLib
 
                     if ( chChar != '>' )
                     {
-                        IASLIB_THROW_XML_EXCEPTION( "No matching end tag found for <?" + strTagName );
+                        IASLIB_THROW_XML_EXCEPTION( "No matching end tag found for <?" + strTagName )
                     }
                     bTagFound = true;
                     bTagClosed = true;
+                    pTag->SetSelfClose( true );
                     bIsEndTag = true;
                     if ( strPropertyName.GetLength() != 0 )
                     {
                         // If we close a tag with a property name, then we add the property
                         // name to the tag with a blank value.
-                        CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
+                        auto *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
                     }
                     break;
@@ -338,7 +345,7 @@ namespace IASLib
                     {
                         if ( bIsEndTag )
                         {
-                            IASLIB_THROW_XML_EXCEPTION( "Property found in XML End Tag." );
+                            IASLIB_THROW_XML_EXCEPTION( "Property found in XML End Tag." )
                         }
                         TagReturns trPropRet = StartProperty( oStream, pTag, strPropertyName );
                         if ( trPropRet == CXMLDocument::OPEN_TAG )
@@ -358,9 +365,10 @@ namespace IASLib
                             {
                                 bTagClosed = true;
                                 bIsSelfClose = true;
+                                pTag->SetSelfClose( bIsSelfClose );
                                 if ( bIsEndTag )
                                 {
-                                    IASLIB_THROW_XML_EXCEPTION( "Self close (/>) found in XML End Tag." );
+                                    IASLIB_THROW_XML_EXCEPTION( "Self close (/>) found in XML End Tag." )
                                 }
                                 // We have to pop our tag off the stack to restore
                                 // the correct stack frame on the document.
@@ -376,7 +384,7 @@ namespace IASLib
                     } // if ( strPropertyName.GetLength != 0 )
                     else
                     {
-                        IASLIB_THROW_XML_EXCEPTION( "Found \"=\" without a property name in XML Tag." );
+                        IASLIB_THROW_XML_EXCEPTION( "Found \"=\" without a property name in XML Tag." )
                     }
                     break;
 
@@ -389,20 +397,21 @@ namespace IASLib
 
                     if ( chChar != '>' )
                     {
-                        IASLIB_THROW_XML_EXCEPTION( "Found unexpected \"/\" in tag." );
+                        IASLIB_THROW_XML_EXCEPTION( "Found unexpected \"/\" in tag." )
                     }
                     bIsSelfClose = true;
                     if ( bIsEndTag )
                     {
-                        IASLIB_THROW_XML_EXCEPTION( "Found self close \"/>\" in XML End Tag." );
+                        IASLIB_THROW_XML_EXCEPTION( "Found self close \"/>\" in XML End Tag." )
                     }
+                    pTag->SetSelfClose( bIsSelfClose );
                     bTagClosed = true;
                     bIsEndTag = true;
                     if ( strPropertyName.GetLength() != 0 )
                     {
                         // If we close a tag with a property name, then we add the property
                         // name to the tag with a blank value.
-                        CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
+                        auto *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
                     }
                     break;
@@ -413,7 +422,7 @@ namespace IASLib
                     {
                         // If we close a tag with a property name, then we add the property
                         // name to the tag with a blank value.
-                        CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
+                        auto *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
                     }
                     break;
@@ -427,7 +436,7 @@ namespace IASLib
                     {
                         // If we close a tag with a property name, then we add the property
                         // name to the tag with a blank value.
-                        CXMLProperty *pNewProperty = new CXMLProperty( strPropertyName, "" );
+                        auto *pNewProperty = new CXMLProperty( strPropertyName, "" );
                         pTag->AddProperty( pNewProperty );
                         strPropertyName.Clear();
                     }
@@ -457,11 +466,11 @@ namespace IASLib
         CString strException = "No closing brace found for tag within stream. Stream ended without finding closing \">\" for tag named [";
         strException += strTagName;
         strException += "]";
-        IASLIB_THROW_XML_EXCEPTION( strException );
+        IASLIB_THROW_XML_EXCEPTION( strException )
         return CXMLDocument::ERROR_TAG;
     }
 
-    CXMLDocument::TagReturns CXMLDocument::StartProperty( CStream &oStream, CXMLElement *pTag, CString strName )
+    CXMLDocument::TagReturns CXMLDocument::StartProperty( CStream &oStream, CXMLElement *pTag, const CString& strName )
     {
         CString strValue;
         char    chChar;
@@ -487,7 +496,7 @@ namespace IASLib
                         oStream >> chChar;
                         if ( chChar != '>' )
                         {
-                            IASLIB_THROW_XML_EXCEPTION( "No matching end tag found for <?" );
+                            IASLIB_THROW_XML_EXCEPTION( "No matching end tag found for <?" )
                         }
                         bFinished = true;
                         bFoundTagEnd = true;
@@ -508,7 +517,7 @@ namespace IASLib
                         {
                             if ( strValue.GetCount() != 0 )
                             {
-                                IASLIB_THROW_XML_EXCEPTION( "Quote found in middle of property value!" );
+                                IASLIB_THROW_XML_EXCEPTION( "Quote found in middle of property value!" )
                             }
                             bInQuotes = true;
                             bSingleQuotes = false;
@@ -533,7 +542,7 @@ namespace IASLib
                         {
                             if ( strValue.GetCount() != 0 )
                             {
-                                IASLIB_THROW_XML_EXCEPTION( "Quote found in middle of property value!" );
+                                IASLIB_THROW_XML_EXCEPTION( "Quote found in middle of property value!" )
                             }
                             bInQuotes = true;
                             bSingleQuotes = true;
@@ -615,7 +624,7 @@ namespace IASLib
 
         if ( bFinished )
         {
-            CXMLProperty *pNewProperty = new CXMLProperty( strName, strValue );
+            auto *pNewProperty = new CXMLProperty( strName, strValue );
             pTag->AddProperty( pNewProperty );
         }
         if ( bFoundTagEnd )
@@ -628,4 +637,4 @@ namespace IASLib
         }
         return CXMLDocument::OPEN_TAG;
     }
-}; // Namespace IASLib
+} // Namespace IASLib

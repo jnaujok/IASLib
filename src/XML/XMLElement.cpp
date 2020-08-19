@@ -23,13 +23,13 @@
 
 namespace IASLib
 {
-    IMPLEMENT_OBJECT( CXMLElement, CXMLChunk );
+    IMPLEMENT_OBJECT( CXMLElement, CXMLChunk )
 
-    CXMLElement::CXMLElement( void )
+    CXMLElement::CXMLElement( )
     {
         m_bCommentTag = false;
         m_bMetaTag = false;
-        m_bHasClosingTag = false;
+        m_bHasClosingTag = true;
         m_bSelfClosingTag = false;
     }
 
@@ -40,9 +40,10 @@ namespace IASLib
         CString strStartTag;
         CString strTagData;
         CString strEndTag;
-        bool    bSingleTag = false;
         m_bCommentTag = false;
         m_bMetaTag = false;
+        m_bHasClosingTag = true;
+        m_bSelfClosingTag = false;
 
         strWork.Trim();
 
@@ -51,7 +52,7 @@ namespace IASLib
                 // There are no tags within this block. That's bad, because we never should
                 // have called this constructor if there were no tags...
             // To Do: Really cool error handling.
-            IASLIB_THROW_XML_EXCEPTION( "Unclosed tag! No closing brace found in data!" );
+            IASLIB_THROW_XML_EXCEPTION( "Unclosed tag! No closing brace found in data!" )
             return;
         }
 
@@ -81,22 +82,25 @@ namespace IASLib
                 // We remove the question marks, and set the single tag flag.
             strStartTag = strStartTag.Substring( 1, (int)strStartTag.GetLength() - 2 );
             strStartTag.Trim();
-            bSingleTag = true;
+            m_bSelfClosingTag = true;
+            m_bMetaTag = true;
         }
 
         if ( strStartTag[ strStartTag.GetLength() - 1 ] == '/' )
         {
                 // This is an "Empty" tag. In other words, it contains no data.
-            bSingleTag = true;
             strStartTag = strStartTag.Substring( 0, (int)strStartTag.GetLength() - 1 );
             strStartTag.Trim();
+            m_bSelfClosingTag = true;
+            m_bHasClosingTag = false;
         }
 
         if ( strStartTag.Substring( 0, 3 ) == "!--" )
         {
                 // This is a comment tag, and it has no structure whatsoever.
-            bSingleTag = true;
             m_bCommentTag = true;
+            m_bSelfClosingTag = true;
+            m_bHasClosingTag = false;
             m_strElementName = "!--";
             if ( strStartTag.IndexOf( "--", 3 ) == NOT_FOUND )
             {
@@ -165,9 +169,9 @@ namespace IASLib
 		    // property-value tags, or nothing at all.
 	    strStartTag = strStartTag.Substring( m_strElementName.GetLength() );
 
-        if ( ! bSingleTag )
+        if ( ! m_bSelfClosingTag )
         {
-                // Now, let's find the closing tag of this element. Remebering, of course,
+                // Now, let's find the closing tag of this element. Remembering of course,
                 // that XML is case-sensitive. We also have to remember that we may have
                 // embedded elements of the same name as this one.
             strEndTag.Format( "</%s>", (const char *)m_strElementName );
@@ -178,8 +182,8 @@ namespace IASLib
 
             size_t nFound = 0;
             size_t  nStart = 0;
-            size_t 	nStart1 = 0;
-            size_t  nStart2 = 0;
+            size_t 	nStart1;
+            size_t  nStart2;
             bool bDone = false;
 
             do
@@ -191,9 +195,10 @@ namespace IASLib
                 while ( nStart2 != NOT_FOUND )
                 {
                         // Make sure it's not an "Empty Tag" start tag.
-                    if ( ( strWork.IndexOf( "/>", nStart2 ) != NOT_FOUND ) && ( ! ( strWork.IndexOf( '>', nStart2 ) < strWork.IndexOf( "/>", nStart2 ) ) ) )
+                    if (( strWork.IndexOf( "/>", nStart2 ) != NOT_FOUND ) &&
+                        strWork.IndexOf('>', nStart2) >= strWork.IndexOf("/>", nStart2))
                     {
-                            // It is an empty tag, ignore it and look for the next occurance.
+                            // It is an empty tag, ignore it and look for the next occurrence.
                         nStart2 = strWork.IndexOf( strStartTag2, nStart2 + strStartTag2.GetLength() , false );
                     }
                     else
@@ -225,7 +230,7 @@ namespace IASLib
                 CString strTemp;
                 strTemp.Format( "Bad tag, no ending tag found for tag <%s>.\n", (const char *)m_strElementName );
                 strTag = "";
-                throw CXMLException( 1 );
+                IASLIB_THROW_XML_EXCEPTION( strTemp )
             }
 
                 // Okay, we have the end tag for this element. Whatever is left must not be a part
@@ -276,7 +281,7 @@ namespace IASLib
                         bInQuotes = ! bInQuotes;
                         bHadQuotes = true;
 						    // If this is the end quote, then we've found our value.
-					    if ( ( ! bInQuotes ) && ( bFoundEquals ) )
+					    if ( ! bInQuotes )
 					    {
 						    bFoundEnd = true;
 						    strPropValue = strStartTag.Substring( nValueStart, nIndex - nValueStart );
@@ -322,7 +327,7 @@ namespace IASLib
                     strPropValue = strStartTag.Substring( nValueStart );
                 }
 
-                CXMLProperty *pNewProp = new CXMLProperty( strPropName, strPropValue );
+                auto *pNewProp = new CXMLProperty( strPropName, strPropValue );
                 m_aProperties.Push( pNewProp );
             }
 
@@ -330,7 +335,7 @@ namespace IASLib
             strStartTag = strStartTag.Substring( nIndex + 1 );
         }
 
-        if ( ! bSingleTag )
+        if ( ! m_bSelfClosingTag )
         {
                 // Okay, now that we've analyzed the start tag properties, it's time to
                 // tear apart the data in the tag.
@@ -349,7 +354,7 @@ namespace IASLib
                         AddData( strTemp );
                     }
 
-                    CXMLElement *pNewSubElement = new CXMLElement( strTagData );
+                    auto *pNewSubElement = new CXMLElement( strTagData );
                     m_aSubElements.Push( pNewSubElement );
                 }
                 else
@@ -364,7 +369,7 @@ namespace IASLib
         }
     }
 
-    CXMLElement::~CXMLElement( void )
+    CXMLElement::~CXMLElement( )
     {
         m_aProperties.DeleteAll();
         m_aSubElements.DeleteAll();
@@ -376,7 +381,7 @@ namespace IASLib
         {
             return (CXMLProperty *)m_aProperties[ nCount ];
         }
-        return NULL;
+        return nullptr;
     }
 
     const char *CXMLElement::GetProperty( const char *strPropertyName ) const
@@ -388,7 +393,7 @@ namespace IASLib
 
         while ( nIndex < m_aProperties.Length() )
         {
-            CXMLProperty *pCompare = (CXMLProperty *)m_aProperties[ nIndex ];
+            auto *pCompare = (CXMLProperty *)m_aProperties[ nIndex ];
             CString strSearch = pCompare->GetName();
 
             if ( strPropName == strSearch )
@@ -398,7 +403,7 @@ namespace IASLib
             nIndex++;
         }
 
-        return NULL;
+        return nullptr;
     }
 
     const char *CXMLElement::GetData( size_t nCount ) const
@@ -408,22 +413,22 @@ namespace IASLib
 
         while ( nStep < m_aSubElements.GetCount() )
         {
-            CXMLChunk *pChunk = (CXMLChunk *)m_aSubElements.Get( nStep );
+            auto *pChunk = (CXMLChunk *)m_aSubElements.Get( nStep );
             if ( pChunk->IsData() )
             {
                 if ( nFound == nCount )
                 {
-                    CXMLData *pData = (CXMLData *)pChunk;
+                    auto *pData = (CXMLData *)pChunk;
                     return pData->GetData();
                 }
                 nFound++;
             }
             nStep++;
         }
-        return NULL;
+        return nullptr;
     }
 
-    size_t CXMLElement::GetSubElementCount( void ) const
+    size_t CXMLElement::GetSubElementCount( ) const
     {
         size_t          nCount = 0;
         size_t          nRetVal = 0;
@@ -491,7 +496,7 @@ namespace IASLib
             nCount++;
         }
 
-        return NULL;
+        return nullptr;
     }
 
     const CXMLElement *CXMLElement::GetSubElement( const char *strElementType, size_t nIndex ) const
@@ -522,29 +527,31 @@ namespace IASLib
             nCount++;
         }
 
-        return NULL;
+        return nullptr;
     }
 
-    void CXMLElement::SetName( CString strTagName )
+    void CXMLElement::SetName( const CString& strTagName )
     {
         m_strElementName = strTagName;
     }
 
-    void CXMLElement::SetData( CString strData, size_t nDataElement )
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "OCUnusedGlobalDeclarationInspection"
+    void CXMLElement::SetData( const CString& strData, size_t nDataElement )
     {
         size_t  nCount = 0;
         size_t  nFound = 0;
 
         while ( nCount < m_aSubElements.GetCount() )
         {
-            CXMLChunk *pChunk = (CXMLChunk *)m_aSubElements.Get( nCount );
+            auto *pChunk = (CXMLChunk *)m_aSubElements.Get( nCount );
 
             if ( pChunk->IsData() )
             {
                 nFound++;
                 if ( nFound > nDataElement )
                 {
-                    CXMLData *pData = (CXMLData *)pChunk;
+                    auto *pData = (CXMLData *)pChunk;
 
                     pData->SetData( strData );
 
@@ -554,9 +561,10 @@ namespace IASLib
             nCount++;
         }
 
-        CXMLData *pData = new CXMLData( strData );
+        auto *pData = new CXMLData( strData );
         m_aSubElements.Append( pData );
     }
+#pragma clang diagnostic pop
 
     void CXMLElement::AddProperty( CXMLProperty *pNewProperty )
     {
@@ -568,13 +576,13 @@ namespace IASLib
         m_aSubElements.Append( pNewElement );
     }
 
-    void CXMLElement::AddData( CString strData )
+    void CXMLElement::AddData( const CString& strData )
     {
-        CXMLData *pDataChunk = new CXMLData( strData );
+        auto *pDataChunk = new CXMLData( strData );
         m_aSubElements.Append( pDataChunk );
     }
 
-    size_t CXMLElement::GetDataCount( void ) const
+    size_t CXMLElement::GetDataCount( ) const
     {
         size_t          nCount = 0;
         size_t          nRetVal = 0;
@@ -600,6 +608,21 @@ namespace IASLib
             element += "<!--";
             element += GetData();
             element += "-->";
+        }
+        else if ( m_bMetaTag )
+        {
+            element += "<?";
+            element += GetName();
+            for ( int nProp = 0; nProp < GetPropertyCount(); nProp ++ )
+            {
+                auto prop = GetProperty(nProp);
+                element += " ";
+                element += prop->GetName();
+                element += "=\"";
+                element += prop->GetValue();
+                element += "\"";
+            }
+            element += "?>";
         }
         else
         {
@@ -628,6 +651,13 @@ namespace IASLib
 
             }
         }
+        if ( m_bHasClosingTag )
+        {
+            element += "</";
+            element += GetName();
+            element += ">";
+        }
+
         if ( offset > 0 ) {
             element = element.Pad(offset, ' ', false);
         }

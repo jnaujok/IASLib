@@ -160,6 +160,10 @@ configure_file(${PROJECT_SOURCE_DIR}/inc/IASLibConfig.h.in ${PROJECT_SOURCE_DIR}
 #add library file
 add_library(IASLib ${SOURCES})
 
+ENABLE_TESTING()
+ADD_SUBDIRECTORY( test )
+
+
 # specify the C++ standard
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)

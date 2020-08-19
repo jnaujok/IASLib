@@ -16,8 +16,8 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-#ifndef IASLIB_XMLELEMENT_H__
-#define IASLIB_XMLELEMENT_H__
+#ifndef IASLIB_XML_ELEMENT_H__
+#define IASLIB_XML_ELEMENT_H__
 
 #include "../BaseTypes/String_.h"
 #include "../Streams/Stream.h"
@@ -61,12 +61,14 @@ namespace IASLib
             void                SetMetaTag( void ) { m_bMetaTag = true; }
             bool                IsComment( void ) { return m_bCommentTag; }
             bool                IsMetaTag( void ) { return m_bMetaTag; }
+            void                SetSelfClose( bool selfClose ) { m_bSelfClosingTag = selfClose; m_bHasClosingTag = !selfClose; }
+            void                SetHasClosingTag( bool hasClose ) { m_bHasClosingTag = hasClose; m_bSelfClosingTag = !hasClose; }
 
-            void                SetName( CString strTagName );
-            void                SetData( CString strData, size_t nDataElement = 0 );
+            void                SetName( const CString& strTagName );
+            void                SetData( const CString& strData, size_t nDataElement = 0 );
             void                AddProperty( CXMLProperty *pNewProperty );
             void                AddSubElement( CXMLElement *pNewElement );
-            void                AddData( CString strData );
+            void                AddData( const CString& strData );
 
             bool                DeleteProperty( const char *strPropertyName );
             bool                DeleteSubElement( size_t nElement );
@@ -74,8 +76,8 @@ namespace IASLib
             virtual bool        IsElement( void ) const { return true; }
             virtual bool        IsData( void ) const { return false; }
 
-            virtual CString     toString( int offset = 0, int indent = 0 ) const;
+            virtual CString     toString( int offset, int indent ) const;
     };
 } // namespace IASLib
 
-#endif // __XMLELEMENT_H__
+#endif // IASLIB_XML_ELEMENT_H__

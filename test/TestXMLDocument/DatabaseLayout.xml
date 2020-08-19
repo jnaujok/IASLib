@@ -1,4 +1,3 @@
-<?xml version="1.0" ?>
 <FileInfo name="BaseCamp Database Tables" version="3.0.1001" author="Jeffrey R. Naujok" />
 <table name="user_archive">
     <info>
@@ -8,9 +7,9 @@
         assures us that data tables (like the file repository) never get
         left with a hanging reference.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="first_name"        type="varchar(40)"      null="no"></field>
-    <field name="last_name"         type="varchar(40)"      null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="first_name" type="varchar(40)" null="no"/>
+    <field name="last_name" type="varchar(40)" null="no"/>
     <index name="primary_user_archive_index" unique="yes">
         user_id
     </index>
@@ -34,10 +33,10 @@
         must be added before the users table. Thus, it must appear before
         it in the DatabaseLayout.xml file.
     </info>
-    <field name="derived_id"        type="char(32)"         null="no"></field>
-    <field name="password"          type="char(32)"         null="no"></field>
-    <field name="last_changed"      type="datetime"         null="no"></field>
-    <field name="last_password"     type="char(32)"         null="no"></field>
+    <field name="derived_id" type="char(32)" null="no"/>
+    <field name="password" type="char(32)" null="no"/>
+    <field name="last_changed" type="datetime" null="no"/>
+    <field name="last_password" type="char(32)" null="no"/>
     <index name="primary_user_password_index" unique="yes">
         derived_id
     </index>
@@ -54,18 +53,18 @@
         users that have not logged in as inactive, and eventually to  
         delete old users that have not logged in.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="first_name"        type="varchar(40)"      null="no"></field>
-    <field name="last_name"         type="varchar(40)"      null="no"></field>
-    <field name="e_mail"            type="varchar(80)"      null="no"></field>
-    <field name="phone"             type="varchar(20)"      null="no"></field>
-    <field name="cell"              type="varchar(30)"      null="no"></field>
-    <field name="location"          type="varchar(80)"      null="no"></field>
-    <field name="status_code"       type="int"              null="no"></field>
-    <field name="creation_date"     type="datetime"         null="no"></field>
-    <field name="last_login"        type="datetime"         null="no"></field>
-    <field name="manager_id"        type="char(16)"         null="no"></field>
-    <field name="time_zone"         type="int"              null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="first_name" type="varchar(40)" null="no"/>
+    <field name="last_name" type="varchar(40)" null="no"/>
+    <field name="e_mail" type="varchar(80)" null="no"/>
+    <field name="phone" type="varchar(20)" null="no"/>
+    <field name="cell" type="varchar(30)" null="no"/>
+    <field name="location" type="varchar(80)" null="no"/>
+    <field name="status_code" type="int" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="last_login" type="datetime" null="no"/>
+    <field name="manager_id" type="char(16)" null="no"/>
+    <field name="time_zone" type="int" null="no"/>
     <index name="primary_user_index" unique="yes">
         user_id
     </index>
@@ -87,8 +86,8 @@
         tie to menu items. This allows us to dynamically assign menu
         items to a user through the role table.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="role_id"           type="char(16)"         null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="role_id" type="char(16)" null="no"/>
     <index name="primary_user_role_index" unique="yes">
         user_id, role_id
     </index>
@@ -111,13 +110,13 @@
 
 <table name="roles">
     <info>
-        Roles are the basis of privelige and security within the BaseCamp
+        Roles are the basis of privilege and security within the BaseCamp
         system. Roles tie menu items and permissions into logical 
-        categories so that it becomes easy to assign a logical functionallity
+        categories so that it becomes easy to assign a logical functionality
         group to a user or a group.
     </info>
-    <field name="role_id"           type="char(16)"         null="no"></field>
-    <field name="description"       type="varchar(80)"      null="no"></field>
+    <field name="role_id" type="char(16)" null="no"/>
+    <field name="description" type="varchar(80)" null="no"/>
     <index name="primary_role_index" unique="yes">
         role_id
     </index>
@@ -137,8 +136,8 @@
         This table ties roles to menu items. This allows us to dynamically
         create roles to provide different functionality groups.
     </info>
-    <field name="role_id"           type="char(16)"         null="no"></field>
-    <field name="menu_item_id"      type="char(16)"         null="no"></field>
+    <field name="role_id" type="char(16)" null="no"/>
+    <field name="menu_item_id" type="char(16)" null="no"/>
     <index name="primary_role_menu_item_index" unique="yes">
         role_id, menu_item_id
     </index>
@@ -210,14 +209,14 @@
         a user has the menu item attached to them through a role, then the user
         has access to any item security tagged with that menu item.
     </info>
-    <field name="menu_item_id"      type="char(16)"         null="no"></field>
-    <field name="parent_id"         type="char(16)"         null="yes"></field>
-    <field name="url_target"        type="varchar(255)"     null="no"></field>
-    <field name="item_text"         type="varchar(64)"      null="no"></field>
-    <field name="image_open"        type="varchar(255)"     null="no"></field>
-    <field name="image_closed"      type="varchar(255)"     null="no"></field>
-    <field name="status_line"       type="varchar(80)"      null="no"></field>
-    <field name="menu_order"        type="int"              null="no"></field>
+    <field name="menu_item_id" type="char(16)" null="no"/>
+    <field name="parent_id" type="char(16)" null="yes"/>
+    <field name="url_target" type="varchar(255)" null="no"/>
+    <field name="item_text" type="varchar(64)" null="no"/>
+    <field name="image_open" type="varchar(255)" null="no"/>
+    <field name="image_closed" type="varchar(255)" null="no"/>
+    <field name="status_line" type="varchar(80)" null="no"/>
+    <field name="menu_order" type="int" null="no"/>
     <index name="primary_menu_item_index" unique="yes">
         menu_item_id
     </index>
@@ -266,7 +265,7 @@
         insert into menu_items values( 'BB_NewType', 'BugBaseAdmin', '/bugbase/admin/newtype/index.html', 'New Type Code', '/icons/menu/bugbase/newtype.gif', '/icons/menu/bugbase/newtype.gif', 'Add a new type code to this project.', 485 );
         insert into menu_items values( 'BB_ManField', 'BugBaseAdmin', '/bugbase/admin/manfield/index.html', 'Manage Extra Fields', '/icons/menu/bugbase/manfield.gif', '/icons/menu/bugbase/manfield.gif', 'Manage the extra data fields for this project.', 486 );
         insert into menu_items values( 'BB_NewField', 'BugBaseAdmin', '/bugbase/admin/newfield/index.html', 'New Extra Field', '/icons/menu/bugbase/newfield.gif', '/icons/menu/bugbase/newfield.gif', 'Add an extra data field to this project.', 487 );
-        insert into menu_items values( 'BB_Workflow', 'BugBaseAdmin', '/bugbase/admin/Workflow/index.html', 'Workflow Managment', '/icons/menu/bugbase/Workflow.gif', '/icons/menu/bugbase/Workflow.gif', 'Change how bug assignments change automatically.', 488 );
+        insert into menu_items values( 'BB_Workflow', 'BugBaseAdmin', '/bugbase/admin/Workflow/index.html', 'Workflow Management', '/icons/menu/bugbase/Workflow.gif', '/icons/menu/bugbase/Workflow.gif', 'Change how bug assignments change automatically.', 488 );
 
         insert into menu_items values( 'ManageUsers', 'Root', ' ', 'Manage Users', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'User Management tools', 700 );
         insert into menu_items values( 'NewUser', 'ManageUsers', '/admin/newuser/index.html', 'New User', '/icons/menu/newuser.gif', '/icons/menu/newuser.gif', 'Add a new user.', 710 );
@@ -279,7 +278,7 @@
         insert into menu_items values( 'SysAdmin', 'Root', ' ', 'System Administration', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'System Administration tools.', 800 );
         insert into menu_items values( 'DBBackup', 'SysAdmin', '/sysadmin/DBBackup/index.html', 'Database Backup', '/icons/menu/dbbackup.gif', '/icons/menu/dbbackup.gif', 'Set up database backup schedule.', 810 );
         insert into menu_items values( 'SysStat', 'SysAdmin', '/sysadmin/SysStat/index.html', 'System Status', '/icons/menu/sysstat.gif', '/icons/menu/sysstat.gif', 'Show the current system status.', 820 );
-        insert into menu_items values( 'WhoIs', 'SysAdmin', '/sysadmin/WhoIs/index.html', 'Who Is Online', '/icons/menu/whois.gif', '/icons/menu/whois.gif', 'Shows who is currently logged intot the system.', 830 );
+        insert into menu_items values( 'WhoIs', 'SysAdmin', '/sysadmin/WhoIs/index.html', 'Who Is Online', '/icons/menu/whois.gif', '/icons/menu/whois.gif', 'Shows who is currently logged into the system.', 830 );
         insert into menu_items values( 'CloseSys', 'SysAdmin', '/sysadmin/CloseSys/index.html', 'Allow/Disallow Logins', '/icons/menu/closesys.gif', '/icons/menu/closesys.gif', 'Allows the administrator to close and reopen the system for maintenance.', 840 );
 
 
@@ -296,9 +295,9 @@
         This table ties a role to the permissions that it controls.
         Permissions are a level of control "within" a menu item.
     </info>
-    <field name="role_id"           type="char(16)"         null="no"></field>
-    <field name="menu_item_id"      type="char(16)"         null="no"></field>
-    <field name="permission_id"     type="char(16)"         null="no"></field>
+    <field name="role_id" type="char(16)" null="no"/>
+    <field name="menu_item_id" type="char(16)" null="no"/>
+    <field name="permission_id" type="char(16)" null="no"/>
     <index name="primary_role_perm_index" unique="yes">
         role_id, menu_item_id, permission_id
     </index>
@@ -326,9 +325,9 @@
         Without permissions, you'd have to define two completely
         different web pages and menu-items.
     </info>
-    <field name="menu_item_id"      type="char(16)"         null="no"></field>
-    <field name="permission_id"     type="char(16)"         null="no"></field>
-    <field name="description"       type="varchar(80)"      null="no"></field>
+    <field name="menu_item_id" type="char(16)" null="no"/>
+    <field name="permission_id" type="char(16)" null="no"/>
+    <field name="description" type="varchar(80)" null="no"/>
     <index name="primary_permission_index" unique="yes">
         menu_item_id, permission_id
     </index>
@@ -350,9 +349,9 @@
         can include information like how many times they've logged in,
         how many reports they've run or similar count-related items.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="metric_id"         type="char(16)"         null="no"></field>
-    <field name="metric_count"      type="numeric(16,0)"    null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_count" type="numeric(16,0)" null="no"/>
     <index name="primary_user_metrics_index" unique="yes">
         user_id, metric_id
     </index>
@@ -367,8 +366,8 @@
         for a user. This allows us to tie a descriptive name to a 
         metric when they are viewed through the system.
     </info>
-    <field name="metric_id"         type="char(16)"         null="no"></field>
-    <field name="metric_desc"       type="varchar(255)"     null="no"></field>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_desc" type="varchar(255)" null="no"/>
     <index name="primary_user_metric_desc_index" unique="yes">
         metric_id
     </index>
@@ -381,9 +380,9 @@
         report layout is stored in preferences, some users had counts
         of well over 2000 preference items.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="pref_name"         type="varchar(128)"     null="no"></field>
-    <field name="pref_value"        type="varchar(255)"     null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="pref_name" type="varchar(128)" null="no"/>
+    <field name="pref_value" type="varchar(255)" null="no"/>
     <index name="primary_user_pref_index" unique="yes">
         user_id, pref_name
     </index>
@@ -431,8 +430,8 @@
         is actually nothing preventing a single user from belonging to
         multiple groups.
     </info>
-    <field name="group_id"          type="char(16)"         null="no"></field>
-    <field name="user_id"           type="char(16)"         null="no"></field>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
     <index name="primary_group_members_index" unique="yes">
         group_id, user_id
     </index>
@@ -451,8 +450,8 @@
         also be assigned roles through the user_role table and thus
         have more roles than a regular group member.
     </info>
-    <field name="group_id"          type="char(16)"         null="no"></field>
-    <field name="role_id"           type="char(16)"         null="no"></field>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="role_id" type="char(16)" null="no"/>
     <index name="primary_group_roles_index" unique="yes">
         group_id, role_id
     </index>
@@ -476,9 +475,9 @@
         duplicated to the user when they are added to the system. After
         that point, their preferences become their own.
     </info>
-    <field name="group_id"          type="char(16)"         null="no"></field>
-    <field name="pref_name"         type="varchar(128)"     null="no"></field>
-    <field name="pref_value"        type="varchar(255)"     null="no"></field>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="pref_name" type="varchar(128)" null="no"/>
+    <field name="pref_value" type="varchar(255)" null="no"/>
     <index name="primary_group_pref_index" unique="yes">
         group_id, pref_name
     </index>
@@ -492,9 +491,9 @@
         This table stores informational metrics about the group. The
         information is limited to simple counts.
     </info>
-    <field name="group_id"          type="char(16)"         null="no"></field>
-    <field name="metric_id"         type="char(16)"         null="no"></field>
-    <field name="metric_count"      type="numeric(16,0)"    null="no"></field>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_count" type="numeric(16,0)" null="no"/>
     <index name="primary_group_metrics_index" unique="yes">
         group_id, metric_id
     </index>
@@ -506,8 +505,8 @@
         to a group. This allows us to provide a human-readable display
         of metrics.
     </info>
-    <field name="metric_id"         type="char(16)"         null="no"></field>
-    <field name="metric_desc"       type="varchar(255)"     null="no"></field>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_desc" type="varchar(255)" null="no"/>
     <index name="primary_grp_metric_desc_index" unique="yes">
         metric_id
     </index>
@@ -519,9 +518,9 @@
         description. Since only one metric value is available for each
         type of metric.
     </info>
-    <field name="metric_id"         type="char(16)"         null="no"></field>
-    <field name="metric_count"      type="numeric(16,0)"    null="no"></field>
-    <field name="metric_desc"       type="varchar(255)"     null="no"></field>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_count" type="numeric(16,0)" null="no"/>
+    <field name="metric_desc" type="varchar(255)" null="no"/>
     <index name="primary_metrics_index" unique="yes">
         metric_id
     </index>
@@ -537,13 +536,13 @@
         The event log stores information on events on the system. It
         acts as a type of audit-log for the system and is only available
         to administrators with various filter levels to keep the information
-        at a managable level.
+        at a manageable level.
     </info>
-    <field name="event_id"          type="numeric(16,0)"    null="no"></field>
-    <field name="event_code"        type="int"              null="no"></field>
-    <field name="time_stamp"        type="datetime"         null="no"></field>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="description"       type="varchar(255)"     null="no"></field>
+    <field name="event_id" type="numeric(16,0)" null="no"/>
+    <field name="event_code" type="int" null="no"/>
+    <field name="time_stamp" type="datetime" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="description" type="varchar(255)" null="no"/>
     <index name="primary_event_log_index" unique="yes">
         event_id
     </index>
@@ -553,7 +552,7 @@
     <index name="tertiary_event_log_index" unique="no">
         time_stamp, event_code, user_id, event_id
     </index>
-    <index name="quarternary_event_log_index" unique="no">
+    <index name="quaternary_event_log_index" unique="no">
         event_code, time_stamp, event_id
     </index>
     <index name="pentiary_event_log_index" unique="no">
@@ -570,8 +569,8 @@
         codes are usually numeric and do not provide a human-readable version
         of the event information.
     </info>
-    <field name="event_code"        type="int"              null="no"></field>
-    <field name="code_desc"         type="varchar(255)"     null="no"></field>
+    <field name="event_code" type="int" null="no"/>
+    <field name="code_desc" type="varchar(255)" null="no"/>
     <index name="primary_event_codes_index" unique="yes">
         event_code
     </index>
@@ -607,10 +606,10 @@
         structure that the user uses to store previously generated
         reports in.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="folder_id"         type="int"              null="no"></field>
-    <field name="parent_folder"     type="int"              null="no"></field>
-    <field name="folder_name"       type="varchar(80)"      null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="parent_folder" type="int" null="no"/>
+    <field name="folder_name" type="varchar(80)" null="no"/>
     <index name="primary_report_folder_index" unique="yes">
         user_id, folder_id
     </index>
@@ -625,13 +624,13 @@
         the user has generated. It also contains tracking information
         so the background server can clean-up old reports.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="folder_id"         type="int"              null="no"></field>
-    <field name="report_id"         type="int"              null="no"></field>
-    <field name="storage_id"        type="int"              null="no"></field>
-    <field name="report_title"      type="varchar(255)"     null="no"></field>
-    <field name="last_accessed"     type="datetime"         null="no"></field>
-    <field name="status"            type="int"              null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="report_id" type="int" null="no"/>
+    <field name="storage_id" type="int" null="no"/>
+    <field name="report_title" type="varchar(255)" null="no"/>
+    <field name="last_accessed" type="datetime" null="no"/>
+    <field name="status" type="int" null="no"/>
     <index name="primary_report_index" unique="yes">
         user_id, folder_id, report_id
     </index>
@@ -649,11 +648,11 @@
         stored. Note that storages could actually be on other servers, in
         which case, the file will have to be retrieved before being displayed.
     </info>
-    <field name="storage_id"        type="int"              null="no"></field>
-    <field name="report_name"       type="varchar(80)"      null="no"></field>
-    <field name="generation_date"   type="datetime"         null="no"></field>
-    <field name="generation_server" type="varchar(80)"      null="no"></field>
-    <field name="data_file_name"    type="varchar(255)"     null="no"></field>
+    <field name="storage_id" type="int" null="no"/>
+    <field name="report_name" type="varchar(80)" null="no"/>
+    <field name="generation_date" type="datetime" null="no"/>
+    <field name="generation_server" type="varchar(80)" null="no"/>
+    <field name="data_file_name" type="varchar(255)" null="no"/>
     <index name="primary_storage_data_index" unique="yes">
         storage_id
     </index>
@@ -684,15 +683,15 @@
         the time again exceeds 24 hours, the report is marked as a status of 5, "Dead",
         an e-mail is sent, and the run_flag is set to -1. 
     </info>
-    <field name="stored_report_id"      type="int"          null="no"></field>
-    <field name="last_run"              type="datetime"     null="no"></field>
-    <field name="interval_minutes"      type="int"          null="no"></field>
-    <field name="next_run"              type="datetime"     null="no"></field>
-    <field name="run_count"             type="int"          null="no"></field>
-    <field name="run_count_remaining"   type="int"          null="no"></field>
-    <field name="run_flag"              type="int"          null="no"></field>
-    <field name="run_start_time"        type="datetime"     null="no"></field>
-    <field name="status"                type="int"          null="no"></field>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="last_run" type="datetime" null="no"/>
+    <field name="interval_minutes" type="int" null="no"/>
+    <field name="next_run" type="datetime" null="no"/>
+    <field name="run_count" type="int" null="no"/>
+    <field name="run_count_remaining" type="int" null="no"/>
+    <field name="run_flag" type="int" null="no"/>
+    <field name="run_start_time" type="datetime" null="no"/>
+    <field name="status" type="int" null="no"/>
     <index name="primary_sched_rpt_q_index" unique="no">
         stored_report_id, last_run
     </index>
@@ -710,12 +709,12 @@
         The report identifier is the ReportFactory code used to build
         the correct report object.
     </info>
-    <field name="stored_report_id"  type="int"              null="no"></field>
-    <field name="report_identifier" type="varchar(80)"      null="no"></field>
-    <field name="permissions"       type="char(9)"          null="no"></field>
-    <field name="last_used"         type="datetime"         null="no"></field>
-    <field name="owner_user_id"     type="char(16)"         null="no"></field>
-    <field name="group_id"          type="char(16)"         null="no"></field>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="report_identifier" type="varchar(80)" null="no"/>
+    <field name="permissions" type="char(9)" null="no"/>
+    <field name="last_used" type="datetime" null="no"/>
+    <field name="owner_user_id" type="char(16)" null="no"/>
+    <field name="group_id" type="char(16)" null="no"/>
     <index name="primary_stored_rpt_index" unique="yes">
         stored_report_id
     </index>
@@ -733,9 +732,9 @@
         report_folders table that the receiving user wants their copy 
         of the report put into.
     </info>
-    <field name="stored_report_id"  type="int"              null="no"></field>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="folder_id"         type="int"              null="no"></field>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
     <index name="primary_stored_rpt_recip_index" unique="yes">
         stored_report_id, user_id
     </index>
@@ -751,9 +750,9 @@
         you would normally find in the HTML form. This makes it very
         simple to build a scheduled report generator.
     </info>
-    <field name="stored_report_id"  type="int"              null="no"></field>
-    <field name="parameter_name"    type="varchar(80)"      null="no"></field>
-    <field name="parameter_value"   type="varchar(80)"      null="no"></field>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="parameter_name" type="varchar(80)" null="no"/>
+    <field name="parameter_value" type="varchar(80)" null="no"/>
     <index name="primary_report_param_index" unique="yes">
         stored_report_id, parameter_name
     </index>
@@ -765,10 +764,10 @@
         aside for future generation. Each folder can contain multiple stored
         reports and each folder can contain other folders as well.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="folder_id"         type="int"              null="no"></field>
-    <field name="parent_folder"     type="int"              null="no"></field>
-    <field name="folder_name"       type="varchar(80)"      null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="parent_folder" type="int" null="no"/>
+    <field name="folder_name" type="varchar(80)" null="no"/>
     <index name="primary_stored_folder_index" unique="yes">
         user_id, folder_id
     </index>
@@ -784,10 +783,10 @@
         report if desired. Reports can be shared on a user, group, or universal
         level.
     </info>
-    <field name="user_id"           type="char(16)"         null="no"></field>
-    <field name="folder_id"         type="int"              null="no"></field>
-    <field name="stored_report_id"  type="int"              null="no"></field>
-    <field name="description"       type="varchar(80)"      null="no"></field>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="description" type="varchar(80)" null="no"/>
     <index name="primary_fldr_cntnts_index" unique="yes">
         user_id, folder_id, stored_report_id
     </index>
@@ -805,16 +804,16 @@
         there's no "failover" to another file server. Nor is there support for
         writing uploaded files to two or more file servers. Maybe in Version 4?
     </info>
-    <field name="file_id"           type="numeric(16,0)"    null="no"></field>
-    <field name="file_path"         type="varchar(512)"     null="no"></field>
-    <field name="file_name"         type="varchar(256)"     null="no"></field>
-    <field name="file_description"  type="varchar(80)"      null="no"></field>
-    <field name="creator"           type="char(16)"         null="no"></field>
-    <field name="creation_date"     type="datetime"         null="no"></field>
-    <field name="modifier"          type="char(16)"         null="no"></field>
-    <field name="last_modified"     type="datetime"         null="no"></field>
-    <field name="mime_type"         type="varchar(80)"      null="no"></field>
-    <field name="file_length"       type="int"              null="no"></field>
+    <field name="file_id" type="numeric(16,0)" null="no"/>
+    <field name="file_path" type="varchar(512)" null="no"/>
+    <field name="file_name" type="varchar(256)" null="no"/>
+    <field name="file_description" type="varchar(80)" null="no"/>
+    <field name="creator" type="char(16)" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="modifier" type="char(16)" null="no"/>
+    <field name="last_modified" type="datetime" null="no"/>
+    <field name="mime_type" type="varchar(80)" null="no"/>
+    <field name="file_length" type="int" null="no"/>
     <index name="file_storage_primary_index" unique="yes">
         file_id
     </index>
@@ -833,15 +832,15 @@
         system. For example, Project Everest was the code name for the 
         initial BaseCamp development. 
     </info>
-    <field name="project_id"        type="numeric(16,0)"    null="no"></field>
-    <field name="project_name"      type="varchar(80)"      null="no"></field>
-    <field name="project_desc"      type="varchar(256)"     null="no"></field>
-    <field name="manager_id"        type="char(16)"         null="no"></field>
-    <field name="creation_date"     type="datetime"         null="no"></field>
-    <field name="creator"           type="char(16)"         null="no"></field>
-    <field name="released_version"  type="numeric(16,0)"    null="yes"></field>
-    <field name="dev_version"       type="numeric(16,0)"    null="no"></field>
-    <field name="release_date"      type="datetime"         null="no"></field>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="project_name" type="varchar(80)" null="no"/>
+    <field name="project_desc" type="varchar(256)" null="no"/>
+    <field name="manager_id" type="char(16)" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="creator" type="char(16)" null="no"/>
+    <field name="released_version" type="numeric(16,0)" null="yes"/>
+    <field name="dev_version" type="numeric(16,0)" null="no"/>
+    <field name="release_date" type="datetime" null="no"/>
     <index name="project_primary_index" unique="yes">
         project_id
     </index>
@@ -909,11 +908,11 @@
         This table stores information about a team. Teams are assigned to
         work levels within a project.
     </info>
-    <field name="project_id"        type="numeric(16,0)"    null="no"></field>
-    <field name="team_id"           type="numeric(16,0)"    null="no"></field>
-    <field name="team_name"         type="varchar(40)"      null="no"></field>
-    <field name="team_desc"         type="varchar(256)"     null="no"></field>
-    <field name="team_lead"         type="char(16)"         null="no"></field>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="team_id" type="numeric(16,0)" null="no"/>
+    <field name="team_name" type="varchar(40)" null="no"/>
+    <field name="team_desc" type="varchar(256)" null="no"/>
+    <field name="team_lead" type="char(16)" null="no"/>
     <index name="team_primary_index" unique="yes">
         project_id, team_name
     </index>
@@ -936,8 +935,8 @@
         This spin table ties users to teams. Any user can belong to multiple
         teams, and, obviously, any team can have multiple users.
     </info>
-    <field name="team_id"           type="numeric(16,0)"    null="no"></field>
-    <field name="user_id"           type="char(16)"         null="no"></field>
+    <field name="team_id" type="numeric(16,0)" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
     <index name="team_members_primary_index" unique="yes">
         team_id,user_id
     </index>
@@ -979,16 +978,16 @@
         Flag 2-16:
                 Reserved 
     </info>
-    <field name="req_id"            type="numeric(16,0)"    null="no"></field>
-    <field name="req_number"        type="numeric(16,0)"    null="no"></field>
-    <field name="req_summary"       type="varchar(80)"      null="no"></field>
-    <field name="req_description"   type="varchar(256)"     null="no"></field>
-    <field name="req_full_desc"     type="numeric(16,0)"    null="no"></field>
-    <field name="creator"           type="char(16)"         null="no"></field>
-    <field name="creation_date"     type="datetime"         null="no"></field>
-    <field name="modifier"          type="char(16)"         null="no"></field>
-    <field name="last_modified"     type="datetime"         null="no"></field>
-    <field name="flags"             type="char(16)"         null="no"></field>
+    <field name="req_id" type="numeric(16,0)" null="no"/>
+    <field name="req_number" type="numeric(16,0)" null="no"/>
+    <field name="req_summary" type="varchar(80)" null="no"/>
+    <field name="req_description" type="varchar(256)" null="no"/>
+    <field name="req_full_desc" type="numeric(16,0)" null="no"/>
+    <field name="creator" type="char(16)" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="modifier" type="char(16)" null="no"/>
+    <field name="last_modified" type="datetime" null="no"/>
+    <field name="flags" type="char(16)" null="no"/>
     <index name="requirement_primary_index" unique="yes">
         req_id
     </index>
@@ -1033,9 +1032,9 @@
         priorities within a project, so, we associate a priority with 
         each entry in the spin table. So there, we added value. 
     </info>
-    <field name="project_id"        type="numeric(16,0)"    null="no"></field>
-    <field name="req_id"            type="numeric(16,0)"    null="no"></field>
-    <field name="priority"          type="char(16)"         null="no"></field>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="req_id" type="numeric(16,0)" null="no"/>
+    <field name="priority" type="char(16)" null="no"/>
     <index name="project_reqs_primary_index" unique="yes">
         project_id,req_id
     </index>
@@ -1053,11 +1052,11 @@
         Also, each version can have a name. The 2.2 version of BaseCamp
         was called NextSteppe during development.
     </info>
-    <field name="version_id"        type="numeric(16,0)"    null="no"></field>
-    <field name="version_number"    type="char(16)"         null="no"></field>
-    <field name="version_name"      type="char(40)"         null="no"></field>
-    <field name="manager"           type="char(16)"         null="no"></field>
-    <field name="status"            type="numeric(4,0)"     null="no"></field> 
+    <field name="version_id" type="numeric(16,0)" null="no"/>
+    <field name="version_number" type="char(16)" null="no"/>
+    <field name="version_name" type="char(40)" null="no"/>
+    <field name="manager" type="char(16)" null="no"/>
+    <field name="status" type="numeric(4,0)" null="no"/>
     <index name="version_primary_index" unique="yes">
         version_id
     </index>
@@ -1143,15 +1142,15 @@
         Requirements Complete, Design Complete, Code Complete, Test Complete, and
         the Released milestone.
     </info>
-    <field name="milestone_id"      type="numeric(16,0)"    null="no"></field>
-    <field name="milestone_name"    type="char(80)"         null="no"></field>
-    <field name="manager"           type="char(16)"         null="no"></field>
-    <field name="status"            type="numeric(4,0)"     null="no"></field> 
+    <field name="milestone_id" type="numeric(16,0)" null="no"/>
+    <field name="milestone_name" type="char(80)" null="no"/>
+    <field name="manager" type="char(16)" null="no"/>
+    <field name="status" type="numeric(4,0)" null="no"/>
     <field name="targeted_start"    type="datetime"         null="no"/>
     <field name="targeted_end"      type="datetime"         null="no"/>
     <field name="actual_start"      type="datetime"         null="yes"/>
-    <field name="lockdown_date"     type="datetime"         null="yes"></field>
-    <field name="verified_date"     type="datetime"         null="yes"></field>
+    <field name="lockdown_date" type="datetime" null="yes"/>
+    <field name="verified_date" type="datetime" null="yes"/>
     <index name="milestone_primary_index" unique="yes">
         milestone_id
     </index>
@@ -1236,25 +1235,25 @@
         This table stores the defects associated with the BugBase reporting
         system. Each defect has an audit trail in the bug_comments table.
     </info>
-    <field name="bug_id"                type="numeric(16,0)"    null="no"></field>
-    <field name="project_id"            type="numeric(16,0)"    null="no"></field>
-    <field name="bug_number"            type="numeric(16,0)"    null="no"></field>
-    <field name="bug_title"             type="char(255)"        null="no"></field>
-    <field name="bug_type"              type="int"              null="no"></field>
-    <field name="bug_priority"          type="int"              null="no"></field>
-    <field name="bug_status"            type="int"              null="no"></field>
-    <field name="bug_owner"             type="char(16)"         null="no"></field>
-    <field name="bug_assigned"          type="char(16)"         null="no"></field>
-    <field name="bug_created"           type="datetime"         null="no"></field>
-    <field name="bug_last_changed"      type="datetime"         null="no"></field>
-    <field name="bug_reproduced"        type="int"              null="no"></field>
-    <field name="bug_est_time_to_fix"   type="numeric(16,0)"    null="yes"></field>
-    <field name="bug_act_time_to_fix"   type="numeric(16,0)"    null="yes"></field>
-    <field name="bug_locked_by"         type="char(16)"         null="yes"></field>
-    <field name="bug_locked"            type="int"              null="no"></field>
-    <field name="bug_closed_by"         type="char(16)"         null="yes"></field>
-    <field name="bug_closed"            type="int"              null="no"></field>
-    <field name="bug_closed_on"         type="datetime"         null="yes"></field>
+    <field name="bug_id" type="numeric(16,0)" null="no"/>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="bug_number" type="numeric(16,0)" null="no"/>
+    <field name="bug_title" type="char(255)" null="no"/>
+    <field name="bug_type" type="int" null="no"/>
+    <field name="bug_priority" type="int" null="no"/>
+    <field name="bug_status" type="int" null="no"/>
+    <field name="bug_owner" type="char(16)" null="no"/>
+    <field name="bug_assigned" type="char(16)" null="no"/>
+    <field name="bug_created" type="datetime" null="no"/>
+    <field name="bug_last_changed" type="datetime" null="no"/>
+    <field name="bug_reproduced" type="int" null="no"/>
+    <field name="bug_est_time_to_fix" type="numeric(16,0)" null="yes"/>
+    <field name="bug_act_time_to_fix" type="numeric(16,0)" null="yes"/>
+    <field name="bug_locked_by" type="char(16)" null="yes"/>
+    <field name="bug_locked" type="int" null="no"/>
+    <field name="bug_closed_by" type="char(16)" null="yes"/>
+    <field name="bug_closed" type="int" null="no"/>
+    <field name="bug_closed_on" type="datetime" null="yes"/>
     <index name="bugbase_primary_index" unique="yes">
         bug_id
     </index>
@@ -1404,10 +1403,10 @@
         This table stores the comments attached to the bugs. Each comment
         is tagged with a time/date and an author.
     </info>
-    <field name="bug_id"                type="numeric(16,0)"    null="no"></field>
-    <field name="author"                type="char(16)"         null="no"></field>
-    <field name="modified_on"           type="datetime"         null="no"></field>
-    <field name="bug_comments"          type="text"             null="yes"></field>
+    <field name="bug_id" type="numeric(16,0)" null="no"/>
+    <field name="author" type="char(16)" null="no"/>
+    <field name="modified_on" type="datetime" null="no"/>
+    <field name="bug_comments" type="text" null="yes"/>
     <index name="bug_comments_primary" unique="no">
         bug_id,author,modified_on
     </index>
@@ -1420,9 +1419,9 @@
     <info>
         This table stores the files attached to the bugs.
     </info>
-    <field name="bug_id"        type="numeric(16,0)"    null="no"></field>
-    <field name="file_id"       type="numeric(16,0)"    null="no"></field>
-    <field name="reason"        type="varchar(80)"      null="yes"></field>
+    <field name="bug_id" type="numeric(16,0)" null="no"/>
+    <field name="file_id" type="numeric(16,0)" null="no"/>
+    <field name="reason" type="varchar(80)" null="yes"/>
     <index name="bug_files_primary" unique="no">
         bug_id,file_id
     </index>

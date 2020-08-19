@@ -49,6 +49,8 @@ namespace IASLib
 
             CXMLIndex  *GetIndex( void ) { return &m_xiIndex; }
 
+            CString     toString( int indent = 0 );
+
         private:
             enum TagReturns
             {
@@ -59,7 +61,7 @@ namespace IASLib
             };
 
             TagReturns  StartTag( CStream &oStream, CXMLElement *pTag );
-            TagReturns  StartProperty( CStream &oStream, CXMLElement *pTag, CString strName );
+            TagReturns  StartProperty( CStream &oStream, CXMLElement *pTag, const CString& strName );
     };
 
 }; // end of Namespace IASLib
