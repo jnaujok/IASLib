@@ -116,6 +116,12 @@ namespace IASLib
             IASLIB_THROW_XML_EXCEPTION( "Stream ended with an unclosed tag." )
         }
 
+        if ( strCurrentData.GetLength() > 0 )
+        {
+            pData = new CXMLData(strCurrentData);
+            m_xiIndex.AddData(pData);
+        }
+
         return true;
     }
 

@@ -10,22 +10,55 @@ bool testMemoryStream() {
     {
         std::cout << "TESTING XMLDocument from In-Memory Stream" << std::endl;
 
-        CString strXML = "<?xml version=1.0 encoding=UTF-8?><?xml-stylesheet type='text/xsl' href='_UpgradeReport_Files/UpgradeReport.xslt'?>\n"
-                         "<UpgradeLog>\n<Properties>\n<Property Name=\"Solution\" Value=\"BaseCamp2\">"
-                         "</Property>\n</Properties>\n</UpgradeLog>\n<Dummy/>\n";
+        CString strXML = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                         "<?xml-stylesheet type=\"text/xsl\" href=\"_UpgradeReport_Files/UpgradeReport.xslt\"?>"
+                         "<UpgradeLog><Properties>"
+                         "<Property Name=\"Solution\" Value=\"BaseCamp2\">A Useful Solution for Software Management</Property>"
+                         "</Properties>"
+                         "</UpgradeLog>"
+                         "<Dummy/>";
+        CString strCompareIndent = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                                   "<?xml-stylesheet type=\"text/xsl\" href=\"_UpgradeReport_Files/UpgradeReport.xslt\"?>\n"
+                                   "<UpgradeLog>\n"
+                                   "    <Properties>\n"
+                                   "        <Property Name=\"Solution\" Value=\"BaseCamp2\">\n"
+                                   "            A Useful Solution for Software Management\n"
+                                   "        </Property>\n"
+                                   "    </Properties>\n"
+                                   "</UpgradeLog>\n"
+                                   "<Dummy/>\n";
         CStringStream osInput1( strXML );
 
         CXMLDocument xDoc( &osInput1 );
-
         CXMLIndex *pIndex = xDoc.GetIndex();
 
+        // -- FORMATTED OUTPUT --
         std::cout << "Index loaded-> " << pIndex->GetElementCount() << " elements found -- Should be 4." << std::endl;
-
         auto outDoc = xDoc.toString( 4 );
+        std::cout << "---- TOP ----\n" << (const char *)outDoc << "---- END ----\n" << std::endl;
+        if ( outDoc == strCompareIndent )
+        {
+            std::cout << "SUCCESS. Formatted output as expected." << std::endl;
+        }
+        else
+        {
+            std::cerr << "FAILURE: Output was not formatted as expected." << std::endl;
+        }
 
-        std::cout << (const char *)outDoc << std::endl << std::endl;
+        // -- ORIGINAL FORMAT --
+        outDoc = xDoc.toString();
+        std::cout << "---- TOP ----\n" << (const char *)outDoc << "---- END ----\n" << std::endl;
 
-        std::cout << "TESTING COMPLETE" << std::endl << std::endl;
+        if ( outDoc == strXML )
+        {
+            std::cout << "SUCCESS. Formatted output as expected." << std::endl;
+        }
+        else
+        {
+            std::cerr << "FAILURE: Output was not formatted as expected." << std::endl;
+        }
+
+        std::cout << "Memory Stream Testing complete." << std::endl << std::endl;
     }
     catch (CXMLException &oE )
     {
@@ -78,7 +111,7 @@ int main( int argc, char *argv[] )
 #endif
 {
     testMemoryStream();
-    testFileStream(argc,argv);
+   // testFileStream(argc,argv);
 
 
 /*

@@ -602,12 +602,18 @@ namespace IASLib
     }
 
     CString CXMLElement::toString( int offset, int indent) const {
+        bool hadInternalData = false;
         CString element;
+        element = element.Pad( offset, ' ', false );
+
         if ( m_bCommentTag )
         {
             element += "<!--";
             element += GetData();
             element += "-->";
+            if ( indent > 0 ){
+                element += "\n";
+            }
         }
         else if ( m_bMetaTag )
         {
@@ -623,6 +629,9 @@ namespace IASLib
                 element += "\"";
             }
             element += "?>";
+            if ( indent > 0 ){
+                element += "\n";
+            }
         }
         else
         {
@@ -638,24 +647,43 @@ namespace IASLib
                 element += "\"";
             }
             if ( m_bSelfClosingTag ){
-                element += "/";
-            }
-            element += ">";
-            if ( ( ! m_bSelfClosingTag ) && ( GetSubElementCount() > 0 )) {
-                for ( int nSub = 0; nSub < GetSubElementCount(); nSub++ ) {
-                    auto chunk = GetSubElement(nSub);
-                    if ( indent != 0 ) element += "\n";
-                    element += chunk->toString(offset + indent, indent);
-
+                element += "/>";
+                if ( indent > 0 ){
+                    element += "\n";
                 }
-
             }
-        }
-        if ( m_bHasClosingTag )
-        {
-            element += "</";
-            element += GetName();
-            element += ">";
+            else {
+                element += ">";
+            }
+
+            if ( ( ! m_bSelfClosingTag ) && ( m_aSubElements.Length() > 0 )) {
+                for (int nSub = 0; nSub < m_aSubElements.Length(); nSub++ )
+                {
+                    auto chunk = (CXMLChunk *)m_aSubElements[nSub];
+                    CString temp = chunk->toString(offset + indent, indent);
+                    if ( (indent != 0 ) && ( chunk->IsElement() || ( chunk->IsData() && temp.GetLength() > 0 && !hadInternalData ) ) )
+                    {
+                        element += "\n";
+                        if ( chunk->IsData() ) {
+                            hadInternalData = true;
+                        }
+                    }
+                    element += temp;
+                }
+            }
+            if ( m_bHasClosingTag )
+            {
+                if ( indent > 0 && hadInternalData ) {
+                    element += "\n";
+                }
+                element += CString("").Pad( offset );
+                element += "</";
+                element += GetName();
+                element += ">";
+                if ( indent > 0 ){
+                    element += "\n";
+                }
+            }
         }
 
         if ( offset > 0 ) {

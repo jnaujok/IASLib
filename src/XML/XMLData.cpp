@@ -33,6 +33,18 @@ namespace IASLib
 
     CString CXMLData::toString(int offset, int indent ) const
     {
-        return m_strData.Pad(offset, ' ', false );
+        CString temp = m_strData;
+        temp.Trim();
+        if (( indent > 0 ) && ( temp.GetLength() == 0 ) )
+        {
+            return temp;
+        }
+        else if ( indent > 0 )
+        {
+            CString temp = m_strData;
+            temp.Replace( "\n", "" );
+            return temp.Pad( offset + temp.GetLength(), ' ', false );
+        }
+        return m_strData.Pad(offset + m_strData.GetLength(), ' ', false );
     }
 } // namespace IASLib
