@@ -602,7 +602,7 @@ namespace IASLib
     }
 
     CString CXMLElement::toString( int offset, int indent) const {
-        bool hadInternalData = false;
+        bool hadInternalData;
         CString element;
         element = element.Pad( offset, ' ', false );
 
@@ -635,6 +635,7 @@ namespace IASLib
         }
         else
         {
+            hadInternalData = false;
             element += "<";
             element += GetName();
             for ( int nProp = 0; nProp < GetPropertyCount(); nProp ++ )
@@ -648,9 +649,6 @@ namespace IASLib
             }
             if ( m_bSelfClosingTag ){
                 element += "/>";
-                if ( indent > 0 ){
-                    element += "\n";
-                }
             }
             else {
                 element += ">";
@@ -673,9 +671,6 @@ namespace IASLib
             }
             if ( m_bHasClosingTag )
             {
-                if ( indent > 0 && hadInternalData ) {
-                    element += "\n";
-                }
                 element += CString("").Pad( offset );
                 element += "</";
                 element += GetName();

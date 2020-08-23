@@ -41,9 +41,7 @@ namespace IASLib
         }
         else if ( indent > 0 )
         {
-            CString temp = m_strData;
-            temp.Replace( "\n", "" );
-            return temp.Pad( offset + temp.GetLength(), ' ', false );
+            return temp.Pad( offset + temp.GetLength(), ' ', false ) + "\n";
         }
         return m_strData.Pad(offset + m_strData.GetLength(), ' ', false );
     }

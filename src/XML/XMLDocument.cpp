@@ -142,6 +142,10 @@ namespace IASLib
             auto strOut = pChunk->toString(0, indent );
             strRetVal += strOut;
         }
+        if ( ( indent > 0 ) && ( strRetVal[strRetVal.GetLength() - 1] != '\n' ) ) {
+            strRetVal += '\n';
+        }
+
         return strRetVal;
     }
 

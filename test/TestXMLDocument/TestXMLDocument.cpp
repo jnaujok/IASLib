@@ -29,34 +29,27 @@ bool testMemoryStream() {
                                    "<Dummy/>\n";
         CStringStream osInput1( strXML );
 
+        CDate dttStart;
+        CCPUUsage Timer1;
         CXMLDocument xDoc( &osInput1 );
+        CCPUUsage Timer2;
+        int nSec;
+        int nMSec;
+        Timer1.TotalElapsed(Timer2, nSec, nMSec );
+        CDate dttEnd;
+        printf( "%01d.%03d - Wall Time\n", dttEnd.Elapsed( dttStart ) / 1000, dttEnd.Elapsed( dttStart ) % 1000 );
+        printf( "%01d.%06d - CPU Time To Load\n", nSec, nMSec );
+
         CXMLIndex *pIndex = xDoc.GetIndex();
 
         // -- FORMATTED OUTPUT --
-        std::cout << "Index loaded-> " << pIndex->GetElementCount() << " elements found -- Should be 4." << std::endl;
+        ASSERT( pIndex->GetElementCount() == 4 );
         auto outDoc = xDoc.toString( 4 );
-        std::cout << "---- TOP ----\n" << (const char *)outDoc << "---- END ----\n" << std::endl;
-        if ( outDoc == strCompareIndent )
-        {
-            std::cout << "SUCCESS. Formatted output as expected." << std::endl;
-        }
-        else
-        {
-            std::cerr << "FAILURE: Output was not formatted as expected." << std::endl;
-        }
+        ASSERT( outDoc == strCompareIndent );
 
         // -- ORIGINAL FORMAT --
         outDoc = xDoc.toString();
-        std::cout << "---- TOP ----\n" << (const char *)outDoc << "---- END ----\n" << std::endl;
-
-        if ( outDoc == strXML )
-        {
-            std::cout << "SUCCESS. Formatted output as expected." << std::endl;
-        }
-        else
-        {
-            std::cerr << "FAILURE: Output was not formatted as expected." << std::endl;
-        }
+        ASSERT( outDoc == strXML );
 
         std::cout << "Memory Stream Testing complete." << std::endl << std::endl;
     }
@@ -83,20 +76,24 @@ bool testFileStream( int argc, char *argv[] ) {
         CDate dttStart;
         CCPUUsage Timer1;
         CXMLDocument xDoc( &osInput2 );
+        CCPUUsage Timer2;
         int nSec;
         int nMSec;
-        Timer1.GetTotalTime( nSec, nMSec );
+        Timer1.TotalElapsed(Timer2, nSec, nMSec );
         CDate dttEnd;
         printf( "%01d.%03d - Wall Time\n", dttEnd.Elapsed( dttStart ) / 1000, dttEnd.Elapsed( dttStart ) % 1000 );
         printf( "%01d.%06d - CPU Time To Load\n", nSec, nMSec );
         CXMLIndex *pIndex = xDoc.GetIndex();
 
-        std::cout << "Index loaded-> " << pIndex->GetElementCount() << " elements found." << std::endl;
-        std::cout.flush();
+        ASSERT( pIndex->GetElementCount() == 73 );
 
         auto outDoc = xDoc.toString( 4 );
+        ASSERT( outDoc.GetLength() == 83486 );
+        ASSERT( outDoc.hashcode() == 482108729 );
 
-        std::cout << (const char *)outDoc << std::endl << std::endl;
+        outDoc = xDoc.toString();
+        ASSERT( outDoc.GetLength() == 83408 );
+        ASSERT( outDoc.hashcode() == 1554375035 );
     }
     catch (CXMLException &oE )
     {
@@ -112,29 +109,6 @@ int main( int argc, char *argv[] )
 {
     testMemoryStream();
     testFileStream(argc,argv);
-
-
-/*
-    try
-    {
-        CDate dttStart;
-        CCPUUsage Timer2;
-        CXMLIndex oIndex( strFileName );
-        int nSec;
-        int nMSec;
-        Timer2.GetTotalTime( nSec, nMSec );
-        CDate dttEnd;
-        printf( "%01d.%03d - Wall Time\n", dttEnd.Elapsed( dttStart ) / 1000, dttEnd.Elapsed( dttStart ) % 1000 );
-        printf( "%01d.%06d - Elapsed Time To Load\n", nSec, nMSec );
-
-        std::cout << "Index loaded-> " << oIndex.GetElementCount() << " elements found." << std::endl;
-        std::cout.flush();
-    }
-    catch (CXMLException &oE )
-    {
-        std::cout << oE.DumpStack() << std::endl;
-    }
-*/
 	return 0;
 }
 
