@@ -43,7 +43,8 @@ namespace IASLib
 			virtual void            PutLine( const CString &strOutput );
 			virtual unsigned char   GetUChar( void );
 			virtual void            PutChar( const unsigned char chPut );
-			virtual int             PutBuffer( const char *achBuffer, int nLength );
+            virtual char            PeekChar( void );
+            virtual int             PutBuffer( const char *achBuffer, int nLength );
 			virtual int             GetBuffer( char *achBuffer, int nLength );
 			virtual size_t		    bytesRemaining( void ) { return m_strString.Length() - m_nCurrentPosition; }
 

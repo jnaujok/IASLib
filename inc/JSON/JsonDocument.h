@@ -1,23 +1,17 @@
-#ifndef IASLIB_JSON_PARSER_H__
-#define IASLIB_JSON_PARSER_H__
+//
+// Created by jnaujok on 2/14/21.
+//
 
-#ifdef IASLIB_JSON_SUPPORT__
-
-#include "Stream.h"
-#include "JsonNode.h"
-#include "Object.h"
-#include "String_.h"
-
+#ifndef IASLIB_JSONDOCUMENT_H
+#define IASLIB_JSONDOCUMENT_H
 
 namespace IASLib {
-    class CJsonParser : public CObject {
+    class CJsonDocument : public CJsonNode {
     private:
 
     public:
-        DEFINE_OBJECT( CJsonParser )
+        DEFINE_OBJECT( CJsonDocument )
 
-        static CJsonNode *parse( CString jsonData );
-        static CJsonNode *parse( CStream *jsonData );
 
     private:
         static CJsonNode *parseElement( CStream *jsonData );
@@ -36,6 +30,4 @@ namespace IASLib {
     };
 }
 
-
-#endif // IASLIB_JSON_SUPPORT__
-#endif // IASLIB_JSON_PARSER_H__
+#endif //IASLIB_JSONDOCUMENT_H

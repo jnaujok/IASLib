@@ -15,7 +15,7 @@
 #ifndef IASLIB_JSONNODETYPE_H__
 #define IASLIB_JSONNODETYPE_H__
 
-#ifdef IASLIB_JSONSUPPORT__
+#ifdef IASLIB_JSON_SUPPORT__
 
 namespace IASLib
 {
@@ -33,6 +33,6 @@ namespace IASLib
     };
 }
 
-#endif // IASLIB_JSONSUPPORT__
+#endif // IASLIB_JSON_SUPPORT__
 #endif // IASLIB_JSONNODETYPE_H__
 

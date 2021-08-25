@@ -17,7 +17,7 @@
 #ifndef IASLIB_OBJECTNODE_H__
 #define IASLIB_OBJECTNODE_H__
 
-#ifdef IASLIB_JSONSUPPORT__
+#ifdef IASLIB_JSON_SUPPORT__
 
 #include "JsonNode.h"
 #include "../Collections/Hash.h"
@@ -120,6 +120,6 @@ namespace IASLib
     };
 }
 
-#endif // IASLIB_JSONSUPPORT__
+#endif // IASLIB_JSON_SUPPORT__
 #endif // IASLIB_OBJECTNODE_H__
 

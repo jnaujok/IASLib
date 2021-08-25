@@ -31,6 +31,8 @@ namespace IASLib
 		protected:
 			CSocket            *m_pSocket;
             bool                m_bNoDelete;
+            bool                m_bIsPeeked;
+            unsigned char       m_chPeeked;
 		public:
 								CSocketStream( void );
 								CSocketStream( CSocket *pSocket );
@@ -44,7 +46,8 @@ namespace IASLib
 			virtual void        PutLine( const CString &strOutput );
 			virtual unsigned char        GetUChar( void );
 			virtual void        PutChar( const unsigned char chPut );
-			virtual int         PutBuffer( const char *achBuffer, int nLength );
+            virtual char        PeekChar( void );
+            virtual int         PutBuffer( const char *achBuffer, int nLength );
 			virtual int         GetBuffer( char *achBuffer, int nLength );
 			virtual CSocket    *GetSocket( void ) { return m_pSocket; }
 

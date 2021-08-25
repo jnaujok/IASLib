@@ -47,6 +47,8 @@ namespace IASLib
             void                   *m_pData;
 
         public:
+                                    DEFINE_OBJECT(CResource);
+
                                     CResource( void );
                                     CResource( short int nFolder, short int nResource );
                                     CResource( short int nFolder, short int nResource, const char *strName, const char *strModifier, int nType, const char *strFilename );
@@ -55,6 +57,9 @@ namespace IASLib
 
             virtual bool            Load( short int nFolder, short int nResource );
             virtual bool            Save( void );
+
+            virtual long            getLength() { return m_nDataLength; }
+
     };
 } // namespace IASLib
 

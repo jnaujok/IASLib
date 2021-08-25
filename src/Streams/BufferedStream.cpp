@@ -78,6 +78,25 @@ namespace IASLib
         PutNextChar( chPut );
     }
 
+    char CBufferedStream::PeekChar( void )
+    {
+        if (  ( m_nReadPointer == m_nBufferRead ) && ( ! IsEOS() ) )
+        {
+            m_nReadPointer = 0;
+            m_nBufferRead = m_oStream.GetBuffer( m_chReadBuffer, BUFFER_SIZE );
+        }
+
+        if ( m_nReadPointer < m_nBufferRead )
+        {
+            unsigned char chRetVal = m_chReadBuffer[ m_nReadPointer ];
+            return chRetVal;
+        }
+
+        IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+        return '\0';
+    }
+
+
     int CBufferedStream::PutBuffer( const char *achBuffer, int nLength )
     {
         int nOffset = 0, nSize = 0;

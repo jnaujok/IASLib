@@ -32,20 +32,24 @@ namespace IASLib
             size_t              m_nElements;
 
         public:
-                                TCollection( void );
-            virtual            ~TCollection( void );
+                                TCollection( void ) {
+                                    m_nElements = 0;
+                                }
+            virtual            ~TCollection( void ) {
+                                    // Nothing to do at this level
+                                }
             
                                 DEFINE_OBJECT( TCollection )
 
-            virtual size_t      GetLength( void ) const { return m_nElements; }
-            virtual size_t      Length( void ) const { return m_nElements; }
-            virtual size_t      GetCount( void ) const { return m_nElements; }
-            virtual size_t      Count( void ) const { return m_nElements; }
+            virtual size_t      getLength( void ) const { return m_nElements; }
+            virtual size_t      length( void ) const { return m_nElements; }
+            virtual size_t      getCount( void ) const { return m_nElements; }
+            virtual size_t      count( void ) const { return m_nElements; }
 
-            virtual TIterator<T>  *Enumerate( void ) = 0;
+            virtual TIterator<T>  *enumerate( void ) = 0;
 
-            virtual void        DeleteAll( void ) = 0;
-            virtual void        EmptyAll( void ) = 0;
+            virtual void        deleteAll( void ) = 0;
+            virtual void        emptyAll( void ) = 0;
     };
 } // namespace IASLib
 

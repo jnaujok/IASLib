@@ -110,6 +110,15 @@ namespace IASLib
         m_strOutputString += chPut;
     }
 
+    char CStringStream::PeekChar() {
+        if ( m_nCurrentPosition >= m_strString.GetLength() )
+        {
+            IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+        }
+
+        return m_strString[ m_nCurrentPosition ];
+    }
+
     int CStringStream::PutBuffer( const char *achBuffer, int nLength )
     {
         CString strOutput( achBuffer, nLength );

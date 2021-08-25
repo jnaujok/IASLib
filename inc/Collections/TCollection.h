@@ -33,10 +33,10 @@ namespace IASLib
         virtual bool    contains( T *o );
 
         // Returns true if this collection contains all of the elements in the specified collection.
-        virtual bool	containsAll(Collection<T> c);
+        virtual bool	containsAll(TCollection<T> c);
 
         // Compares the specified object with this collection for equality.
-        virtual bool	equals(Collection<T> c);
+        virtual bool	equals(TCollection<T> c);
 
         // Returns the hash code value for this collection.
         virtual int	    hashCode();
@@ -51,10 +51,10 @@ namespace IASLib
         virtual bool	remove(T *o);
 
         // Removes all of this collection's elements that are also contained in the specified collection (optional operation).
-        virtual bool	removeAll(Collection<T> c);
+        virtual bool	removeAll(TCollection<T> c);
 
         // Retains only the elements in this collection that are contained in the specified collection (optional operation).
-        virtual bool	retainAll(Collection<T> c);
+        virtual bool	retainAll(TCollection<T> c);
 
         // Returns the number of elements in this collection.
         virtual int	    size( void );

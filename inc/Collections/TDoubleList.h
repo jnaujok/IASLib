@@ -14,22 +14,23 @@
 #ifndef IASLIB_DOUBLELIST_H__
 #define IASLIB_DOUBLELIST_H__
 
-#include "../BaseTypes/Object.h"
+#include "String_.h"
+#include "TCollection.h"
 
 namespace IASLib
 {
     class CListItem : public CObject
     {
         public:
-            DECLARE_OBJECT( CListItem, CObject );
+            DECLARE_OBJECT( CListItem, CObject )
 
-            int     compare( const CListItem &oCompare ) const == 0;
+            virtual int compare( const CListItem &oCompare ) const = 0;
     };
 
     template <class T> 
     class TDoubleList : public TCollection<T>
     {
-        static_assert(std::is_base_of<CListItem, T>::value, "T must derive from CListItem");
+        static_assert(std::is_base_of<T, CListItem>::value, "T must derive from CListItem");
 
         private:
             class TListElement
@@ -47,9 +48,9 @@ namespace IASLib
             virtual bool	add(int index, T *element);
 
             // Appends all of the elements in the specified collection to the end of this list, in the order that they are returned by the specified collection's iterator (optional operation).
-            virtual bool	addAll( Collection<T> list);
+            virtual bool	addAll( TCollection<T> list);
             // Inserts all of the elements in the specified collection into this list at the specified position (optional operation).
-            virtual bool	addAll(int index, Collection<T> c)
+            virtual bool	addAll(int index, TCollection<T> c)
 
             // Removes all of the elements from this list (optional operation).
             virtual void	clear( void );
@@ -57,10 +58,10 @@ namespace IASLib
             // Returns true if this list contains the specified element.
             virtual bool	contains(T* element);
             // Returns true if this list contains all of the elements of the specified collection.
-            virtual bool	containsAll(Collection<T> c);
+            virtual bool	containsAll(TCollection<T> c);
 
             // Compares the specified object with this list for equality.
-            virtual bool	equals(Collection<T> o);
+            virtual bool	equals(TCollection<T> o);
 
             // Returns the element at the specified position in this list.
             virtual T*	    get(int index)
@@ -92,10 +93,10 @@ namespace IASLib
             virtual bool	remove(T* o);
 
             // Removes from this list all of its elements that are contained in the specified collection (optional operation).
-            virtual bool	removeAll(Collection<T*> c);
+            virtual bool	removeAll(TCollection<T*> c);
 
             // Retains only the elements in this list that are contained in the specified collection (optional operation).
-            virtual bool	retainAll(Collection<T*> c);
+            virtual bool	retainAll(TCollection<T*> c);
 
             // Replaces the element at the specified position in this list with the specified element (optional operation).
             virtual T*	set(int index, T* element);
@@ -104,7 +105,7 @@ namespace IASLib
             virtual int	size( void );
 
             // Returns a view of the portion of this list between the specified fromIndex, inclusive, and toIndex, exclusive.
-            virtual List<T>	subList(int fromIndex, int toIndex);
+            virtual TList<T>	subList(int fromIndex, int toIndex);
 
             // Returns an array containing all of the elements in this list in proper sequence (from first to last element).
             virtual T** toArray();

@@ -1,3 +1,23 @@
-#ifdef IASLIB_JSONSUPPORT__
+/**
+ * Value Node Class Implementation
+ *
+ *  This Class implements an abstract JSON value node that provides the base class
+ *  for all derived value node types.
+ *
+ *	Author: Jeffrey R. Naujok
+ *	Created: 8/25/2020
+ *
+ * Copyright (C) 2020, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
+ */
 
-#endif // IASLIB_JSONSUPPORT__
+#ifdef IASLIB_JSON_SUPPORT__
+
+#include "ValueNode.h"
+
+namespace IASLib {
+
+    IMPLEMENT_OBJECT(CValueNode,CJsonNode)
+
+}
+#endif // IASLIB_JSON_SUPPORT__

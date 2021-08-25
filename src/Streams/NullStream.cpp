@@ -64,6 +64,11 @@ namespace IASLib
     {
     }
 
+    char CNullStream::PeekChar()
+    {
+        return '\0';
+    }
+
     int CNullStream::PutBuffer( const char *, int nLength )
     {
         return nLength;

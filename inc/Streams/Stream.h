@@ -43,6 +43,8 @@ namespace IASLib
             virtual int         PutBuffer( const char *achBuffer, int nLength ) = 0;
             virtual int         GetBuffer( char *achBuffer, int nLength ) = 0;
 
+            virtual char        PeekChar( void ) = 0;
+
             virtual size_t      bytesRemaining( void ) = 0;
             virtual bool        IsEOS( void ) = 0;
 

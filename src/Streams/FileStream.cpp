@@ -104,6 +104,24 @@ namespace IASLib
         return '\0';
     }
 
+    char CFileStream::PeekChar( void )
+    {
+        if ( m_pFile )
+        {
+            if ( ! m_pFile->IsEOF() )
+            {
+                char chRetVal;
+
+                long pos = m_pFile->GetPos();
+                m_pFile->Read( &chRetVal, sizeof( char ) );
+                m_pFile->Seek(pos, SEEK_SET );
+
+                return chRetVal;
+            }
+        }
+        return '\0';
+    }
+
     unsigned char CFileStream::GetUChar( void )
     {
         if ( m_pFile )

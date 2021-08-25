@@ -13,7 +13,7 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-#ifdef IASLIB_JSONSUPPORT__
+#ifdef IASLIB_JSON_SUPPORT__
 
 #include "ObjectNode.h"
 
@@ -180,5 +180,5 @@ namespace IASLib
     }
 };
 
-#endif // IASLIB_JSONSUPPORT__
+#endif // IASLIB_JSON_SUPPORT__
 

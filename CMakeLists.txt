@@ -14,6 +14,7 @@ option(USE_RTTI "Use Run-Time Type Information." ON )
 option(USE_DEBUG "Use debugging features of the library." ON)
 option(USE_MEMORY_MANAGER "Use extended memory manager." OFF)
 option(USE_MEMORY_DEBUGGING "Use memory debugging features." ON)
+option(USE_JSON "Enable JSON support." ON)
 
 #Bring the headers, such as Student.h into the project
 include_directories(
@@ -101,7 +102,7 @@ set(
         ${STREAMS}
         ${THREADING}
         ${XML}
-)
+        src/JSON/BooleanNode.cpp src/JSON/BinaryNode.cpp inc/Templates/TArray.h src/JSON/JsonParser.cpp src/Resources/Resource.cpp)
 
 if(UNIX AND NOT APPLE)
     set(LINUX TRUE)
@@ -152,6 +153,9 @@ if (USE_MEMORY_MANAGER)
 endif()
 if (USE_MEMORY_DEBUGGING)
     add_definitions(-DIASLIB_MEMORY_DEBUGGING__)
+endif()
+if (USE_JSON)
+    add_definitions(-DIASLIB_JSON_SUPPORT__)
 endif()
 
 

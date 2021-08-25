@@ -26,12 +26,16 @@ namespace IASLib
    {
        m_bNoDelete = false;
        m_pSocket = NULL;
+       m_bIsPeeked = false;
+       m_chPeeked = '\0';
    }
 
    CSocketStream::CSocketStream( CSocket *pSocket )
    {
        m_bNoDelete = false;
        m_pSocket = pSocket;
+       m_bIsPeeked = false;
+       m_chPeeked = '\0';
    }
 
    CSocketStream::~CSocketStream( void )
@@ -42,6 +46,8 @@ namespace IASLib
        }
        m_pSocket = NULL;
        m_bIsOpen = false;
+       m_bIsPeeked = false;
+       m_chPeeked = '\0';
    }
 
    void CSocketStream::Close( void )
@@ -52,6 +58,8 @@ namespace IASLib
        }
        m_pSocket = NULL;
        m_bIsOpen = false;
+       m_bIsPeeked = false;
+       m_chPeeked = '\0';
    }
 
    /***********************************************************************
@@ -104,6 +112,11 @@ namespace IASLib
    ***********************************************************************/
    char CSocketStream::GetChar( void )
    {
+       if ( m_bIsPeeked ) {
+           m_bIsPeeked = false;
+           return m_chPeeked;
+       }
+
        if ( m_pSocket )
        {
            char chRetVal;
@@ -117,6 +130,11 @@ namespace IASLib
 
    unsigned char CSocketStream::GetUChar( void )
    {
+       if ( m_bIsPeeked ) {
+           m_bIsPeeked = false;
+           return m_chPeeked;
+       }
+
        if ( m_pSocket )
        {
            unsigned char chRetVal;
@@ -159,6 +177,22 @@ namespace IASLib
        }
    }
 
+   char CSocketStream::PeekChar() {
+       if ( m_bIsPeeked ) {
+           m_bIsPeeked = false;
+           return m_chPeeked;
+       }
+
+       if ( m_pSocket )
+       {
+           m_chPeeked = m_pSocket->Read();
+           m_bIsPeeked = true;
+           return m_chPeeked;
+       }
+
+       return '\0';
+   }
+
    int CSocketStream::PutBuffer( const char *achBuffer, int nLength )
    {
        int nSent = 0;
@@ -175,6 +209,12 @@ namespace IASLib
    {
        int nReceived = 0;
 
+       if ( m_bIsPeeked && nLength > 0 ) {
+           achBuffer[nReceived] = m_chPeeked;
+           m_bIsPeeked = false;
+           nReceived++;
+       }
+
        while ( nReceived < nLength )
        {
            nReceived += m_pSocket->Read( &(achBuffer[nReceived]), nLength - nReceived );
@@ -185,6 +225,8 @@ namespace IASLib
 
    bool CSocketStream::IsEOS( void )
    {
+       if ( m_bIsPeeked )
+           return false;
        return ( m_pSocket->HasData() );
    }
 } // Namespace IASLib

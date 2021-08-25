@@ -16,7 +16,7 @@
 #ifndef IASLIB_JSONNODE_H__
 #define IASLIB_JSONNODE_H__
 
-#ifdef IASLIB_JSONSUPPORT__
+#ifdef IASLIB_JSON_SUPPORT__
 
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/IASLib_String.h"
@@ -30,6 +30,8 @@ namespace IASLib
     class CJsonNode : public CObject
     {
         public:
+            DEFINE_OBJECT(CJsonNode)
+
             /**
              * Method that will try to convert value of this node to a boolean value.
              */
@@ -219,6 +221,6 @@ namespace IASLib
     };
 }
 
-#endif // IASLIB_JSONSUPPORT__
+#endif // IASLIB_JSON_SUPPORT__
 #endif // IASLIB_JSONNODE_H__
 
