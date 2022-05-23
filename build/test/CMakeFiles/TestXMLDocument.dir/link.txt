@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/TestXMLDocument.dir/TestXMLDocument/TestXMLDocument.cpp.o -o TestXMLDocument  ../libIASLib.a 

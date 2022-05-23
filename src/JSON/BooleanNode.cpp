@@ -17,14 +17,27 @@
 
 #include "BooleanNode.h"
 
-namespace IASLib {
-    CBooleanNode::CBooleanNode(CString name, bool value) : CValueNode(name) {
-        bValue = value;
+namespace IASLib 
+{
+    IMPLEMENT_OBJECT(CBooleanNode,CValueNode)
+    
+    CBooleanNode::CBooleanNode( CJsonNode *parent, CString name, CString value) : CValueNode( parent, name) 
+    {
+        if ( value == "null" )
+        {
+            setNull();
+        }
+        else if ( value == "true" )
+        {
+            setValue( true );
+        }
+        else if ( value == "false" )
+        {
+            setValue( false );
+        }
     }
 
-    void setValue(bool value) {
-        bValue = value;
-    }
+
 
 } // namespace IASLib
 

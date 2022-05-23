@@ -22,6 +22,8 @@ namespace IASLib {
     CBinaryNode::CBinaryNode( CString name, CString value ) : CValueNode( name )
     {
         dataBlock = new CDataBlock( value.GetLength() );
+
+
     }
 
 }

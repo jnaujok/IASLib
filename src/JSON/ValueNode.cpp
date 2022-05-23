@@ -19,5 +19,19 @@ namespace IASLib {
 
     IMPLEMENT_OBJECT(CValueNode,CJsonNode)
 
+
+    CValueNode::CValueNode( const CJsonNode *parent, const CString &name )
+    {
+        setParent( parent );
+        setName( name );
+    }
+
+    CValueNode::CValueNode( const CString &name )
+    {
+        setParent( nullptr );
+        setName( name );
+    }    
+    
+
 }
 #endif // IASLIB_JSON_SUPPORT__

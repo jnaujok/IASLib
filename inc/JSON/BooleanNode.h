@@ -9,10 +9,17 @@ namespace IASLib {
     class CBooleanNode : public CValueNode {
     private:
         bool bValue;
+        bool bIsNull;
     public:
-        CBooleanNode( CJsonNode *parent, CString name, bool value );
+        DEFINE_OBJECT(CBooleanNode)
+
+        CBooleanNode( CJsonNode *parent, CString name, CString value );
 
         void setValue( bool value );
+        void setNull()
+        {
+            bIsNull = true;
+        }
 
         /**
          * Method that will try to convert value of this node to a boolean value.

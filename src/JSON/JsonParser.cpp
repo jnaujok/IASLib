@@ -180,7 +180,7 @@ namespace IASLib {
         if ( token.GetLength() == 0 ) {
             return true;
         }
-        if ( ( token[0] == ' ' ) || ( token[0] == '0x0a' ) || ( token[0] == '0x0d' ) || ( token[0] =='0x09') )
+        if ( ( token[0] == ' ' ) || ( token[0] == '\n' ) || ( token[0] == '\r' ) || ( token[0] =='\t') )
         {
             return isTokenWhitespace( token.Substring( 1 ) );
         }

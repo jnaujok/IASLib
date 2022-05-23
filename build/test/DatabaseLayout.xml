@@ -1,0 +1,1713 @@
+<FileInfo name="BaseCamp Database Tables" version="3.0.1001" author="Jeffrey R. Naujok" />
+<table name="user_archive">
+    <info>
+        During the course of time, users come and users go. However, there
+        may be data still tied to a user name. The user archive stores the
+        name and id of every user who has *ever* used the system. This 
+        assures us that data tables (like the file repository) never get
+        left with a hanging reference.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="first_name" type="varchar(40)" null="no"/>
+    <field name="last_name" type="varchar(40)" null="no"/>
+    <index name="primary_user_archive_index" unique="yes">
+        user_id
+    </index>
+    <initialize>
+        insert into user_archive values( 'admin','Admin', 'Admin' );
+    </initialize>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="user_password">
+    <info>
+        The user password table stores the current and last password for
+        the users of the BaseCamp system. The password is associated through
+        a derived ID, that is generated from the user information. This
+        is then used to compare the encrypted password. 
+        All of the data in this table (except the "last_changed" value)
+        are stored in an encrypted form to prevent password snooping.
+        Because of the way the database is built, the user_password table
+        must be added before the users table. Thus, it must appear before
+        it in the DatabaseLayout.xml file.
+    </info>
+    <field name="derived_id" type="char(32)" null="no"/>
+    <field name="password" type="char(32)" null="no"/>
+    <field name="last_changed" type="datetime" null="no"/>
+    <field name="last_password" type="char(32)" null="no"/>
+    <index name="primary_user_password_index" unique="yes">
+        derived_id
+    </index>
+</table>
+
+<table name="users">
+    <info>
+        The "users" table provides storage for the data associated with
+        a user on the BaseCamp system. The user_id field is used universally
+        to represent a user within the database.
+        The other data fields are used at various points within the BaseCamp
+        system to track or otherwise associate data with the user.
+        The "last_login" field is used by the background server to mark
+        users that have not logged in as inactive, and eventually to  
+        delete old users that have not logged in.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="first_name" type="varchar(40)" null="no"/>
+    <field name="last_name" type="varchar(40)" null="no"/>
+    <field name="e_mail" type="varchar(80)" null="no"/>
+    <field name="phone" type="varchar(20)" null="no"/>
+    <field name="cell" type="varchar(30)" null="no"/>
+    <field name="location" type="varchar(80)" null="no"/>
+    <field name="status_code" type="int" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="last_login" type="datetime" null="no"/>
+    <field name="manager_id" type="char(16)" null="no"/>
+    <field name="time_zone" type="int" null="no"/>
+    <index name="primary_user_index" unique="yes">
+        user_id
+    </index>
+    <index name="secondary_user_index" unique="no">
+        last_login
+    </index>
+    <initialize>
+        insert into users values( 'admin','Admin', 'Admin', 'admin@admin.com', '999-999-9999', '999-999-9999', 'Administration', 0, '01/01/1970  00:00:00', '01/01/1970  00:00:00', 'admin', -480 );
+    </initialize>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+
+<table name="user_roles">
+    <info>
+        An entry in this table ties the user to a role. Roles in turn
+        tie to menu items. This allows us to dynamically assign menu
+        items to a user through the role table.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="role_id" type="char(16)" null="no"/>
+    <index name="primary_user_role_index" unique="yes">
+        user_id, role_id
+    </index>
+    <index name="secondary_user_role_index" unique="no">
+        role_id, user_id
+    </index>
+    <initialize>
+        insert into user_roles values( 'admin', 'everyone' );
+        insert into user_roles values( 'admin', 'ReqBase' );
+        insert into user_roles values( 'admin', 'BugBase' );
+        insert into user_roles values( 'admin', 'BugBaseAdmin' );
+        insert into user_roles values( 'admin', 'TestBase' );
+        insert into user_roles values( 'admin', 'SysAdmin' );
+        insert into user_roles values( 'admin', 'admin' );
+    </initialize>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="roles">
+    <info>
+        Roles are the basis of privilege and security within the BaseCamp
+        system. Roles tie menu items and permissions into logical 
+        categories so that it becomes easy to assign a logical functionality
+        group to a user or a group.
+    </info>
+    <field name="role_id" type="char(16)" null="no"/>
+    <field name="description" type="varchar(80)" null="no"/>
+    <index name="primary_role_index" unique="yes">
+        role_id
+    </index>
+    <initialize>
+        insert into roles values( 'everyone', 'Everyone' );
+        insert into roles values( 'ReqBase', 'ReqBase Users' );
+        insert into roles values( 'BugBase', 'BugBase Users' );
+        insert into roles values( 'BugBaseAdmin', 'BugBase Administrator' );
+        insert into roles values( 'TestBase', 'TestBase Users' );
+        insert into roles values( 'SysAdmin', 'System Administrators' );
+        insert into roles values( 'admin', 'Administrators' );
+    </initialize>
+</table>
+
+<table name="role_menu_items">
+    <info>
+        This table ties roles to menu items. This allows us to dynamically
+        create roles to provide different functionality groups.
+    </info>
+    <field name="role_id" type="char(16)" null="no"/>
+    <field name="menu_item_id" type="char(16)" null="no"/>
+    <index name="primary_role_menu_item_index" unique="yes">
+        role_id, menu_item_id
+    </index>
+    <index name="secondary_role_menu_item_index" unique="no">
+        menu_item_id, role_id
+    </index>
+    <initialize>
+        insert into role_menu_items values( 'everyone', 'Home' );
+        insert into role_menu_items values( 'everyone', 'UserPrefs' );
+        insert into role_menu_items values( 'everyone', 'ChangePassword' );
+        insert into role_menu_items values( 'everyone', 'ChangeProfile' );
+        insert into role_menu_items values( 'everyone', 'ReportPrefs' );
+
+        insert into role_menu_items values( 'everyone', 'ToDoList' );
+        insert into role_menu_items values( 'everyone', 'NewToDo' );
+
+        insert into role_menu_items values( 'everyone', 'StoredRpts' );
+        insert into role_menu_items values( 'everyone', 'SchedRpt' );
+
+        insert into role_menu_items values( 'ReqBase', 'NewProject' );
+        insert into role_menu_items values( 'ReqBase', 'ViewProjects' );
+        insert into role_menu_items values( 'ReqBase', 'NewTeam' );
+        insert into role_menu_items values( 'ReqBase', 'ViewTeams' );
+
+        insert into role_menu_items values( 'BugBase', 'MyBugs' );
+        insert into role_menu_items values( 'BugBase', 'NewBug' );
+        insert into role_menu_items values( 'BugBase', 'ListAllBugs' );
+        insert into role_menu_items values( 'BugBase', 'BugPrefs' );
+
+        insert into role_menu_items values( 'TestBase', 'NewTestPlan' );
+        insert into role_menu_items values( 'TestBase', 'ViewTestPlan' );
+
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_ManPri' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_NewPri' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_ManStat' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_NewStat' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_ManType' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_NewType' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_ManField' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_NewField' );
+        insert into role_menu_items values( 'BugBaseAdmin', 'BB_Workflow' );
+
+        insert into role_menu_items values( 'SysAdmin', 'DBBackup' );
+        insert into role_menu_items values( 'SysAdmin', 'SysStat' );
+        insert into role_menu_items values( 'SysAdmin', 'WhoIs' );
+        insert into role_menu_items values( 'SysAdmin', 'CloseSys' );
+
+        insert into role_menu_items values( 'admin', 'NewUser' );
+        insert into role_menu_items values( 'admin', 'UserMan' );
+        insert into role_menu_items values( 'admin', 'NewRole' );
+        insert into role_menu_items values( 'admin', 'RoleMan' );
+        insert into role_menu_items values( 'admin', 'GroupMan' );
+        insert into role_menu_items values( 'admin', 'NewGroup' );
+        insert into role_menu_items values( 'admin', 'NewMenu' );
+        insert into role_menu_items values( 'admin', 'ManMenu' );
+        insert into role_menu_items values( 'admin', 'NewPerm' );
+        insert into role_menu_items values( 'admin', 'ManPerm' );
+    </initialize>
+</table>
+
+<table name="menu_items">
+    <info>
+        Menu items are pretty much exactly what they sound like. Each row
+        represents a single possible menu item that can be displayed by the
+        BaseCamp system. Menu items may be nested by use of the parent_id field. 
+        There is also an assumed menu item known as "Root" that is used to
+        specify the base menu level.
+        Menu IDs are also used to provide security within the BaseCamp system. If
+        a user has the menu item attached to them through a role, then the user
+        has access to any item security tagged with that menu item.
+    </info>
+    <field name="menu_item_id" type="char(16)" null="no"/>
+    <field name="parent_id" type="char(16)" null="yes"/>
+    <field name="url_target" type="varchar(255)" null="no"/>
+    <field name="item_text" type="varchar(64)" null="no"/>
+    <field name="image_open" type="varchar(255)" null="no"/>
+    <field name="image_closed" type="varchar(255)" null="no"/>
+    <field name="status_line" type="varchar(80)" null="no"/>
+    <field name="menu_order" type="int" null="no"/>
+    <index name="primary_menu_item_index" unique="yes">
+        menu_item_id
+    </index>
+    <index name="secondary_menu_item_index" unique="no">
+        menu_item_id, menu_order
+    </index>
+    <initialize>
+        insert into menu_items values( 'Home', 'Root', '/BaseCamp/title.html', 'Home', '/icons/menu/home.gif', '/icons/menu/home.gif', 'Return to the BaseCamp Home Page.', 0 );
+
+        insert into menu_items values( 'UserPrefs', 'Root', ' ', 'User Preferences', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'Modify your user preferences.', 100 );
+        insert into menu_items values( 'ChangePassword', 'UserPrefs', '/userpref/changepass/index.html', 'Change Password', '/icons/menu/changepass.gif', '/icons/menu/changepass.gif', 'Change your password for accessing the BaseCamp system.', 110 );
+        insert into menu_items values( 'ChangeProfile', 'UserPrefs', '/userpref/changeprof/index.html', 'Change User Profile', '/icons/menu/changeprof.gif', '/icons/menu/changeprof.gif', 'Change your user information.', 120 );
+        insert into menu_items values( 'ReportPrefs', 'UserPrefs', '/userpref/reportprefs/index.html', 'Report Preferences', '/icons/menu/reportprefs.gif', '/icons/menu/reportprefs.gif', 'Change your preferences for a report.', 130 );
+        insert into menu_items values( 'OutputPrefs', 'UserPrefs', '/userpref/outputprefs/index.html', 'Output Preferences', '/icons/menu/outputprefs.gif', '/icons/menu/outputprefs.gif', 'Set up default settings for .', 135 );
+
+        insert into menu_items values( 'ScheduledReports', 'Root', ' ', 'Scheduled Reports', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'Reports generated on a schedule.', 140 );
+        insert into menu_items values( 'StoredRpts', 'ScheduledReports', '/stored-reports/index.html', 'Generated Reports', '/icons/menu/storedrpt.gif', '/icons/menu/storedrpt.gif', 'Folders of the reports that have been generated.', 141 );
+        insert into menu_items values( 'SchedRpt', 'ScheduledReports', '/schedule/folder/index.html', 'Scheduled Reports', '/icons/menu/schedrpt.gif', '/icons/menu/schedrpt.gif', 'Folders of reports scheduled to be generated.', 142 );
+
+        insert into menu_items values( 'UserTasks', 'Root', ' ', 'Task Management', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'Maintain your to-do list.', 150 );
+        insert into menu_items values( 'ToDoList', 'UserTasks', '/TaskMan/MyToDo/index.html', 'My To-Do List', '/icons/menu/TaskMan/ToDoList.gif', '/icons/menu/TaskMan/ToDoList.gif', 'View your to-do list.', 155 );
+        insert into menu_items values( 'NewToDo', 'UserTasks', '/TaskMan/NewToDo/index.html', 'New Task', '/icons/menu/TaskMan/NewToDo.gif', '/icons/menu/TaskMan/NewToDo.gif', 'Add a new task.', 160 );
+        
+        insert into menu_items values( 'ReqBase', 'Root', ' ', 'ReqBase', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'ReqBase Requirements tracking system.', 200 );
+        insert into menu_items values( 'NewProject', 'ReqBase', '/reqbase/newproj/index.html', 'New Project', '/icons/menu/ReqBase/newproject.gif', '/icons/menu/ReqBase/newproject.gif', 'Create a new project.', 210 );
+        insert into menu_items values( 'ViewProjects', 'ReqBase', '/reqbase/viewproj/index.html', 'View Project Status', '/icons/menu/ReqBase/viewprojects.gif', '/icons/menu/ReqBase/viewprojects.gif', 'View the status of projects.', 220 );
+        insert into menu_items values( 'NewTeam', 'ReqBase', '/reqbase/newteam/index.html', 'New Team', '/icons/menu/ReqBase/newteam.gif', '/icons/menu/ReqBase/newteam.gif', 'Create a new project team.', 230 );
+        insert into menu_items values( 'ViewTeams', 'ReqBase', '/reqbase/viewteams/index.html', 'View Team Status', '/icons/menu/ReqBase/viewteams.gif', '/icons/menu/ReqBase/viewteams.gif', 'View the status of the teams on your projects.', 240 );
+
+        insert into menu_items values( 'TestBase', 'Root', ' ', 'TestBase', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'TestBase Test planning system.', 300 );
+        insert into menu_items values( 'NewTestPlan', 'TestBase', '/testbase/newtestplan/index.html', 'New Test Plan', '/icons/menu/TestBase/newtestplan.gif', '/icons/menu/TestBase/newtestplan.gif', 'Create a new test plan for this project.', 310 );
+        insert into menu_items values( 'ViewTestPlan', 'TestBase', '/testbase/viewtestplan/index.html', 'View Test Plans', '/icons/menu/TestBase/viewtestplan.gif', '/icons/menu/TestBase/viewtestplan.gif', 'View the test plans attached to this project.', 320 );
+
+        insert into menu_items values( 'BugBase', 'Root', ' ', 'BugBase', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'BugBase Defect Tracking system.', 400 );
+        insert into menu_items values( 'MyBugs', 'BugBase', '/bugbase/index.html', 'My Bugs', '/icons/menu/bugbase/mybugs.gif', '/icons/menu/bugbase/mybugs.gif', 'Display a list of bugs currently assigned to you.', 410 );
+        insert into menu_items values( 'NewBug', 'BugBase', '/bugbase/enter/index.html', 'Enter Defect', '/icons/menu/bugbase/enterbug.gif', '/icons/menu/bugbase/enterbug.gif', 'Enter a new defect.', 420 );
+        insert into menu_items values( 'ListAllBugs', 'BugBase', '/bugbase/list/listall.html', 'List All Bugs', '/icons/menu/bugbase/listall.gif', '/icons/menu/bugbase/listall.gif', 'List all the bugs in the project.', 430 );
+        insert into menu_items values( 'BugPrefs', 'BugBase', '/bugbase/BugPrefs/index.html', 'My Bug Preferences', '/icons/menu/BugBase/BugPrefs.gif', '/icons/menu/BugBase/BugPrefs.gif', 'Choose your preferences for BugBase', 440 );
+
+        insert into menu_items values( 'BugBaseAdmin', 'Root', ' ', 'Manage BugBase', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'Manage BugBase features.', 475 );
+        insert into menu_items values( 'BB_ManPri', 'BugBaseAdmin', '/bugbase/admin/manpri/index.html', 'Manage Priorities', '/icons/menu/bugbase/manpri.gif', '/icons/menu/bugbase/manpri.gif', 'Manage the priority codes in this project.', 480 );
+        insert into menu_items values( 'BB_NewPri', 'BugBaseAdmin', '/bugbase/admin/newpri/index.html', 'New Priority Code', '/icons/menu/bugbase/newpri.gif', '/icons/menu/bugbase/manpri.gif', 'Add a new priority codeto the project.', 481 );
+        insert into menu_items values( 'BB_ManStat', 'BugBaseAdmin', '/bugbase/admin/manstat/index.html', 'Manage Status Codes', '/icons/menu/bugbase/manstat.gif', '/icons/menu/bugbase/manstat.gif', 'Manage the status codes for this project.', 482 );
+        insert into menu_items values( 'BB_NewStat', 'BugBaseAdmin', '/bugbase/admin/newstat/index.html', 'New Status Code', '/icons/menu/bugbase/newstat.gif', '/icons/menu/bugbase/newstat.gif', 'Add a new status code to this project.', 483 );
+        insert into menu_items values( 'BB_ManType', 'BugBaseAdmin', '/bugbase/admin/mantype/index.html', 'Manage Type Codes', '/icons/menu/bugbase/mantype.gif', '/icons/menu/bugbase/mantype.gif', 'Manage the type codes for this project.', 484 );
+        insert into menu_items values( 'BB_NewType', 'BugBaseAdmin', '/bugbase/admin/newtype/index.html', 'New Type Code', '/icons/menu/bugbase/newtype.gif', '/icons/menu/bugbase/newtype.gif', 'Add a new type code to this project.', 485 );
+        insert into menu_items values( 'BB_ManField', 'BugBaseAdmin', '/bugbase/admin/manfield/index.html', 'Manage Extra Fields', '/icons/menu/bugbase/manfield.gif', '/icons/menu/bugbase/manfield.gif', 'Manage the extra data fields for this project.', 486 );
+        insert into menu_items values( 'BB_NewField', 'BugBaseAdmin', '/bugbase/admin/newfield/index.html', 'New Extra Field', '/icons/menu/bugbase/newfield.gif', '/icons/menu/bugbase/newfield.gif', 'Add an extra data field to this project.', 487 );
+        insert into menu_items values( 'BB_Workflow', 'BugBaseAdmin', '/bugbase/admin/Workflow/index.html', 'Workflow Management', '/icons/menu/bugbase/Workflow.gif', '/icons/menu/bugbase/Workflow.gif', 'Change how bug assignments change automatically.', 488 );
+
+        insert into menu_items values( 'ManageUsers', 'Root', ' ', 'Manage Users', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'User Management tools', 700 );
+        insert into menu_items values( 'NewUser', 'ManageUsers', '/admin/newuser/index.html', 'New User', '/icons/menu/newuser.gif', '/icons/menu/newuser.gif', 'Add a new user.', 710 );
+        insert into menu_items values( 'UserMan', 'ManageUsers', '/admin/userman/index.html', 'Manage Users', '/icons/menu/userman.gif', '/icons/menu/userman.gif', 'View, edit, and delete users.', 720 );
+        insert into menu_items values( 'NewRole', 'ManageUsers', '/admin/newrole/index.html', 'New Role', '/icons/menu/newrole.gif', '/icons/menu/newrole.gif', 'Add a new user role.', 730 );
+        insert into menu_items values( 'RoleMan', 'ManageUsers', '/admin/roleman/index.html', 'Manage Roles', '/icons/menu/roleman.gif', '/icons/menu/roleman.gif', 'View, edit and delete user roles.', 740 );
+        insert into menu_items values( 'NewGroup', 'ManageUsers', '/admin/newgroup/index.html', 'New Group', '/icons/menu/newgroup.gif', '/icons/menu/newgroup.gif', 'Add a new user group.', 750 );
+        insert into menu_items values( 'GroupMan', 'ManageUsers', '/admin/groupman/index.html', 'Manage Groups', '/icons/menu/groupman.gif', '/icons/menu/groupman.gif', 'View, edit, and delete user groups', 760 );
+
+        insert into menu_items values( 'SysAdmin', 'Root', ' ', 'System Administration', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'System Administration tools.', 800 );
+        insert into menu_items values( 'DBBackup', 'SysAdmin', '/sysadmin/DBBackup/index.html', 'Database Backup', '/icons/menu/dbbackup.gif', '/icons/menu/dbbackup.gif', 'Set up database backup schedule.', 810 );
+        insert into menu_items values( 'SysStat', 'SysAdmin', '/sysadmin/SysStat/index.html', 'System Status', '/icons/menu/sysstat.gif', '/icons/menu/sysstat.gif', 'Show the current system status.', 820 );
+        insert into menu_items values( 'WhoIs', 'SysAdmin', '/sysadmin/WhoIs/index.html', 'Who Is Online', '/icons/menu/whois.gif', '/icons/menu/whois.gif', 'Shows who is currently logged into the system.', 830 );
+        insert into menu_items values( 'CloseSys', 'SysAdmin', '/sysadmin/CloseSys/index.html', 'Allow/Disallow Logins', '/icons/menu/closesys.gif', '/icons/menu/closesys.gif', 'Allows the administrator to close and reopen the system for maintenance.', 840 );
+
+
+        insert into menu_items values( 'Developer', 'Root', ' ', 'Manage System', '/icons/menu/folder-open.gif', '/icons/menu/folder-closed.gif', 'System Management tools', 900 );
+        insert into menu_items values( 'NewMenu', 'Developer', '/dev/newmenu/index.html', 'New Menu Item', '/icons/menu/newmenu.gif', '/icons/menu/newmenu.gif', 'Add a new menu item.', 910 );
+        insert into menu_items values( 'ManMenu', 'Developer', '/dev/manmenu/index.html', 'Manage Menu Items', '/icons/menu/manmenu.gif', '/icons/menu/manmenu.gif', 'View, edit, and delete menu items.', 920 );
+        insert into menu_items values( 'NewPerm', 'Developer', '/dev/newperm/index.html', 'New Permission', '/icons/menu/newperm.gif', '/icons/menu/newperm.gif', 'Add a new permission.', 930 );
+        insert into menu_items values( 'ManPerm', 'Developer', '/dev/manperm/index.html', 'Manage Permissions', '/icons/menu/manperm.gif', '/icons/menu/manperm.gif', 'View, edit, and delete permissions.', 940 );
+    </initialize>
+</table>
+
+<table name="role_permissions">
+    <info>
+        This table ties a role to the permissions that it controls.
+        Permissions are a level of control "within" a menu item.
+    </info>
+    <field name="role_id" type="char(16)" null="no"/>
+    <field name="menu_item_id" type="char(16)" null="no"/>
+    <field name="permission_id" type="char(16)" null="no"/>
+    <index name="primary_role_perm_index" unique="yes">
+        role_id, menu_item_id, permission_id
+    </index>
+    <index name="secondary_role_perm_index" unique="no">
+        menu_item_id, permission_id, role_id
+    </index>
+    <initialize>
+        insert into role_permissions values( 'admin', 'NewRole', 'AllMenuItems' );
+        insert into role_permissions values( 'admin', 'NewRole', 'AllPermissions' );
+        insert into role_permissions values( 'admin', 'RoleMan', 'AllMenuItems' );
+        insert into role_permissions values( 'admin', 'RoleMan', 'AllPermissions' );
+        insert into role_permissions values( 'admin', 'NewUser', 'AllGroups' );
+        insert into role_permissions values( 'admin', 'UserMan', 'AllUsers' );
+        insert into role_permissions values( 'admin', 'UserMan', 'AllGroups' );
+        insert into role_permissions values( 'admin', 'GroupMan', 'AllGroups' );
+    </initialize>
+</table>
+
+<table name="permissions">
+    <info>
+        Permissions are simply named flags that define permissions
+        within a particular menu item. For example, one use may have
+        the right to modify data on a particular page, while a 
+        different user may only have the right to view that data. 
+        Without permissions, you'd have to define two completely
+        different web pages and menu-items.
+    </info>
+    <field name="menu_item_id" type="char(16)" null="no"/>
+    <field name="permission_id" type="char(16)" null="no"/>
+    <field name="description" type="varchar(80)" null="no"/>
+    <index name="primary_permission_index" unique="yes">
+        menu_item_id, permission_id
+    </index>
+    <initialize>
+        insert into permissions values( 'NewRole', 'AllMenuItems', 'Allows the assignment of any menu item.' );
+        insert into permissions values( 'NewRole', 'AllPermissions', 'Allows the assignment of all permissions.' );
+        insert into permissions values( 'RoleMan', 'AllMenuItems', 'Allows the assignment of any menu item.' );
+        insert into permissions values( 'RoleMan', 'AllPermissions', 'Allows the assignment of all permissions.' );
+        insert into permissions values( 'NewUser', 'AllGroups', 'Allows an administrator to assign any group to a new user.' );
+        insert into permissions values( 'UserMan', 'AllUsers', 'Allows an administrator to see all of the users on the system.' );
+        insert into permissions values( 'UserMan', 'AllGroups', 'Allows an administrator to add a user to any group on the system.' );
+        insert into permissions values( 'GroupMan', 'AllGroups', 'Allows an administrator to manage any group on the system.' );
+    </initialize>
+</table>
+
+<table name="user_metrics">
+    <info>
+        This table stores metric information tied to a user, this
+        can include information like how many times they've logged in,
+        how many reports they've run or similar count-related items.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_count" type="numeric(16,0)" null="no"/>
+    <index name="primary_user_metrics_index" unique="yes">
+        user_id, metric_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="user_metric_desc">
+    <info>
+        This table defines a meaning for each of the metrics stored
+        for a user. This allows us to tie a descriptive name to a 
+        metric when they are viewed through the system.
+    </info>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_desc" type="varchar(255)" null="no"/>
+    <index name="primary_user_metric_desc_index" unique="yes">
+        metric_id
+    </index>
+</table>
+
+<table name="user_preferences">
+    <info>
+        This table stores preferences for a user, which can actually
+        include an incredibly vast amount of data. In practice, since
+        report layout is stored in preferences, some users had counts
+        of well over 2000 preference items.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="pref_name" type="varchar(128)" null="no"/>
+    <field name="pref_value" type="varchar(255)" null="no"/>
+    <index name="primary_user_pref_index" unique="yes">
+        user_id, pref_name
+    </index>
+    <index name="secondary_user_pref_index" unique="no">
+        pref_name, user_id
+    </index>
+    <initialize>
+        insert into user_preferences values( 'admin', 'DefaultProject', '1' );
+        insert into user_preferences values( 'admin', 'DefaultVersion_1', '2' );
+        insert into user_preferences values( 'admin', 'DefaultMilestone_1', '4' );
+        insert into user_preferences values( 'admin', 'DefaultMilestone_2', '2' );
+    </initialize>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="groups">
+    <info>
+        The group table allows us to store information for each group
+        within the BaseCamp system. Groups have an ID, used internally, 
+        a name, used for display, and a description which includes other
+        useful information about the group, such as contact information.
+        The allows_new_user flag determines whether the item can appear
+        on the new user page, and the req_approval flag tells whether 
+        joining the group requires approval from an administrator.
+    </info>
+    <field name="group_id"          type="char(16)"         null="no" />
+    <field name="group_name"        type="varchar(128)"     null="no" />
+    <field name="group_desc"        type="varchar(255)"     null="no" />
+    <field name="allows_new_user"   type="int"              null="no" />
+    <field name="req_approval"      type="int"              null="no" />
+    <index name="primary_groups_index" unique="yes">
+        group_id
+    </index>
+    <initialize>
+        insert into groups values('admin','BaseCamp Administrators','Administrators of the BaseCamp system.',0,1);
+        insert into groups values('everyone','All Users','All users of the BaseCamp system.',0,0);
+    </initialize>
+</table>
+
+<table name="group_members">
+    <info>
+        This table ties users to a group. Although it is unlikely, there
+        is actually nothing preventing a single user from belonging to
+        multiple groups.
+    </info>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
+    <index name="primary_group_members_index" unique="yes">
+        group_id, user_id
+    </index>
+    <initialize>
+        insert into group_members values('admin','admin');
+    </initialize>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="group_roles">
+    <info>
+        This table ties groups to the roles that their group members
+        are granted when they join a group. An individual user could
+        also be assigned roles through the user_role table and thus
+        have more roles than a regular group member.
+    </info>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="role_id" type="char(16)" null="no"/>
+    <index name="primary_group_roles_index" unique="yes">
+        group_id, role_id
+    </index>
+    <initialize>
+        insert into group_roles values( 'admin', 'everyone' );
+        insert into group_roles values( 'admin', 'ReqBase' );
+        insert into group_roles values( 'admin', 'BugBase' );
+        insert into group_roles values( 'admin', 'BugBaseAdmin' );
+        insert into group_roles values( 'admin', 'TestBase' );
+        insert into group_roles values( 'admin', 'SysAdmin' );
+        insert into group_roles values( 'admin', 'admin' );
+        insert into group_roles values('everyone','everyone');
+    </initialize>
+</table>
+
+<table name="group_preferences">
+    <info>
+        This table stores a set of preferences that are the "default" 
+        for a group. This is usually used to lay out report formats 
+        for a particular group. However, these preferences are only
+        duplicated to the user when they are added to the system. After
+        that point, their preferences become their own.
+    </info>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="pref_name" type="varchar(128)" null="no"/>
+    <field name="pref_value" type="varchar(255)" null="no"/>
+    <index name="primary_group_pref_index" unique="yes">
+        group_id, pref_name
+    </index>
+    <index name="secondary_group_pref_index" unique="no">
+        pref_name, group_id
+    </index>
+</table>
+
+<table name="group_metrics">
+    <info>
+        This table stores informational metrics about the group. The
+        information is limited to simple counts.
+    </info>
+    <field name="group_id" type="char(16)" null="no"/>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_count" type="numeric(16,0)" null="no"/>
+    <index name="primary_group_metrics_index" unique="yes">
+        group_id, metric_id
+    </index>
+</table>
+
+<table name="group_metric_desc">
+    <info>
+        This table provides a written description of each metric tied
+        to a group. This allows us to provide a human-readable display
+        of metrics.
+    </info>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_desc" type="varchar(255)" null="no"/>
+    <index name="primary_grp_metric_desc_index" unique="yes">
+        metric_id
+    </index>
+</table>
+
+<table name="metrics">
+    <info>
+        This table stores system-wide metrics values along with their
+        description. Since only one metric value is available for each
+        type of metric.
+    </info>
+    <field name="metric_id" type="char(16)" null="no"/>
+    <field name="metric_count" type="numeric(16,0)" null="no"/>
+    <field name="metric_desc" type="varchar(255)" null="no"/>
+    <index name="primary_metrics_index" unique="yes">
+        metric_id
+    </index>
+    <initialize>
+        insert into metrics values('MajorVersion',3,'Major Revision Number');
+        insert into metrics values('MinorVersion',0,'Minor Revision Number');
+        insert into metrics values('BuildNumber',1001,'Build Number');
+    </initialize>
+</table>
+
+<table name="event_log">
+    <info>
+        The event log stores information on events on the system. It
+        acts as a type of audit-log for the system and is only available
+        to administrators with various filter levels to keep the information
+        at a manageable level.
+    </info>
+    <field name="event_id" type="numeric(16,0)" null="no"/>
+    <field name="event_code" type="int" null="no"/>
+    <field name="time_stamp" type="datetime" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="description" type="varchar(255)" null="no"/>
+    <index name="primary_event_log_index" unique="yes">
+        event_id
+    </index>
+    <index name="secondary_event_log_index" unique="no">
+        event_id, time_stamp, event_code
+    </index>
+    <index name="tertiary_event_log_index" unique="no">
+        time_stamp, event_code, user_id, event_id
+    </index>
+    <index name="quaternary_event_log_index" unique="no">
+        event_code, time_stamp, event_id
+    </index>
+    <index name="pentiary_event_log_index" unique="no">
+        user_id, event_code, time_stamp, event_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="event_codes">
+    <info>
+        The event log stores codes to define the types of the events. These
+        codes are usually numeric and do not provide a human-readable version
+        of the event information.
+    </info>
+    <field name="event_code" type="int" null="no"/>
+    <field name="code_desc" type="varchar(255)" null="no"/>
+    <index name="primary_event_codes_index" unique="yes">
+        event_code
+    </index>
+</table>
+
+<table name="session">
+    <info>
+        The session table ties a unique session ID to a user. It tries to 
+        tie this session to an IP address as well. It also ties it to an
+        encrypted cookie code so we can identify a user in one of two ways.
+        IP lookup should not be considered a reliable method.
+    </info>
+    <field name="session_id"        type="numeric(16,0)"    null="no" />
+    <field name="user_id"           type="char(16)"         null="no" />
+    <field name="ip_address"        type="char(15)"         null="no" />
+    <field name="logout_after"      type="datetime"         null="no" />
+    <field name="start_time"        type="datetime"         null="no" />
+    <field name="cookie_code"       type="char(32)"         null="no" />
+    <index name="primary_session_index" unique="yes">
+        session_id
+    </index>
+    <index name="secondary_session_index" unique="no">
+        logout_after, start_time, session_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="report_folder">
+    <info>
+        This table is used to create the hierarchical report folder
+        structure that the user uses to store previously generated
+        reports in.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="parent_folder" type="int" null="no"/>
+    <field name="folder_name" type="varchar(80)" null="no"/>
+    <index name="primary_report_folder_index" unique="yes">
+        user_id, folder_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="report">
+    <info>
+        This table provides storage information for each report that
+        the user has generated. It also contains tracking information
+        so the background server can clean-up old reports.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="report_id" type="int" null="no"/>
+    <field name="storage_id" type="int" null="no"/>
+    <field name="report_title" type="varchar(255)" null="no"/>
+    <field name="last_accessed" type="datetime" null="no"/>
+    <field name="status" type="int" null="no"/>
+    <index name="primary_report_index" unique="yes">
+        user_id, folder_id, report_id
+    </index>
+    <index name="secondary_report_index" unique="no">
+        storage_id, user_id, folder_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="storage_data">
+    <info>
+        This table links the storage id to the file wherever it is being
+        stored. Note that storages could actually be on other servers, in
+        which case, the file will have to be retrieved before being displayed.
+    </info>
+    <field name="storage_id" type="int" null="no"/>
+    <field name="report_name" type="varchar(80)" null="no"/>
+    <field name="generation_date" type="datetime" null="no"/>
+    <field name="generation_server" type="varchar(80)" null="no"/>
+    <field name="data_file_name" type="varchar(255)" null="no"/>
+    <index name="primary_storage_data_index" unique="yes">
+        storage_id
+    </index>
+    <index name="secondary_storage_data_index" unique="no">
+        generation_date, storage_id
+    </index>
+</table>
+
+<table name="scheduled_report_queue">
+    <info>
+        The scheduled report queue table provides a timed schedule for
+        generating stored reports. Reports are queued into the table
+        and can be generated at any interval, and can be scheduled to
+        run on any future date. Reports can be set to run forever by
+        setting the run_count_remaining flag to -1. Otherwise, the
+        report will only be run the number of times set in the run_count_remaining
+        field.
+        The run_start_time and the status field are used by the background
+        server to monitor the status of a report that is running (run_flag
+        set to 1 instead of 0). The status code starts at zero. If the report
+        runs longer than 1/2 hour, the status code changes to a one. This is
+        a "yellow" status. If the run time exceeds two hours, the report
+        status is changed to 2, or "red status". At Six hours, the status is
+        changed to 3, for "Alert" status, and an e-mail is sent to the system
+        administrator. After 24 hours, the status is set to 4, "Timed-out", and
+        another mail message is sent to the system administrator. The run flag
+        is restored to zero. When a report runs that is already set to 4, if
+        the time again exceeds 24 hours, the report is marked as a status of 5, "Dead",
+        an e-mail is sent, and the run_flag is set to -1. 
+    </info>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="last_run" type="datetime" null="no"/>
+    <field name="interval_minutes" type="int" null="no"/>
+    <field name="next_run" type="datetime" null="no"/>
+    <field name="run_count" type="int" null="no"/>
+    <field name="run_count_remaining" type="int" null="no"/>
+    <field name="run_flag" type="int" null="no"/>
+    <field name="run_start_time" type="datetime" null="no"/>
+    <field name="status" type="int" null="no"/>
+    <index name="primary_sched_rpt_q_index" unique="no">
+        stored_report_id, last_run
+    </index>
+    <index name="secondary_sched_rpt_q_index" unique="no">
+        next_run, stored_report_id
+    </index>
+</table>
+
+<table name="stored_report">
+    <info>
+        This table provides storage for creating a "canned" report for
+        later generation. Each report has an owner, a group, and a set
+        of permissions for editing. The permissions are similar to the
+        Unix permissions (rwxrwxrwx) for owner/group/everyone.
+        The report identifier is the ReportFactory code used to build
+        the correct report object.
+    </info>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="report_identifier" type="varchar(80)" null="no"/>
+    <field name="permissions" type="char(9)" null="no"/>
+    <field name="last_used" type="datetime" null="no"/>
+    <field name="owner_user_id" type="char(16)" null="no"/>
+    <field name="group_id" type="char(16)" null="no"/>
+    <index name="primary_stored_rpt_index" unique="yes">
+        stored_report_id
+    </index>
+    <user_fields>
+        owner_user_id
+    </user_fields>
+</table>
+
+<table name="stored_report_recipients">
+    <info>
+        This table is used to target the recipients of a stored report.
+        Since reports can be targeted at more than one recipient, this
+        allows us to send a "copy" of the report to each person in this
+        list. The folder_id is used to determine which folder in the
+        report_folders table that the receiving user wants their copy 
+        of the report put into.
+    </info>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <index name="primary_stored_rpt_recip_index" unique="yes">
+        stored_report_id, user_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="report_parameters">
+    <info>
+        This table provides storage for the parameters used to generate
+        the report. These parameters use the same name and values that
+        you would normally find in the HTML form. This makes it very
+        simple to build a scheduled report generator.
+    </info>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="parameter_name" type="varchar(80)" null="no"/>
+    <field name="parameter_value" type="varchar(80)" null="no"/>
+    <index name="primary_report_param_index" unique="yes">
+        stored_report_id, parameter_name
+    </index>
+</table>
+
+<table name="stored_folder">
+    <info>
+        Stored folders are used to organize reports that users have set 
+        aside for future generation. Each folder can contain multiple stored
+        reports and each folder can contain other folders as well.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="parent_folder" type="int" null="no"/>
+    <field name="folder_name" type="varchar(80)" null="no"/>
+    <index name="primary_stored_folder_index" unique="yes">
+        user_id, folder_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="folder_contents">
+    <info>
+        This table provides the cross-reference from user folders to stored
+        reports. This lets multiple users have access to the same stored 
+        report if desired. Reports can be shared on a user, group, or universal
+        level.
+    </info>
+    <field name="user_id" type="char(16)" null="no"/>
+    <field name="folder_id" type="int" null="no"/>
+    <field name="stored_report_id" type="int" null="no"/>
+    <field name="description" type="varchar(80)" null="no"/>
+    <index name="primary_fldr_cntnts_index" unique="yes">
+        user_id, folder_id, stored_report_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="file_storage">
+    <info>
+        This table stores information on file storage. Note that the base
+        location for storage can be changed from within the settings. However,
+        BaseCamp (at least for now) supports only a single-machine file 
+        storage system. So, for now at least, if the file server goes down, 
+        there's no "failover" to another file server. Nor is there support for
+        writing uploaded files to two or more file servers. Maybe in Version 4?
+    </info>
+    <field name="file_id" type="numeric(16,0)" null="no"/>
+    <field name="file_path" type="varchar(512)" null="no"/>
+    <field name="file_name" type="varchar(256)" null="no"/>
+    <field name="file_description" type="varchar(80)" null="no"/>
+    <field name="creator" type="char(16)" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="modifier" type="char(16)" null="no"/>
+    <field name="last_modified" type="datetime" null="no"/>
+    <field name="mime_type" type="varchar(80)" null="no"/>
+    <field name="file_length" type="int" null="no"/>
+    <index name="file_storage_primary_index" unique="yes">
+        file_id
+    </index>
+    <index name="file_storage_secondary_index" unique="no">
+        creator,creation_date,modifier,last_modified
+    </index>
+    <user_fields>
+        creator,modifier
+    </user_fields>
+</table>
+
+<table name="project">
+    <info>
+        The Project table stores information about a top-level project. A 
+        project is synonymous with a complete software package or a single
+        system. For example, Project Everest was the code name for the 
+        initial BaseCamp development. 
+    </info>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="project_name" type="varchar(80)" null="no"/>
+    <field name="project_desc" type="varchar(256)" null="no"/>
+    <field name="manager_id" type="char(16)" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="creator" type="char(16)" null="no"/>
+    <field name="released_version" type="numeric(16,0)" null="yes"/>
+    <field name="dev_version" type="numeric(16,0)" null="no"/>
+    <field name="release_date" type="datetime" null="no"/>
+    <index name="project_primary_index" unique="yes">
+        project_id
+    </index>
+    <initialize>
+        insert into project values(1,'BaseCamp','BaseCamp is a program for --scaling the mountain-- of project management.', 'admin', '01/01/1994 00:00:00', 'admin', 1, 2, '02/28/2004 00:00:00');
+    </initialize>
+    <user_fields>
+        manager_id,creator
+    </user_fields>
+</table>
+
+<table name="project_audit">
+    <info>
+        This table defines audit tracking for a project. Each project
+        has to maintain a complete audit trail of who made changes to it and 
+        what changes were made.
+    </info>
+    <field name="project_id"            type="numeric(16,0)"    null="no"/>
+    <field name="user_id"               type="char(16)"         null="no"/>
+    <field name="change_date"           type="datetime"         null="no"/>
+    <field name="change_desc"           type="text"             null="no"/>
+    <index name="project_audit_primary_index" unique="no">
+        project_id,user_id,change_date
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="project_docs">
+    <info>
+        The Project documents stores links to documentation for the project.
+        This can be up and downloaded as needed, and serves as a document
+        repository for the system.
+    </info>
+    <field name="project_id"        type="numeric(16,0)"    null="no"/>
+    <field name="file_id"           type="numeric(16,0)"    null="no"/>
+    <field name="file_desc"         type="varchar(80)"      null="no"/>
+    <field name="summary"           type="text"             null="yes"/>
+    <index name="project_docs_primary_index" unique="yes">
+        project_id,file_id
+    </index>
+</table>
+
+<table name="project_comments">
+    <info>
+        This table stores all of the comments attached to a project and attaches a 
+        date and an author to those comments.
+    </info>
+    <field name="project_id"        type="numeric(16,0)"    null="no"/>
+    <field name="comment_id"        type="numeric(16,0)"    null="no"/>
+    <field name="author"            type="char(16)"         null="no"/>
+    <field name="datestamp"         type="datetime"         null="no"/>
+    <field name="comment"           type="text"             null="no"/>
+    <index name="project_comments_primary_index" unique="yes">
+        project_id,comment_id
+    </index>
+    <user_fields>
+        author
+    </user_fields>
+</table>
+
+<table name="team">
+    <info>
+        This table stores information about a team. Teams are assigned to
+        work levels within a project.
+    </info>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="team_id" type="numeric(16,0)" null="no"/>
+    <field name="team_name" type="varchar(40)" null="no"/>
+    <field name="team_desc" type="varchar(256)" null="no"/>
+    <field name="team_lead" type="char(16)" null="no"/>
+    <index name="team_primary_index" unique="yes">
+        project_id, team_name
+    </index>
+    <index name="team_secondary_index" unique="yes">
+        team_id
+    </index>
+    <index name="team_tertiary_index" unique="no">
+        team_name,team_lead
+    </index>
+    <initialize>
+        insert into team values( 1, 1, 'BaseCampTeam','Members of the BaseCamp project', 'admin' );
+    </initialize>
+    <user_fields>
+        team_lead
+    </user_fields>
+</table>
+
+<table name="team_members">
+    <info>
+        This spin table ties users to teams. Any user can belong to multiple
+        teams, and, obviously, any team can have multiple users.
+    </info>
+    <field name="team_id" type="numeric(16,0)" null="no"/>
+    <field name="user_id" type="char(16)" null="no"/>
+    <index name="team_members_primary_index" unique="yes">
+        team_id,user_id
+    </index>
+    <initialize>
+        insert into team_members values( 1, 'admin' );
+    </initialize>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="requirement">
+    <info>
+        This table provides tracking for project requirements. Each requirement
+        for a project gets detailed as a requirement in the database. Each
+        requirement can have supporting documentation, and supporting files. 
+        In addition, requirements are tied to the project at the project, version,
+        and milestone level to provide requirements tracking at each level. 
+        Requirements also can be tied to test cases that would prove that a 
+        requirement is met. 
+        Basically the requirement is the heart and soul of the whole tracking
+        system, as it ties together ReqBase, TestBase, and BugBase.
+        Note: the req_full_desc field is actually a file_storage identifier because
+        256 characters is a lousy amount of space to hold a description. However, it
+        is enough for a quick description to pop-up into a list without having to 
+        do the file pull and process. 
+        The flags field holds a set of flags that deal with the state of the 
+        requirement:
+        Flag 1:
+                N = New
+                R = Reviewed
+                A = Approved
+                S = Scheduled
+                P = Assigned
+                D = Developed
+                T = Tested
+                V = Verified
+                C = Complete
+        Flag 2-16:
+                Reserved 
+    </info>
+    <field name="req_id" type="numeric(16,0)" null="no"/>
+    <field name="req_number" type="numeric(16,0)" null="no"/>
+    <field name="req_summary" type="varchar(80)" null="no"/>
+    <field name="req_description" type="varchar(256)" null="no"/>
+    <field name="req_full_desc" type="numeric(16,0)" null="no"/>
+    <field name="creator" type="char(16)" null="no"/>
+    <field name="creation_date" type="datetime" null="no"/>
+    <field name="modifier" type="char(16)" null="no"/>
+    <field name="last_modified" type="datetime" null="no"/>
+    <field name="flags" type="char(16)" null="no"/>
+    <index name="requirement_primary_index" unique="yes">
+        req_id
+    </index>
+    <index name="requirement_secondary_index" unique="no">
+        req_number,creator,creation_date,modifier,last_modified,flags
+    </index>
+    <user_fields>
+        creator,modifier
+    </user_fields>
+</table>
+
+<table name="req_audit">
+    <info>
+        This table defines audit tracking for a requirement. Each requirement
+        has to maintain a complete audit trail of who made changes to it and 
+        what changes were made.
+    </info>
+    <field name="req_id"                type="numeric(16,0)"    null="no"/>
+    <field name="user_id"               type="char(16)"         null="no"/>
+    <field name="change_date"           type="datetime"         null="no"/>
+    <field name="change_desc"           type="text"             null="no"/>
+    <index name="req_audit_primary_index" unique="no">
+        req_id,user_id,change_date
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="project_requirements">
+    <info>
+        This table ties requirements to a project. Each project can have 
+        multiple requirements, and although each requirement should have 
+        only one project, there are times when that might not be the 
+        case (for example, a company wide security mandate might cross
+        projects.)
+        The other problem is that we don't want to tie project id directly
+        to requirement because of the need to also tie a requirement to
+        versions and milestones within the project. Thus, a spin table. Go
+        read your database normalization books at someone else.
+        However, project-spanning requirements might have different
+        priorities within a project, so, we associate a priority with 
+        each entry in the spin table. So there, we added value. 
+    </info>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="req_id" type="numeric(16,0)" null="no"/>
+    <field name="priority" type="char(16)" null="no"/>
+    <index name="project_reqs_primary_index" unique="yes">
+        project_id,req_id
+    </index>
+    <index name="project_reqs_secondary_index" unique="no">
+        priority,project_id
+    </index>
+</table>
+
+<table name="version">
+    <info>
+        This table stores information on a version within a project.
+        Each project can, and most likely will, have multiple versions. 
+        Each version can have it's own ties to development teams and so
+        on and so forth. Also to requirements and defects, etc.
+        Also, each version can have a name. The 2.2 version of BaseCamp
+        was called NextSteppe during development.
+    </info>
+    <field name="version_id" type="numeric(16,0)" null="no"/>
+    <field name="version_number" type="char(16)" null="no"/>
+    <field name="version_name" type="char(40)" null="no"/>
+    <field name="manager" type="char(16)" null="no"/>
+    <field name="status" type="numeric(4,0)" null="no"/>
+    <index name="version_primary_index" unique="yes">
+        version_id
+    </index>
+    <index name="version_secondary_index" unique="no">
+        version_name,version_number,manager,status
+    </index>
+    <initialize>
+        insert into version values(1,'3.0','Everest', 'admin', 12 );
+        insert into version values(2,'3.01','Sneffles', 'admin', 8 );
+    </initialize>
+    <user_fields>
+        manager
+    </user_fields>
+</table>
+
+<table name="version_audit">
+    <info>
+        This table defines audit tracking for a version. Each version
+        has to maintain a complete audit trail of who made changes to it and 
+        what changes were made.
+    </info>
+    <field name="version_id"            type="numeric(16,0)"    null="no"/>
+    <field name="user_id"               type="char(16)"         null="no"/>
+    <field name="change_date"           type="datetime"         null="no"/>
+    <field name="change_desc"           type="text"             null="no"/>
+    <index name="version_audit_primary_index" unique="no">
+        version_id,user_id,change_date
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="version_status">
+    <info>
+        This table provides a soft list of status codes for a version. Each
+        status can have a different meaning, and have little effect on the 
+        system itself.
+    </info>
+    <field name="version_status"    type="numeric(4,0)"     null="no"/>
+    <field name="status_code"       type="varchar(40)"      null="no"/>
+    <index name="version_status_primary_index" unique="yes">
+        version_status
+    </index>
+    <initialize>
+        insert into version_status values(0,'Proposed');
+        insert into version_status values(1,'Kickoff');
+        insert into version_status values(2,'Requirements Gathering');
+        insert into version_status values(3,'Requirements Approval');
+        insert into version_status values(4,'Design');
+        insert into version_status values(5,'Architecture');
+        insert into version_status values(6,'Resource Planning');
+        insert into version_status values(7,'Development');
+        insert into version_status values(8,'Pre-Alpha Testing');
+        insert into version_status values(9,'Alpha Test');
+        insert into version_status values(10,'Beta Test');
+        insert into version_status values(11,'Release Candidates');
+        insert into version_status values(12,'UAT');
+        insert into version_status values(13,'Released');
+    </initialize>
+</table>
+
+<table name="project_versions">
+    <info>
+        This table ties versions to a project.
+    </info>
+    <field name="project_id"            type="numeric(16,0)"        null="no"/>
+    <field name="version_id"            type="numeric(16,0)"        null="no"/>
+    <index name="project_version_primary_index" unique="yes">
+        project_id,version_id
+    </index>
+    <initialize>
+        insert into project_versions values(1,1);
+        insert into project_versions values(1,2);
+    </initialize>
+</table>
+
+<table name="milestone">
+    <info>
+        This table stores information on milestones within the version. Milestones
+        are used as checkpoints within a development schedule for a version. When
+        a project is created several milestones are added automatically: Kickoff, 
+        Requirements Complete, Design Complete, Code Complete, Test Complete, and
+        the Released milestone.
+    </info>
+    <field name="milestone_id" type="numeric(16,0)" null="no"/>
+    <field name="milestone_name" type="char(80)" null="no"/>
+    <field name="manager" type="char(16)" null="no"/>
+    <field name="status" type="numeric(4,0)" null="no"/>
+    <field name="targeted_start"    type="datetime"         null="no"/>
+    <field name="targeted_end"      type="datetime"         null="no"/>
+    <field name="actual_start"      type="datetime"         null="yes"/>
+    <field name="lockdown_date" type="datetime" null="yes"/>
+    <field name="verified_date" type="datetime" null="yes"/>
+    <index name="milestone_primary_index" unique="yes">
+        milestone_id
+    </index>
+    <index name="milestone_secondary_index" unique="no">
+        milestone_name,targeted_start,targeted_end,actual_start,manager,status
+    </index>
+    <initialize>
+        insert into milestone values( 1,'Kickoff', 'jnaujok', 4, '01/15/2004 00:00:00', '1/15/2004 00:00:00', '1/15/2004 00:00:00', '1/15/2004 00:00:00', '1/15/2004 00:00:00' );
+        insert into milestone values( 2,'Code Complete', 'jnaujok', 2, '01/15/2004 00:00:00', '2/18/2004 00:00:00', '1/15/2004 00:00:00', '', '' );
+        insert into milestone values( 3,'Demo', 'jnaujok', 6, '02/17/2004 00:00:00', '2/17/2004 00:00:00', '', '', '' );
+        insert into milestone values( 4,'UAT', 'jnaujok', 2, '09/15/2000 15:00:00', '10/15/2000 15:00:00', '9/17/2000 15:00:00', '9/16/2000 23:00:00', '' );
+    </initialize>
+    <user_fields>
+        manager
+    </user_fields>
+</table>
+
+<table name="milestone_audit">
+    <info>
+        This table stores information about a milestone's audit trail. Each time a 
+        milestone is changed, an audit record is written so that a complete history 
+        of the milestone is maintained.
+    </info>
+    <field name="milestone_id"          type="numeric(16,0)"    null="no"/>
+    <field name="user_id"               type="char(16)"         null="no"/>
+    <field name="change_date"           type="datetime"         null="no"/>
+    <field name="change_desc"           type="text"             null="no"/>
+    <index name="milestone_audit_primary_index" unique="no">
+        milestone_id,user_id,change_date
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+
+<table name="milestone_status">
+    <info>
+        This table provides a soft list of status codes for a milestone. Each
+        status can have a different meaning, and have little effect on the 
+        system itself.
+    </info>
+    <field name="milestone_status"  type="numeric(4,0)"     null="no"/>
+    <field name="status_code"       type="varchar(40)"      null="no"/>
+    <index name="milestone_status_primary_index" unique="yes">
+        milestone_status
+    </index>
+    <initialize>
+        insert into milestone_status values(0,'Proposed');
+        insert into milestone_status values(1,'Agreed');
+        insert into milestone_status values(2,'In Progress');
+        insert into milestone_status values(3,'Completed');
+        insert into milestone_status values(4,'Closed');
+        insert into milestone_status values(5,'Released');
+        insert into milestone_status values(6,'Missed');
+        insert into milestone_status values(7,'Deprecated');
+        insert into milestone_status values(8,'Postponed');
+        insert into milestone_status values(9,'Discarded');
+        insert into milestone_status values(10,'Failed');
+        insert into milestone_status values(11,'Under Test');
+    </initialize>
+</table>
+
+<table name="version_milestones">
+    <info>
+        This table ties milestones to a version.
+    </info>
+    <field name="version_id"            type="numeric(16,0)"        null="no"/>
+    <field name="milestone_id"          type="numeric(16,0)"        null="no"/>
+    <index name="version_milestones_primary_index" unique="yes">
+        version_id,milestone_id
+    </index>
+    <initialize>
+        insert into version_milestones values( 1, 1 )
+        insert into version_milestones values( 1, 2 )
+        insert into version_milestones values( 1, 3 )
+    </initialize>
+</table>
+
+<table name="bugbase">
+    <info>
+        This table stores the defects associated with the BugBase reporting
+        system. Each defect has an audit trail in the bug_comments table.
+    </info>
+    <field name="bug_id" type="numeric(16,0)" null="no"/>
+    <field name="project_id" type="numeric(16,0)" null="no"/>
+    <field name="bug_number" type="numeric(16,0)" null="no"/>
+    <field name="bug_title" type="char(255)" null="no"/>
+    <field name="bug_type" type="int" null="no"/>
+    <field name="bug_priority" type="int" null="no"/>
+    <field name="bug_status" type="int" null="no"/>
+    <field name="bug_owner" type="char(16)" null="no"/>
+    <field name="bug_assigned" type="char(16)" null="no"/>
+    <field name="bug_created" type="datetime" null="no"/>
+    <field name="bug_last_changed" type="datetime" null="no"/>
+    <field name="bug_reproduced" type="int" null="no"/>
+    <field name="bug_est_time_to_fix" type="numeric(16,0)" null="yes"/>
+    <field name="bug_act_time_to_fix" type="numeric(16,0)" null="yes"/>
+    <field name="bug_locked_by" type="char(16)" null="yes"/>
+    <field name="bug_locked" type="int" null="no"/>
+    <field name="bug_closed_by" type="char(16)" null="yes"/>
+    <field name="bug_closed" type="int" null="no"/>
+    <field name="bug_closed_on" type="datetime" null="yes"/>
+    <index name="bugbase_primary_index" unique="yes">
+        bug_id
+    </index>
+    <index name="bugbase_secondary_index" unique="no">
+        bug_number,bug_type,bug_priority,bug_status,bug_owner,bug_assigned,bug_created,bug_last_changed,bug_closed
+    </index>
+    <user_fields>
+        bug_owner,bug_assigned,bug_locked_by,bug_closed_by
+    </user_fields>
+</table>
+
+<table name="bug_relationship">
+    <info>
+        This table links a defect in BugBase to any other defect in BugBase. It also
+        defines a relationship between the two bugs so that we can set up bug relationships.
+    </info>
+    <field name="bug_id"                type="numeric(16,0)"    null="no"/>
+    <field name="related_bug_id"        type="numeric(16,0)"    null="no"/>
+    <field name="relationship"          type="int"              null="no"/>
+    <index name="bug_relationship_primary_index" unique="yes">
+        bug_id,related_bug_id
+    </index>
+</table>
+
+<table name="bug_relationship_codes">
+    <info>
+        This table provides definitions for the relationship between two bugs. At this time,
+        this table is hard coded, and it's doubtful as to how much it can be made "soft" in 
+        the future.
+    </info>
+    <field name="relationship"          type="int"              null="no"/>
+    <field name="display"               type="varchar(80)"      null="no"/>
+    <index name="bug_relationship_code_primary_index" unique="yes">
+        relationship
+    </index>
+    <initialize>
+        insert into bug_relationship_codes values( 1, 'Duplicate' );
+        insert into bug_relationship_codes values( 2, 'Depends on' );
+        insert into bug_relationship_codes values( 3, 'Must be completed before' );
+        insert into bug_relationship_codes values( 4, 'Similar to' );
+        insert into bug_relationship_codes values( 5, 'See Also' );
+        insert into bug_relationship_codes values( 6, 'Related to' );
+    </initialize>
+</table>
+
+<table name="bug_audit">
+    <info>
+        This table stores information about a bug's audit trail. Each time a bug is 
+        changed, an audit record is written so that a complete history of the bug is
+        maintained.
+    </info>
+    <field name="bug_id"                type="numeric(16,0)"    null="no"/>
+    <field name="user_id"               type="char(16)"         null="no"/>
+    <field name="change_date"           type="datetime"         null="no"/>
+    <field name="change_desc"           type="text"             null="no"/>
+    <index name="bug_audit_primary_index" unique="no">
+        bug_id,user_id,change_date
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="bug_fields">
+    <info>
+        This table stores additional bugs fields that should be entered
+        when a bug is entered into the database. This table holds the actual
+        stored data that was filled into those fields.
+    </info>
+    <field name="bug_id"                type="numeric(16,0)"    null="no"/>
+    <field name="project_id"            type="numeric(16,0)"    null="no"/>
+    <field name="field_code"            type="numeric(16,0)"    null="no"/>
+    <field name="data_value"            type="varchar(255)"     null="no"/>
+    <index name="bug_fields_primary_index" unique="yes">
+        bug_id,project_id,field_code
+    </index>
+</table>
+
+<table name="bug_field_definitions">
+    <info>
+        When an additional field is added to the bugs to be stored for a 
+        particular project, that field and its information is added to this table.
+        This table is then queried when building the "bug entry" page and used
+        to provide a list of extra fields on the page.
+        Field types are: 1-Short text field, 2-Combo-box, 3-List, 4-List with
+        multiple selections, 5-Checkbox, 6-Date
+    </info>
+    <field name="project_id"            type="numeric(16,0)"    null="no"/>
+    <field name="field_code"            type="numeric(16,0)"    null="no"/>
+    <field name="display_name"          type="varchar(80)"      null="no"/>
+    <field name="field_type"            type="int"              null="no"/>
+    <field name="default_value"         type="varchar(80)"      null="no"/>
+    <field name="mandatory"             type="int"              null="no"/>
+    <field name="size"                  type="int"              null="no"/>
+    <field name="maxlength"             type="int"              null="no"/>
+    <index name="bug_field_def_primary_index" unique="yes">
+        project_id,field_code
+    </index>
+    <initialize>
+        insert into bug_field_definitions values( 1, 1, 'Platform', 2, '4', 1, 1, 80 );
+        insert into bug_field_definitions values( 1, 2, 'Browser', 2, '4', 1, 1, 80 );
+    </initialize>
+</table>
+
+<table name="bug_field_values">
+    <info>
+        If the bug field definition is either a combo-box or a list, it becomes
+        necessary to provide a set of default values for those fields. This is the table
+        that produces that list.
+    </info>
+    <field name="project_id"            type="numeric(16,0)"    null="no"/>
+    <field name="field_code"            type="numeric(16,0)"    null="no"/>
+    <field name="sequence_number"       type="numeric(5,0)"     null="no"/>
+    <field name="value"                 type="varchar(80)"      null="no"/>
+    <field name="display"               type="varchar(80)"      null="no"/>
+    <index name="bug_field_values_primary_index" unique="yes">
+        project_id,field_code,sequence_number
+    </index>
+    <initialize>
+        insert into bug_field_values values( 1, 1, 1, '1', 'Windows 95' );
+        insert into bug_field_values values( 1, 1, 2, '2', 'Windows 98' );
+        insert into bug_field_values values( 1, 1, 3, '3', 'Windows ME' );
+        insert into bug_field_values values( 1, 1, 4, '4', 'Windows 2000' );
+        insert into bug_field_values values( 1, 1, 5, '5', 'Windows XP' );
+        insert into bug_field_values values( 1, 1, 6, '6', 'Windows NT 3.51' );
+        insert into bug_field_values values( 1, 1, 7, '7', 'Windows NT 4.0' );
+        insert into bug_field_values values( 1, 1, 8, '8', 'Solaris' );
+        insert into bug_field_values values( 1, 1, 9, '9', 'DEC Unix' );
+        insert into bug_field_values values( 1, 1,10,'10', 'Unix (Other)' );
+        insert into bug_field_values values( 1, 1,11,'11', 'Linux' );
+        insert into bug_field_values values( 1, 1,12,'12', 'Mac' );
+
+        insert into bug_field_values values( 1, 2, 1, '1', 'Internet Explorer 4.01' );
+        insert into bug_field_values values( 1, 2, 2, '2', 'Internet Explorer 5.0' );
+        insert into bug_field_values values( 1, 2, 3, '3', 'Internet Explorer 5.5' );
+        insert into bug_field_values values( 1, 2, 4, '4', 'Internet Explorer 6.0' );
+        insert into bug_field_values values( 1, 2, 5, '5', 'Netscape 4.7' );
+        insert into bug_field_values values( 1, 2, 6, '6', 'Netscape 6.0' );
+        insert into bug_field_values values( 1, 2, 7, '7', 'Netscape 6.1' );
+        insert into bug_field_values values( 1, 2, 8, '8', 'Netscape 6.2' );
+        insert into bug_field_values values( 1, 2, 9, '9', 'Opera' );
+    </initialize>
+</table>
+
+<table name="bug_comments">
+    <info>
+        This table stores the comments attached to the bugs. Each comment
+        is tagged with a time/date and an author.
+    </info>
+    <field name="bug_id" type="numeric(16,0)" null="no"/>
+    <field name="author" type="char(16)" null="no"/>
+    <field name="modified_on" type="datetime" null="no"/>
+    <field name="bug_comments" type="text" null="yes"/>
+    <index name="bug_comments_primary" unique="no">
+        bug_id,author,modified_on
+    </index>
+    <user_fields>
+        author
+    </user_fields>
+</table>
+
+<table name="bug_files">
+    <info>
+        This table stores the files attached to the bugs.
+    </info>
+    <field name="bug_id" type="numeric(16,0)" null="no"/>
+    <field name="file_id" type="numeric(16,0)" null="no"/>
+    <field name="reason" type="varchar(80)" null="yes"/>
+    <index name="bug_files_primary" unique="no">
+        bug_id,file_id
+    </index>
+</table>
+
+<table name="version_bugs">
+    <info>
+        This spin table ties bugs to a version.
+    </info>
+    <field name="version_id"    type="numeric(16,0)"    null="no"/>
+    <field name="bug_id"        type="numeric(16,0)"    null="no"/>
+    <field name="priority"      type="int"              null="no"/>
+    <index name="version_bugs_primary_index" unique="yes">
+        version_id,bug_id
+    </index>
+</table>
+
+<table name="milestone_bugs">
+    <info>
+        This spin table ties bugs to a version.
+    </info>
+    <field name="milestone_id"  type="numeric(16,0)"    null="no"/>
+    <field name="bug_id"        type="numeric(16,0)"    null="no"/>
+    <field name="priority"      type="int"              null="no"/>
+    <index name="milestone_bugs_primary_index" unique="yes">
+        milestone_id,bug_id
+    </index>
+</table>
+
+<table name="bug_workflow">
+    <info>
+        The bug_workflow table attaches a team to a status code. Whenever a bug
+        is assigned to that status, the "assigned_to" user will automatically be
+        set to a team member of the specified team.
+    </info>
+    <field name="project_id"    type="numeric(16,0)"    null="no"/>
+    <field name="bug_status"    type="int"              null="no"/>
+    <field name="assign_to"     type="numeric(16,0)"    null="no"/>
+    <index name="bug_workflow_primary_index" unique="yes">
+        project_id,bug_status
+    </index>
+</table>
+
+<table name="bug_status">
+    <info>
+        This table provides status codes for the bugs in the system.
+    </info>
+    <field name="bug_status"    type="int"              null="no"/>
+    <field name="project_id"    type="numeric(16,0)"    null="no"/>
+    <field name="description"   type="varchar(80)"      null="no"/>
+    <field name="display_color" type="varchar(16)"      null="no"/>
+    <field name="locks_bug"     type="int"              null="no"/>
+    <field name="defers_bug"    type="int"              null="no"/>
+    <field name="closes_bug"    type="int"              null="no"/>
+    <field name="set_by_owner"  type="int"              null="no"/>
+    <field name="set_by_assign" type="int"              null="no"/>
+    <field name="initial_only"  type="int"              null="no"/>
+    <index name="bug_status_primary_index" unique="yes">
+        bug_status,project_id
+    </index>
+    <initialize>
+        insert into bug_status values( 0, 0, 'New Defect', '#CCCC80', 0, 0, 0, 1, 0, 1 );
+        insert into bug_status values( 1, 0, 'Confirmed', '#FFFFCC', 0, 0, 0, 0, 0, 0 );
+        insert into bug_status values( 2, 0, 'Not-Repeatable', '#EFEFEF', 0, 1, 0, 0, 0, 0 );
+        insert into bug_status values( 3, 0, 'Fixed', '#C0C0FF', 0, 0, 0, 0, 1, 0 );
+        insert into bug_status values( 4, 0, 'Verified', '#COEFff', 1, 1, 0, 1, 0, 0 );
+        insert into bug_status values( 5, 0, 'Closed', '#808080', 1, 0, 1, 1, 0, 0 );
+        insert into bug_status values( 6, 0, 'Re-Opened', '#FFCOCO', 0, 0, 0, 1, 0, 0 );
+        insert into bug_status values( 7, 0, 'Rejected', '#FFCOFF', 1, 0, 1, 0, 0, 0 );
+        insert into bug_status values( 8, 0, 'Deferred', '#FFC0FF', 1, 1, 0, 0, 0, 0 );
+        insert into bug_status values( 9, 0, 'In Progress...', '#80C080', 1, 0, 0, 0, 1, 0 );
+        insert into bug_status values(10, 0, 'Workaround', '#C0C080', 0, 1, 0, 0, 1, 0 );
+        insert into bug_status values( 0, 1, 'New Defect', '#CCCC80', 0, 0, 0, 1, 0, 1 );
+        insert into bug_status values( 1, 1, 'Confirmed', '#FFFFCC', 0, 0, 0, 0, 0, 0 );
+        insert into bug_status values( 2, 1, 'Not-Repeatable', '#EFEFEF', 0, 1, 0, 0, 0, 0 );
+        insert into bug_status values( 3, 1, 'Fixed', '#C0C0FF', 0, 0, 0, 0, 1, 0 );
+        insert into bug_status values( 4, 1, 'Verified', '#COEFff', 1, 1, 0, 1, 0, 0 );
+        insert into bug_status values( 5, 1, 'Closed', '#808080', 1, 0, 1, 1, 0, 0 );
+        insert into bug_status values( 6, 1, 'Re-Opened', '#FFCOCO', 0, 0, 0, 1, 0, 0 );
+        insert into bug_status values( 7, 1, 'Rejected', '#FFCOFF', 1, 0, 1, 0, 0, 0 );
+        insert into bug_status values( 8, 1, 'Deferred', '#FFC0FF', 1, 1, 0, 0, 0, 0 );
+        insert into bug_status values( 9, 1, 'In Progress...', '#80C080', 1, 0, 0, 0, 1, 0 );
+        insert into bug_status values(10, 1, 'Workaround', '#C0C080', 0, 1, 0, 0, 1, 0 );
+    </initialize>
+</table>
+
+<table name="bug_priority">
+    <info>
+        This table provides priority codes for the bugs in the system.
+    </info>
+    <field name="bug_priority"  type="int"              null="no"/>
+    <field name="project_id"    type="numeric(16,0)"    null="no"/>
+    <field name="description"   type="varchar(80)"      null="no"/>
+    <index name="bug_priority_primary_index" unique="yes">
+        bug_priority,project_id
+    </index>
+    <initialize>
+        insert into bug_priority values(10, 0, 'Low' );
+        insert into bug_priority values(20, 0, 'Moderate' );
+        insert into bug_priority values(30, 0, 'High' );
+        insert into bug_priority values(40, 0, 'Critical' );
+        insert into bug_priority values(50, 0, 'Show-Stopper' );
+        insert into bug_priority values(10, 1, 'Low' );
+        insert into bug_priority values(20, 1, 'Moderate' );
+        insert into bug_priority values(30, 1, 'High' );
+        insert into bug_priority values(40, 1, 'Critical' );
+        insert into bug_priority values(50, 1, 'Show-Stopper' );
+    </initialize>
+</table>
+
+<table name="bug_type">
+    <info>
+        This table provides type codes for BugBase.
+    </info>
+    <field name="bug_type"      type="int"              null="no"/>
+    <field name="project_id"    type="numeric(16,0)"    null="no"/>
+    <field name="description"   type="varchar(80)"      null="no"/>
+    <index name="bug_type_primary_index" unique="yes">
+        bug_type,project_id
+    </index>
+    <initialize>
+        insert into bug_type values(  0, 0, 'Cosmetic' );
+        insert into bug_type values( 10, 0, 'Poor Design' );
+        insert into bug_type values( 20, 0, 'Unexpected Result' );
+        insert into bug_type values( 30, 0, 'Defect' );
+        insert into bug_type values( 40, 0, 'Crash' );
+        insert into bug_type values( 50, 0, 'New Feature' );
+        insert into bug_type values( 60, 0, 'Wish List' );
+        insert into bug_type values( 70, 0, 'Other' );
+        insert into bug_type values(  0, 1, 'Cosmetic' );
+        insert into bug_type values( 10, 1, 'Poor Design' );
+        insert into bug_type values( 20, 1, 'Unexpected Result' );
+        insert into bug_type values( 30, 1, 'Defect' );
+        insert into bug_type values( 40, 1, 'Crash' );
+        insert into bug_type values( 50, 1, 'New Feature' );
+        insert into bug_type values( 60, 1, 'Wish List' );
+        insert into bug_type values( 70, 1, 'Other' );
+    </initialize>
+</table>
+
+<table name="test_plan">
+    <info>
+        This table stores information on a test plan for a requirement.
+    </info>
+    <field name="test_id"       type="numeric(16,0)"    null="no"/>
+    <field name="test_desc"     type="varchar(80)"      null="no"/>
+    <field name="test_plan"     type="text"             null="yes"/>
+    <index name="test_plan_primary_index" unique="yes">
+        test_id
+    </index>
+</table>
+
+<table name="test_files">
+    <info>
+        This table attaches supporting files to a test plan.
+    </info>
+    <field name="test_id"       type="numeric(16,0)"    null="no"/>
+    <field name="file_id"       type="numeric(16,0)"    null="no"/>
+    <index name="test_files_primary_index" unique="yes">
+        test_id,file_id
+    </index>
+</table>
+
+<table name="req_tests">
+    <info>
+        This spin table ties a test to a requirement.
+    </info>
+    <field name="test_id"       type="numeric(16,0)"    null="no"/>
+    <field name="req_id"        type="numeric(16,0)"    null="no"/>
+    <index name="req_tests_primary_index"   unique="yes">
+        test_id,req_id
+    </index>
+</table>
+
+<table name="test_bugs">
+    <info>
+        This spin table ties the bugs to the tests.
+    </info>
+    <field name="test_id"       type="numeric(16,0)"    null="no"/>
+    <field name="bug_id"        type="numeric(16,0)"    null="no"/>
+    <index name="test_bugs_primary_index" unique="yes">
+        test_id,bug_id
+    </index>
+</table>
+
+<table name="todo">
+    <info>
+        This table stores data for To-Do list items for a user. Each
+        item is tied to a particular user. This lets a user set up a
+        set of tasks for themselves as a way to keep up-to-date on 
+        items.
+    </info>
+    <field name="user_id"       type="char(16)"         null="no"/>
+    <field name="task_id"       type="numeric(16,0)"    null="no"/>
+    <field name="task_summary"  type="varchar(256)"     null="no"/>
+    <field name="description"   type="text"             null="no"/>
+    <field name="due_date"      type="datetime"         null="no"/>
+    <field name="priority"      type="numeric(4,0)"     null="no"/>
+    <field name="created"       type="datetime"         null="no"/>
+    <field name="complete"      type="int"              null="no"/>
+    <field name="completed"     type="datetime"         null="yes"/>
+    <index name="todo_primary_index" unique="yes">
+        user_id,task_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="todo_files">
+    <info>
+        This table ties files to a to-do list item. 
+    </info>
+    <field name="user_id"       type="char(16)"         null="no"/>
+    <field name="task_id"       type="numeric(16,0)"    null="no"/>
+    <field name="file_id"       type="numeric(16,0)"    null="no"/>
+    <index name="todo_files_primary" unique="yes">
+        user_id,task_id,file_id
+    </index>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="todo_priority">
+    <info>
+        This table provides priority codes for a user's todo list.
+    </info>
+    <field name="user_id"       type="char(16)"         null="no"/>
+    <field name="priority"      type="numeric(4,0)"     null="no"/>
+    <field name="pri_desc"      type="varchar(80)"      null="no"/>
+    <index name="todo_priority_primary_index" unique="yes">
+        user_id,priority
+    </index>
+    <initialize>
+        insert into todo_priority values('[[default]]', 10, 'Low' );
+        insert into todo_priority values('[[default]]', 20, 'Moderate' );
+        insert into todo_priority values('[[default]]', 30, 'High' );
+        insert into todo_priority values('[[default]]', 40, 'Critical' );
+        insert into todo_priority values('admin', 10, 'Low' );
+        insert into todo_priority values('admin', 20, 'Moderate' );
+        insert into todo_priority values('admin', 30, 'High' );
+        insert into todo_priority values('admin', 40, 'Critical' );
+    </initialize>
+    <user_fields>
+        user_id
+    </user_fields>
+</table>
+
+<table name="time_zones">
+    <info>
+        This table is just a quick and easy way to store all the 
+        various time zones and pull them up on a form. It's a lot easier
+        than coding them into all of the various pages where they are
+        needed.
+    </info>
+    <field name="offset"        type="int"              null="no"/>
+    <field name="name"          type="varchar(80)"      null="no"/>
+    <field name="continent"     type="varchar(80)"      null="no"/>
+    <index name="time_zones_primary_index" unique="no">
+        continent,offset
+    </index>
+    <initialize>
+        insert into time_zones values(0, 'GMT - Greenwich Mean Time - UTC', 'Europe');
+        insert into time_zones values(0, 'UTC - Coordinated Universal Time - UTC', 'Worldwide');
+        insert into time_zones values(0, 'BT - British Time - UTC', 'Europe');
+        insert into time_zones values(0, 'IT - Irish Time - UTC', 'Europe');
+        insert into time_zones values(0, 'WET - Western European Time - UTC', 'Europe');
+        insert into time_zones values(120, 'EET - Eastern European Time - UTC + 2 hours', 'Europe');
+        insert into time_zones values(180, 'EEST - Eastern European Summer Time - UTC + 3 hours', 'Europe');
+        insert into time_zones values(-210, 'NST - Newfoundland Standard Time - UTC - 3:30 hours', 'North America');
+        insert into time_zones values(-240, 'AST - Atlantic Standard Time- UTC - 4 hours', 'North America');
+        insert into time_zones values(-300, 'EST - Eastern Standard Time - UTC - 5 hours', 'North America');
+        insert into time_zones values(-360, 'CST - Central Standard Time - UTC - 6 hours', 'North America');
+        insert into time_zones values(420, 'CXT - Christmas Island Time - UTC + 7 hours', 'Australia');
+        insert into time_zones values(-420, 'MST - Mountain Standard Time - UTC - 7 hours', 'North America');
+        insert into time_zones values(480, 'AWST - Australian Western Standard Time - UTC + 8 hours', 'Australia');
+        insert into time_zones values(-480, 'PST - Pacific Standard Time - UTC - 8 hours', 'North America');
+        insert into time_zones values(-540, 'AKST - Alaska Standard Time - UTC - 9 hours', 'North America');
+        insert into time_zones values(570, 'ACST - Australian Central Standard Time - UTC + 9:30 hours', 'Australia');
+        insert into time_zones values(570, 'CST - Central Standard Time - UTC + 9:30 hours', 'Australia');
+        insert into time_zones values(60, 'CET - Central European Time - UTC + 1 hour', 'Europe');
+        insert into time_zones values(60, 'MEZ - Mitteleuropaische Zeit - UTC + 1 hour', 'Europe');
+        insert into time_zones values(600, 'AEST - Australian Eastern Standard Time - UTC + 10 hours', 'Australia');
+        insert into time_zones values(600, 'EST - Eastern Standard Time - UTC + 10 hours', 'Australia');
+        insert into time_zones values(-600, 'HAST - Hawaii-Aleutian Standard Time - UTC - 10 hours', 'North America');
+        insert into time_zones values(690, 'NFT - Norfolk (Island) Time - UTC + 11:30 hours', 'Australia');
+    </initialize>
+</table>

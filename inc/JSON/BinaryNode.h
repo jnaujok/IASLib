@@ -12,15 +12,12 @@ namespace IASLib {
         CDataBlock  *dataBlock;
     public:
         DEFINE_OBJECT(CBinaryNode)
+
         CBinaryNode( CString name, CString value );
 
         virtual ~CBinaryNode();
 
-        void setValue( bool value ) {
-            bValue = value;
-        }
-
-
+        virtual void setValue( CString value );
     };
 }
 
