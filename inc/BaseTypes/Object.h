@@ -17,11 +17,7 @@
 #define IASLIB_OBJECT_H__
 
 #ifdef IASLIB_WIN32__
-#ifndef WINVER
-#define WINVER 0x0500
-#endif
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+#include "Platform.h"
 #else
 #include <stdlib.h>
 #include <stdio.h>

@@ -205,6 +205,10 @@ if(USE_NETWORK AND NOT WIN32)
     endif()
 endif()
 target_link_libraries(IASLib PUBLIC ${CMAKE_DL_LIBS})
+if(WIN32)
+    # Winsock (MSVC also gets it from a #pragma in Platform.h).
+    target_link_libraries(IASLib PUBLIC ws2_32)
+endif()
 
 ENABLE_TESTING()
 ADD_SUBDIRECTORY( test )

@@ -36,7 +36,7 @@
     #endif
 
     #ifdef IASLIB_WIN32__
-        #include <windows.h>
+        #include "../BaseTypes/Platform.h"
         #define MUTEX_T HANDLE
     #endif
 #endif

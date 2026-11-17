@@ -32,7 +32,7 @@
 #ifdef IASLIB_MULTI_THREADED__
 
     #ifdef IASLIB_WIN32__
-        #include <windows.h>
+        #include "../BaseTypes/Platform.h"
         #define THREAD_T HANDLE
     #else
         #ifdef IASLIB_PTHREAD__

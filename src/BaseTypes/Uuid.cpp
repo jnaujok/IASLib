@@ -11,7 +11,7 @@
 
 #include "Uuid.h"
 #ifdef IASLIB_WIN32__
-#include <winsock2.h>     // htonl
+#include "Platform.h"
 #else
 #include <arpa/inet.h>
 #endif

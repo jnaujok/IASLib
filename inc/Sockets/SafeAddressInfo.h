@@ -24,7 +24,7 @@
 
 #ifdef IASLIB_NETWORKING__
 #ifdef IASLIB_WIN32__
-    #include <winsock2.h>
+    #include "../BaseTypes/Platform.h"
 #else
     #include <sys/types.h>
     #include <sys/socket.h>

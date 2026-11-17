@@ -22,7 +22,7 @@
 #include "../BaseTypes/String_.h"
 
 #ifdef IASLIB_WIN32__
-#include <windows.h>
+#include "../BaseTypes/Platform.h"
     typedef HMODULE DYN_LIB_TYPE;
 #endif
 

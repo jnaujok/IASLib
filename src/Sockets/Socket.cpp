@@ -22,7 +22,7 @@
 #include <string.h>
 #include <errno.h>
 #ifdef IASLIB_WIN32__
-#include <ws2tcpip.h>
+#include "Platform.h"
 #else
 #include <fcntl.h>
 #include <sys/socket.h>

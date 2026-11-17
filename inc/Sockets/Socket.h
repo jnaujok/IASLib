@@ -19,7 +19,7 @@
 
 #ifdef IASLIB_NETWORKING__
 #ifdef IASLIB_WIN32__
-    #include <winsock2.h>
+    #include "../BaseTypes/Platform.h"
     const SOCKET NULL_SOCKET = (SOCKET)NULL;
 #else
     #include <sys/types.h>

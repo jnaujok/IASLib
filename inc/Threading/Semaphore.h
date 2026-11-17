@@ -29,7 +29,7 @@ struct IASLibPthreadSemaphore
 #endif
 
 #ifdef IASLIB_WIN32__
-#include <windows.h>
+#include "../BaseTypes/Platform.h"
 #define SEMAPHORE_T HANDLE
 #endif
 
