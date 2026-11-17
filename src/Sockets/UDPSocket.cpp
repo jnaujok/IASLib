@@ -19,6 +19,10 @@
 #include "UDPSocket.h"
 #include "SocketException.h"
 #include <cerrno>
+#include "Socket.h"
+#ifndef IASLIB_WIN32__
+#include <poll.h>
+#endif
 
 namespace IASLib
 {
@@ -66,6 +70,12 @@ namespace IASLib
             }
 
             m_nPort = nPort;
+                // When asked for port 0, find out which port we were given.
+            socklen_t nBoundLen = sizeof( listen_addr );
+            if ( getsockname( m_hSocket, (struct sockaddr *)&listen_addr, &nBoundLen ) == 0 )
+            {
+                m_nPort = ntohs( listen_addr.sin_port );
+            }
             m_addrIPAddress = new CInternetAddress( &listen_addr );
                 // Now that we've bound the correct socket, we need to un-set the reuse-address option,
                 // because otherwise the accept call creates a socket that matches this one, apparently,
@@ -152,31 +162,56 @@ namespace IASLib
 
     int CUDPSocket::Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress )
     {
-        struct sockaddr remaddr;
-        socklen_t len = sizeof( struct sockaddr);
-        int n = recvfrom( m_hSocket, (char *)pchBuffer, nBufferSize,
-                    MSG_WAITALL, (struct sockaddr *) &remaddr,
-                    &len );
-        pchBuffer[n] = '\0';
-        incomingAddress.SetAddress(&remaddr);
+        struct sockaddr_storage remaddr;
+        socklen_t len = sizeof( remaddr );
+
+        int n = (int)recvfrom( m_hSocket, (char *)pchBuffer, nBufferSize, 0, (struct sockaddr *) &remaddr, &len );
+
+        if ( n < 0 )
+        {
+            return -1;
+        }
+
+        if ( n < nBufferSize )
+        {
+            pchBuffer[n] = '\0';
+        }
+        incomingAddress.SetAddress( (struct sockaddr *)&remaddr );
         return n;
+    }
+
+    int CUDPSocket::Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress, int nTimeoutMs )
+    {
+#ifndef IASLIB_WIN32__
+        struct pollfd pfd;
+        pfd.fd = m_hSocket;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+
+        int nReady = poll( &pfd, 1, nTimeoutMs );
+        if ( nReady == 0 || ( nReady < 0 && errno == EINTR ) )
+        {
+            return CSocket::READ_TIMEOUT;
+        }
+        if ( nReady < 0 )
+        {
+            return -1;
+        }
+#endif
+        return Read( pchBuffer, nBufferSize, incomingAddress );
     }
 
     int CUDPSocket::Send( const char *pchBuffer, int nBufferSize, const CInternetAddress &targetAddress )
     {
-        size_t retVal = 0;
+        int retVal = -1;
 
-        if ( targetAddress.isValid() )
+        const struct sockaddr *pTarget = targetAddress.GetAddress();
+
+        if ( ( targetAddress.isValid() ) && ( pTarget ) )
         {
-            retVal = sendto( m_hSocket, (const char *)pchBuffer, nBufferSize,
-                MSG_CONFIRM, (const struct sockaddr *)targetAddress,
-                    sizeof(struct sockaddr));
-            
-            if ( retVal == NOT_FOUND )
-            {
-                printf( "SendTo RetVal: %d\n", (int) retVal );
-                printf( "Errno: %d - %s\n", errno, strerror( errno ) );
-            }
+            socklen_t nAddrLen = ( pTarget->sa_family == AF_INET6 ) ? sizeof( struct sockaddr_in6 ) : sizeof( struct sockaddr_in );
+
+            retVal = (int)sendto( m_hSocket, (const char *)pchBuffer, nBufferSize, 0, pTarget, nAddrLen );
         }
         return retVal;
     }

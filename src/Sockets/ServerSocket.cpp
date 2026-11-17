@@ -20,6 +20,9 @@
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
+#ifndef IASLIB_WIN32__
+#include <poll.h>
+#endif
 
 #ifdef IASLIB_WIN32__
 typedef int socklen_t;
@@ -101,6 +104,37 @@ namespace IASLib
         delete pSockAddr;
 
         return pRetVal;
+    }
+    CSocket *CServerSocket::Accept( int nTimeoutMs )
+    {
+        if ( m_hSocket == NULL_SOCKET )
+        {
+            return NULL;
+        }
+
+#ifndef IASLIB_WIN32__
+        struct pollfd pfd;
+        pfd.fd = m_hSocket;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+
+        if ( poll( &pfd, 1, nTimeoutMs ) <= 0 )
+        {
+            return NULL;
+        }
+#endif
+
+        struct sockaddr_in sockAddr;
+        socklen_t nAddrLen = sizeof( struct sockaddr_in );
+
+        SOCKET hSocket = accept( m_hSocket, (struct sockaddr *)&sockAddr, &nAddrLen );
+
+        if ( ( hSocket == SOCKET_ERROR ) || ( hSocket == INVALID_SOCKET ) )
+        {
+            return NULL;
+        }
+
+        return new CSocket( hSocket, "Accepted Socket", &sockAddr );
     }
 } // namespace IASLib
 

@@ -36,6 +36,9 @@ namespace IASLib
                         DEFINE_OBJECT( CServerSocket )
 
             virtual CSocket    *Accept( void );
+                // Waits at most nTimeoutMs milliseconds for a connection.
+                // Returns NULL if none arrived in time or on error; never throws.
+            virtual CSocket    *Accept( int nTimeoutMs );
             virtual bool        isSecure( void ) { return m_bSecure; }
     };
 }

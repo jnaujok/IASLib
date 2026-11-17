@@ -97,7 +97,7 @@ namespace IASLib
     CInternetAddress::CInternetAddress( const CInternetAddress &oSource )
     {
         m_bIsValid = oSource.m_bIsValid;
-        m_sockAddressList = new CSafeAddressInfo( *oSource.m_sockAddressList );
+        m_sockAddressList = ( oSource.m_sockAddressList ) ? new CSafeAddressInfo( *oSource.m_sockAddressList ) : NULL;
         m_strHostname = oSource.m_strHostname;
         m_strService = oSource.m_strService;
     }
@@ -115,6 +115,10 @@ namespace IASLib
 
     CString CInternetAddress::toString( void )
     {
+        if ( m_sockAddressList == NULL )
+        {
+            return CString( "0.0.0.0" );
+        }
         return addressToString(m_sockAddressList->getAddr() );
     }
 
@@ -227,6 +231,10 @@ namespace IASLib
 
     sa_family_t CInternetAddress::GetFamily( void )
     {
+        if ( m_sockAddressList == NULL )
+        {
+            return AF_UNSPEC;
+        }
         return m_sockAddressList->getFamily();
     }
 
@@ -266,7 +274,7 @@ namespace IASLib
             default:
                 break;
         }
-        CString retVal = s;
+        CString retVal = ( s ) ? s : "";
         free(s);
         return retVal;
     }
@@ -371,8 +379,12 @@ namespace IASLib
     {
         if ( this != &oSource )
         {
+            if ( m_sockAddressList != NULL )
+            {
+                delete m_sockAddressList;
+            }
             m_bIsValid = oSource.m_bIsValid;
-            m_sockAddressList = new CSafeAddressInfo( *oSource.m_sockAddressList );
+            m_sockAddressList = ( oSource.m_sockAddressList ) ? new CSafeAddressInfo( *oSource.m_sockAddressList ) : NULL;
             m_strHostname = oSource.m_strHostname;
             m_strService = oSource.m_strService;
         }

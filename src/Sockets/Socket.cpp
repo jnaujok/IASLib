@@ -25,8 +25,19 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#ifndef IASLIB_WIN32__
+#include <poll.h>
+#endif
 
 #include "InternetAddress.h"
+
+    // Never raise SIGPIPE when the peer has closed the connection; send()
+    // reports the error instead, which the callers already handle.
+#if defined( MSG_NOSIGNAL )
+    #define IASLIB_SEND_FLAGS MSG_NOSIGNAL
+#else
+    #define IASLIB_SEND_FLAGS 0
+#endif
 
 #ifdef IASLIB_WIN32__
 namespace IASLib
@@ -55,7 +66,9 @@ static const char *inet_ntop( int iAddrFamily, unsigned long *addrConvert, char 
     if ( iAddrFamily == AF_INET )
     {
         struct in_addr  inaddrConvert;
-        inaddrConvert.s_addr = *addrConvert;
+            // Callers pass the address of a 4-byte s_addr, so copy only that
+            // much rather than reading a whole unsigned long.
+        memcpy( &inaddrConvert.s_addr, addrConvert, sizeof( inaddrConvert.s_addr ) );
 #ifdef IASLIB_MULTI_THREADED__
         mutexNTOP.Lock();
 #endif
@@ -109,6 +122,7 @@ namespace IASLib
     CSocket::CSocket( CSocketConfig config, const char *strConnectTo, int nPort )
     {
         m_nPort = 0;
+        m_internetAddress = NULL;
         m_addrIPAddress = 0;
         m_addrLocalIPAddress = 0;
         m_nLocalPort = 0;
@@ -150,7 +164,7 @@ namespace IASLib
 	    }
         else
         {
-            socklen_t nNameSize;
+            socklen_t nNameSize = sizeof( connect_addr );
 
             if ( getsockname( m_hSocket, (sockaddr *)&connect_addr, &nNameSize ) != SOCKET_ERROR )
             {
@@ -200,6 +214,7 @@ namespace IASLib
 #endif
 
         m_nPort = 0;
+        m_internetAddress = NULL;
         m_addrIPAddress = 0;
         m_addrLocalIPAddress = 0;
         m_nLocalPort = 0;
@@ -248,6 +263,13 @@ namespace IASLib
             else
             {
                 m_nPort = nPort;
+                    // When asked for port 0, find out which port we were given.
+                struct sockaddr_in bound_addr;
+                socklen_t nBoundLen = sizeof( bound_addr );
+                if ( getsockname( m_hSocket, (struct sockaddr *)&bound_addr, &nBoundLen ) == 0 )
+                {
+                    m_nPort = ntohs( bound_addr.sin_port );
+                }
                 m_addrIPAddress = INADDR_ANY;
                     // Now that we've bound the correct socket, we need to un-set the reuse-address option,
                     // because otherwise the accept call creates a socket that matches this one, apparently,
@@ -291,9 +313,10 @@ namespace IASLib
     {
         struct sockaddr_in *remote_addr = (struct sockaddr_in *)AddressIn;
 
-        socklen_t nNameSize;
+        socklen_t nNameSize = sizeof( struct sockaddr_in );
 
         m_nPort = 0;
+        m_internetAddress = NULL;
         m_addrIPAddress = 0;
         m_addrLocalIPAddress = 0;
         m_nLocalPort = 0;
@@ -335,6 +358,7 @@ namespace IASLib
                     m_addrLocalIPAddress = ntohl( connect_addr.sin_addr.s_addr );
                 }
 
+                nNameSize = sizeof( connect_addr );
                 if ( getpeername( m_hSocket, (sockaddr *)&connect_addr, &nNameSize ) != SOCKET_ERROR )
                 {
                     m_nPort = ntohs( connect_addr.sin_port );
@@ -378,6 +402,7 @@ namespace IASLib
 #endif
 
         m_nPort = 0;
+        m_internetAddress = NULL;
         m_addrIPAddress = 0;
         m_addrLocalIPAddress = 0;
         m_nLocalPort = 0;
@@ -420,6 +445,13 @@ namespace IASLib
             else
             {
                 m_nPort = nPort;
+                    // When asked for port 0, find out which port we were given.
+                struct sockaddr_in bound_addr;
+                socklen_t nBoundLen = sizeof( bound_addr );
+                if ( getsockname( m_hSocket, (struct sockaddr *)&bound_addr, &nBoundLen ) == 0 )
+                {
+                    m_nPort = ntohs( bound_addr.sin_port );
+                }
                 m_addrIPAddress = INADDR_ANY;
                     // Now that we've bound the correct socket, we need to un-set the reuse-address option,
                     // because otherwise the accept call creates a socket that matches this one, apparently,
@@ -458,6 +490,7 @@ namespace IASLib
     CSocket::CSocket( const char *strConnectTo, int nPort )
     {
         m_nPort = 0;
+        m_internetAddress = NULL;
         m_addrIPAddress = 0;
         m_addrLocalIPAddress = 0;
         m_nLocalPort = 0;
@@ -499,7 +532,7 @@ namespace IASLib
 	    }
         else
         {
-            socklen_t nNameSize;
+            socklen_t nNameSize = sizeof( connect_addr );
 
             if ( getsockname( m_hSocket, (sockaddr *)&connect_addr, &nNameSize ) != SOCKET_ERROR )
             {
@@ -523,6 +556,11 @@ namespace IASLib
      */
     CSocket::~CSocket()
     {
+        if ( m_internetAddress )
+        {
+            delete m_internetAddress;
+            m_internetAddress = NULL;
+        }
         if ( m_hSocket != NULL_SOCKET )
         {
     #ifdef IASLIB_WIN32__
@@ -604,7 +642,7 @@ namespace IASLib
         if ( m_hSocket != NULL_SOCKET )
         {
             pchBuf[0] = (char)chSend;
-            if ( send( m_hSocket, pchBuf, 1, 0 ) != SOCKET_ERROR )
+            if ( send( m_hSocket, pchBuf, 1, IASLIB_SEND_FLAGS ) != SOCKET_ERROR )
             {
                 return 1;
             }
@@ -641,7 +679,7 @@ namespace IASLib
                 {
                     nSent = nBufferSize;
     #else
-                nRet = send( m_hSocket, &(pchBuffer[ nSent ] ), nBufferSize - nSent, 0 );
+                nRet = send( m_hSocket, &(pchBuffer[ nSent ] ), nBufferSize - nSent, IASLIB_SEND_FLAGS );
                 if ( nRet != SOCKET_ERROR )
                 {
                     nSent += nRet;
@@ -805,16 +843,77 @@ namespace IASLib
         return ::inet_ntop( iAddrFamily, addrConvert, strBuffer, nMaxLen );
     }
 
+    int CSocket::ReadWithTimeout( char *pchBuffer, int nBufferSize, int nTimeoutMs )
+    {
+        if ( m_hSocket == NULL_SOCKET )
+        {
+            return READ_ERROR;
+        }
+
+#ifndef IASLIB_WIN32__
+        struct pollfd pfd;
+        pfd.fd = m_hSocket;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+
+        int nReady = poll( &pfd, 1, nTimeoutMs );
+        if ( nReady == 0 )
+        {
+            return READ_TIMEOUT;
+        }
+        if ( nReady < 0 )
+        {
+            return ( errno == EINTR ) ? READ_TIMEOUT : READ_ERROR;
+        }
+#endif
+
+        int nRet = (int)recv( m_hSocket, pchBuffer, nBufferSize, 0 );
+        if ( nRet < 0 )
+        {
+            return ( ( errno == EAGAIN ) || ( errno == EINTR ) ) ? READ_TIMEOUT : READ_ERROR;
+        }
+        return nRet;
+    }
+
+    void CSocket::Shutdown( void )
+    {
+        if ( m_hSocket != NULL_SOCKET )
+        {
+#ifdef IASLIB_WIN32__
+            shutdown( m_hSocket, SD_BOTH );
+#else
+            shutdown( m_hSocket, SHUT_RDWR );
+#endif
+        }
+    }
+
+    CInternetAddress &CSocket::getInternetAddress( void )
+    {
+        static CInternetAddress invalidAddress;
+
+        if ( m_internetAddress )
+        {
+            return *m_internetAddress;
+        }
+        return invalidAddress;
+    }
+
     void CSocket::setInternetAddress( void )
     {
         if ( m_hSocket )
         {
             if ( IsConnected() )
             {
+                if ( m_internetAddress )
+                {
+                    delete m_internetAddress;
+                    m_internetAddress = NULL;
+                }
+
                 socklen_t nNameSize = sizeof( struct sockaddr_in6 );
                 struct sockaddr *connect_addr = (sockaddr *)malloc( nNameSize );
 
-                if ( getpeername( m_hSocket, (sockaddr *)&connect_addr, &nNameSize ) != SOCKET_ERROR )
+                if ( getpeername( m_hSocket, connect_addr, &nNameSize ) != SOCKET_ERROR )
                 {
                     m_internetAddress = new CInternetAddress( connect_addr );
                 }

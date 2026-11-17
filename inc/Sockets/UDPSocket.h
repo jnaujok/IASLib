@@ -48,7 +48,12 @@ namespace IASLib
             virtual void setName( const char *name ) { m_strSocketName = name; }
             virtual CString getName( void ) { return m_strSocketName; }
             virtual bool            IsConnected( void ) { return (m_hSocket != NULL_SOCKET ) ? true:false; }
+                // Reads one datagram (blocking). Returns its length, or -1 on
+                // error. The data is NUL-terminated when it fits in the buffer.
             virtual int             Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress );
+                // As above, but waits at most nTimeoutMs milliseconds. Returns
+                // CSocket::READ_TIMEOUT if nothing arrived in time.
+            virtual int             Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress, int nTimeoutMs );
             virtual int             Send( const char *pchBuffer, int nBufferSize, const CInternetAddress &targetAddress );
             virtual int             GetPort( void ) { return m_nPort; }
             virtual const CInternetAddress &GetAddress( void ) const { return *m_addrIPAddress; }

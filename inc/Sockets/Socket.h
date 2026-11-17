@@ -80,10 +80,26 @@ namespace IASLib
             virtual int             GetPort( void ) { return m_nPort; }
             virtual unsigned long   GetAddress( void ) { return m_addrIPAddress; }
             virtual const char     *GetAddressString( bool bInternetAddress=true, bool bIncludePort=false );
-            virtual CInternetAddress &getInternetAddress( void ) { return *m_internetAddress; }
+                // The address of the remote end. Returns an invalid address if it
+                // is not known.
+            virtual CInternetAddress &getInternetAddress( void );
             virtual void            Close( void );
             virtual void            SetNonBlocking( bool bDontBlock );
             virtual bool            HasData( void );
+
+                // Reads up to nBufferSize bytes, waiting at most nTimeoutMs
+                // milliseconds (a negative timeout waits forever). Returns the
+                // number of bytes read, 0 if the peer closed the connection,
+                // READ_TIMEOUT if nothing arrived in time, or READ_ERROR. Unlike
+                // Read(), this never throws.
+            virtual int             ReadWithTimeout( char *pchBuffer, int nBufferSize, int nTimeoutMs );
+
+                // Shuts down both directions of a connected socket, which wakes
+                // up any thread blocked reading from it.
+            virtual void            Shutdown( void );
+
+            static const int        READ_TIMEOUT = -1;
+            static const int        READ_ERROR = -2;
 
             static unsigned short Htons( unsigned short ushValue ) { return htons( ushValue ); }
             static unsigned long  Htonl( unsigned long ulValue ) { return htonl( ulValue ); }

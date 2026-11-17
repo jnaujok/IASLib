@@ -85,6 +85,12 @@ namespace IASLib
     {
         if ( this != &oSource )
         {
+            if ( next )
+            {
+                delete next;
+                next = NULL;
+            }
+            delete addr;
             flags = oSource.flags;
             family = oSource.family;
             socktype = oSource.socktype;
