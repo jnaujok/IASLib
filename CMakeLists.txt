@@ -21,6 +21,7 @@ option(USE_MEMORY_DEBUGGING "Use memory debugging features." ON)
 # JSON support is still a work in progress and does not compile yet; enable it
 # explicitly (-DUSE_JSON=ON) when working on it.
 option(USE_JSON "Enable JSON support." OFF)
+option(USE_HERSCHEL_CORRECTION "CDate treats years divisible by 4000 as common years by default." OFF)
 
 #Bring the headers, such as Student.h into the project
 include_directories(
@@ -169,6 +170,9 @@ if (USE_MEMORY_DEBUGGING)
 endif()
 if (USE_JSON)
     add_definitions(-DIASLIB_JSON_SUPPORT__)
+endif()
+if (USE_HERSCHEL_CORRECTION)
+    add_definitions(-DIASLIB_HERSCHEL_CORRECTION__)
 endif()
 
 

@@ -183,6 +183,16 @@ namespace IASLib
             CDate               OffsetDays( int nDays ) { CDate dttRet( *this ); dttRet.m_lEpochDay += (long)nDays; return dttRet; }
             CDate              &Add( int nDays, int nMinutes = 0, int nSeconds = 0 );
 
+                // Herschel's proposed 4000-year rule: when enabled, years divisible
+                // by 4000 (4000, 8000) are common years instead of leap years. Off
+                // by default, which matches the Gregorian calendar as decreed, ISO
+                // 8601 and other date libraries; build with -DUSE_HERSCHEL_CORRECTION=ON
+                // to make it the default. Set it once at startup, before creating
+                // dates: a date stores a day count, so dates after 28 February 4000
+                // created under one setting read one day differently under the other.
+            static void         SetHerschelCorrection( bool bEnabled );
+            static bool         GetHerschelCorrection( void );
+
             static void         SynchronizeToTimeServer( unsigned long lServerTime );
             static long         GetOffsetSeconds( void ) { return m_lOffsetSeconds; }
 

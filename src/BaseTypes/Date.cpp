@@ -44,6 +44,16 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     long CDate::m_lOffsetSeconds = 0;
 
     static bool bInitialized = false;
+
+        // Whether years divisible by 4000 are common years (John Herschel's
+        // proposed refinement). The Gregorian calendar as decreed in 1582, ISO
+        // 8601 and other date libraries make them leap years, so the default
+        // is off unless the library is built with IASLIB_HERSCHEL_CORRECTION__.
+#ifdef IASLIB_HERSCHEL_CORRECTION__
+    static bool bHerschelCorrection = true;
+#else
+    static bool bHerschelCorrection = false;
+#endif
     static long anYearDays[DATE_RANGE + 1];
     static long anMonthDays[ 12 ]    = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
     static long anLeapDays[ 12 ]     = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -1541,7 +1551,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                             }
                             else
                             {
-                                if ( ( nCount % 4000 ) == 0 )
+                                if ( bHerschelCorrection && ( ( nCount % 4000 ) == 0 ) )
                                 {
                                     lDay += 365;
                                 }
@@ -1580,6 +1590,22 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         }
 
         return lDay;
+    }
+
+    void CDate::SetHerschelCorrection( bool bEnabled )
+    {
+        if ( bInitialized && ( bEnabled == bHerschelCorrection ) )
+        {
+            return;
+        }
+        bHerschelCorrection = bEnabled;
+            // The cached year lengths depend on the rule, so rebuild them.
+        Initialize();
+    }
+
+    bool CDate::GetHerschelCorrection( void )
+    {
+        return bHerschelCorrection;
     }
 
     void CDate::Initialize( void )

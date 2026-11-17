@@ -18,3 +18,7 @@ add_test(test_sip TestSip)
 add_executable(TestHttp TestHttp/TestHttp.cpp)
 target_link_libraries(TestHttp IASLib)
 add_test(test_http TestHttp)
+
+add_executable(TestDate TestDate/TestDate.cpp)
+target_link_libraries(TestDate IASLib)
+add_test(test_date TestDate)
