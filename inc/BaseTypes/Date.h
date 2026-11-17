@@ -65,6 +65,13 @@ namespace IASLib
     **  SYBASE   - Jun 02 2001 12:14 PM
     **  SQLITE   - 2001/06/02 12:14:11
     **  ORACLE   - 02-JUN-2001, 12:14:11 PM
+    **  ISO_8601_FULL    - 2001-06-02T12:14:11Z  (Z only for dates known to be UTC)
+    **  ISO_8601_FULL_MS - 2001-06-02T12:14:11.374Z
+    **  ISO_8601_DATE    - 2001-06-02
+    **
+    **  The ISO 8601 based formats (ISO_8601*, YYYYMMDD) use the proleptic
+    **  Gregorian calendar with astronomical years, as ISO 8601 requires; the
+    **  others use the historical calendar (Julian before 15 October 1582).
     **
     */
 
@@ -83,6 +90,9 @@ namespace IASLib
     #define DATE_FORMAT_HHMMSS      13
     #define DATE_FORMAT_ISO_9601_MS_PACKED 14
     #define DATE_FORMAT_RFC7231     15
+    #define DATE_FORMAT_ISO_8601_FULL    16
+    #define DATE_FORMAT_ISO_8601_FULL_MS 17
+    #define DATE_FORMAT_ISO_8601_DATE    18
 
     #define DB_UNKNOWN				0
     #define DB_ORACLE				1
@@ -116,29 +126,37 @@ namespace IASLib
                 DF_HHMMSS               = 0x000D,
                 DF_ISO_8601_MS_PACKED   = 0x000E,
                 DF_RFC7231              = 0x000F,
+                DF_ISO_8601_FULL        = 0x0010,
+                DF_ISO_8601_FULL_MS     = 0x0011,
+                DF_ISO_8601_DATE        = 0x0012,
 		    };
 
+                // The current time (UTC).
                                 CDate();
+                // A date in the historical calendar: nMonth is 0-11, years have no
+                // year zero (1 BC is -1). A date or time that does not exist (30
+                // February, 10 October 1582, hour 24) gives an invalid date.
                                 CDate( int nDay, int nMonth, int nYear, int nHour = 0, int nMinute = 0, int nSecond = 0, int nMillisecond = 0 );
                                 CDate( const CDate &oSource );
                                 CDate( const char *strSource );
                                 CDate( tm_type &tmSource );
-                                CDate( long lEpochDay, long lMilliseconds ) { m_lEpochDay = lEpochDay; m_lMilliseconds = lMilliseconds; }
+                                CDate( long lEpochDay, long lMilliseconds ) { m_lEpochDay = lEpochDay; m_lMilliseconds = lMilliseconds; m_bIsGMT = false; }
             virtual            ~CDate();
 
                                 DEFINE_OBJECT( CDate )
 
             CDate              &operator =( const CDate &oSource );
 
-            bool                operator >( const CDate &oCompare );
-            bool                operator <( const CDate &oCompare );
-            bool                operator >=( const CDate &oCompare );
-            bool                operator <=( const CDate &oCompare );
-            bool                operator ==( const CDate &oCompare );
-            bool                operator !=( const CDate &oCompare );
+            bool                operator >( const CDate &oCompare ) const;
+            bool                operator <( const CDate &oCompare ) const;
+            bool                operator >=( const CDate &oCompare ) const;
+            bool                operator <=( const CDate &oCompare ) const;
+            bool                operator ==( const CDate &oCompare ) const;
+            bool                operator !=( const CDate &oCompare ) const;
 
             int                 GetDay( void ) const;
-            int                 GetDOW( void ) const { return ( m_lEpochDay + 6 ) % 7; }
+                // Day of the week, 0 (Sunday) to 6 (Saturday).
+            int                 GetDOW( void ) const { long lDow = ( m_lEpochDay + 6 ) % 7; return (int)( ( lDow < 0 ) ? lDow + 7 : lDow ); }
             int                 GetDate( void ) const { return GetDay(); }
             int                 GetMonth( void ) const;
             int                 GetYear( void ) const;
@@ -161,6 +179,11 @@ namespace IASLib
             bool                IsDate( void ) const { return ( m_lMilliseconds != -1 ); }
             bool                IsValid( void ) const { return ( m_lMilliseconds >= 0 ) ? true:false; }
             bool                IsLeapYear( int nYear ) const;
+                // True if the day, month (0-11) and year form a real date.
+            static bool         IsValidDate( int nDay, int nMonth, int nYear );
+                // True if the date is known to be UTC (the current time, or text
+                // that gave a time zone).
+            bool                IsGMT( void ) const { return m_bIsGMT; }
 
             void                SetInvalid( void ) { m_lMilliseconds = -1; m_lEpochDay = 0; }
             void                SetDate( int nDay, int nMonth, int nYear, int nHour = 0, int nMinute = 0, int nSecond = 0, int nMillisecond = 0 );
@@ -171,6 +194,24 @@ namespace IASLib
 		    CString				DBDate( int nDBType ) const;
             CString             SybaseDate( void ) const;
             CString             HTTPDate( void ) const;
+
+                // ISO 8601 extended format: "YYYY-MM-DD", or with bTime
+                // "YYYY-MM-DDTHH:MM:SS[.sss]" plus "Z" when IsGMT(). Proleptic
+                // Gregorian calendar; years outside 0000-9999 get a sign
+                // ("-0043" is 44 BC, "+10000").
+            CString             FormatISO8601( bool bTime = true, bool bMilliseconds = false ) const;
+                // The date in the proleptic Gregorian calendar used by ISO 8601:
+                // astronomical year (0 is 1 BC), month 1-12, day.
+            void                GetISODate( long &lYear, int &nMonth, int &nDay ) const;
+                // Reads ISO 8601 (and RFC 3339) dates and times: calendar dates
+                // (YYYY-MM-DD, YYYYMMDD, YYYY-MM, YYYY), ordinal dates (YYYY-DDD),
+                // week dates (YYYY-Www-D), expanded years (+YYYYY, -YYYY), times
+                // after "T" or a space (hh, hh:mm, hh:mm:ss, basic forms, a
+                // fraction on the last part, 24:00), and zones (Z, +hh, +hh:mm,
+                // +hhmm). A time with a zone is converted to UTC. Returns an
+                // invalid date, and sets *pbValid to false, if the text is not
+                // exactly an ISO 8601 date.
+            static CDate        ParseISO8601( const char *strValue, bool *pbValid = NULL );
             static CDate        GetSafeDate( const char *strValue );
             static CDate        Parse( const char *strValue ) { return GetSafeDate( strValue ); }
             static CDate        ParseGMT( const char *strValue ) { CDate dttTemp; dttTemp=GetSafeDate( strValue ); dttTemp.m_bIsGMT = true; return dttTemp; }
@@ -178,8 +219,10 @@ namespace IASLib
             static CDate        ParseUnix( time_t tValue );
             static CDate        ParseHTTP( const char *strHTTPDate );
 
-            int                 Elapsed( const CDate &oThen );
-            int                 ElapsedDays( const CDate &oThen ) { return (int)(oThen.m_lEpochDay - m_lEpochDay); }
+                // Milliseconds and days from oThen to this date (positive when
+                // this date is later).
+            long long           Elapsed( const CDate &oThen ) const;
+            int                 ElapsedDays( const CDate &oThen ) const;
             CDate               OffsetDays( int nDays ) { CDate dttRet( *this ); dttRet.m_lEpochDay += (long)nDays; return dttRet; }
             CDate              &Add( int nDays, int nMinutes = 0, int nSeconds = 0 );
 
@@ -193,6 +236,9 @@ namespace IASLib
             static void         SetHerschelCorrection( bool bEnabled );
             static bool         GetHerschelCorrection( void );
 
+                // Records the difference between a time server's time (seconds
+                // since 1900) and the system clock, and applies it to the current
+                // time from then on. The system clock is not changed.
             static void         SynchronizeToTimeServer( unsigned long lServerTime );
             static long         GetOffsetSeconds( void ) { return m_lOffsetSeconds; }
 
@@ -203,9 +249,11 @@ namespace IASLib
             void                TZAdjust( int nOffset );
             void                SetToGMT( int nOffset );
 
-            CDate              &StartOfDay( void ) { m_lOffsetSeconds = 0; return *this; }
-            CDate              &StartOfHour( void ) { m_lOffsetSeconds = m_lOffsetSeconds - ( m_lOffsetSeconds % 3600 ); return *this; }
+                // Moves the time back to midnight, or to the start of the hour.
+            CDate              &StartOfDay( void );
+            CDate              &StartOfHour( void );
 
+                // The current time in seconds since 1970 (Unix) or 1900 (NTP).
             static CString      EpochTimestamp( void );
             static CString      NTPTimestamp( void );
 
@@ -215,9 +263,10 @@ namespace IASLib
             static CDate        GetNowDate( const char *strValue );
             static CDate        GetTodayDate( const char *strValue );
             static int          AdjustTwoDigitYear( int nYear );
-            static long         GetYearDays( int nYear );
-            static void         Initialize( void );
+            static bool         DateToDay( int nDay, int nMonth, int nYear, long &lDay );
+            static void         DayToDate( long lDay, int &nDay, int &nMonth, int &nYear );
             static CDate        DateParse( const char *strRawDate );
+            static CDate        FinishParse( tm_type &tmVals );
             static bool         ScanGMTOffset( const char *pszOffset, long &lValue );
             static bool         ScanMonths( const char *pszMonth, long &lValue );
             static bool         ScanWday( const char *pszWday, long &lValue );

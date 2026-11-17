@@ -6,6 +6,18 @@
 ** It also includes the most rediculously robust date parsing routine
 ** ever written.
 **
+**  Calendar:
+**      Dates are kept as a day number and the milliseconds since midnight.
+** Day numbers count real days, so the difference between two dates is
+** always the number of days between them. Calendar dates (day, month,
+** year) use the historical calendar: the Julian calendar up to 4 October
+** 1582 and the Gregorian calendar from 15 October 1582 (the days in between
+** never existed). Years are numbered without a year zero: 1 BC is year -1.
+**      ISO 8601 text (FormatISO8601, ParseISO8601 and the DF_ISO_8601*
+** and DF_YYYYMMDD formats) instead uses the proleptic Gregorian calendar
+** with astronomical year numbers (0000 is 1 BC), as ISO 8601 requires. For
+** dates from 15 October 1582 on the two agree.
+**
 **  $AUTHOR$
 **  $LOG$
 **
@@ -13,11 +25,13 @@
 
 #include "Date.h"
 #include "StringTokenizer.h"
-#include "Mutex.h"
+#include <cctype>
 #include <ctime>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <vector>
 #ifndef IASLIB_WIN32__
     #include <sys/time.h> // NOLINT(modernize-deprecated-headers)
 #else
@@ -25,25 +39,12 @@
     #include <sys/timeb.h>
 #endif
 
-#define MAX_DATE 10001
-#define MIN_DATE (-MAX_DATE)
-#define DATE_RANGE (MAX_DATE*2)
-
-// We have to define this constant this way to avoid errors under linux about
-// the size of the decimal constant.
-static const unsigned long DATE_OFFSET_FOR_TIME_SERVER=(unsigned long)(22089888) * ((unsigned long)100);
-
+// Seconds between the NTP epoch (1 Jan 1900) and the Unix epoch (1 Jan 1970).
+static const long long NTP_TO_UNIX_SECONDS = 2208988800LL;
 
 namespace IASLib
 {
-#ifndef IASLIB_WIN32__
-#ifdef IASLIB_MULTI_THREADED__
-static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
-#endif
-#endif
     long CDate::m_lOffsetSeconds = 0;
-
-    static bool bInitialized = false;
 
         // Whether years divisible by 4000 are common years (John Herschel's
         // proposed refinement). The Gregorian calendar as decreed in 1582, ISO
@@ -54,18 +55,219 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 #else
     static bool bHerschelCorrection = false;
 #endif
-    static long anYearDays[DATE_RANGE + 1];
-    static long anMonthDays[ 12 ]    = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-    static long anLeapDays[ 12 ]     = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-    static long an1582Days[ 12 ]     = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 20, 30, 31 };
-    static long anSumMonthDays[ 12 ] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
-    static long anSumLeapDays[ 12 ]  = { 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 };
-    static long anSum1582Days[ 12 ]  = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 293, 323 };
 
-    static CString strMonths         = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec ";  // NOLINT(cert-err58-cpp)
-    static CString strHTTPMonths     = "JanFebMarAprMayJunJulAugSepOctNovDec";  // NOLINT(cert-err58-cpp)
-    static CString strWeekDays       = "SunMonTueWedThuFriSat";  // NOLINT(cert-err58-cpp)
-    static CString strWeekDaysLong   = "Sunday   Monday   Tuesday  WednesdayThursday Friday   Saturday ";  // NOLINT(cert-err58-cpp)
+        // Plain arrays rather than CString globals, which would be constructed
+        // before the CObject statics they depend on (initialisation order).
+    static const char *pszMonthNames = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    static const char *pszWeekDays = "SunMonTueWedThuFriSat";
+    static const char *pszWeekDaysLong = "Sunday   Monday   Tuesday  WednesdayThursday Friday   Saturday ";
+
+    namespace
+    {
+            // The CDate day number of 1 January 1970 (Unix day 0). Kept from the
+            // original table-based implementation so that day numbers of dates
+            // from November 1582 on are unchanged.
+        const long UNIX_EPOCH_DAY = 719164;
+        const long MAX_YEAR = 1000000;
+        const long MS_PER_DAY = 86400000L;
+
+        long floorDiv( long a, long b )
+        {
+            long q = a / b;
+            if ( ( a % b != 0 ) && ( ( a < 0 ) != ( b < 0 ) ) )
+                q--;
+            return q;
+        }
+
+        long floorMod( long a, long b )
+        {
+            return a - floorDiv( a, b ) * b;
+        }
+
+            // Proleptic Gregorian calendar, astronomical years, months 1-12:
+            // days since 1 January 1970.
+        long daysFromGregorian( long y, int m, int d )
+        {
+            y -= ( m <= 2 ) ? 1 : 0;
+            long era = floorDiv( y, 400 );
+            long yoe = y - era * 400;
+            long doy = ( 153 * ( m + ( m > 2 ? -3 : 9 ) ) + 2 ) / 5 + d - 1;
+            long doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+            return era * 146097 + doe - 719468;
+        }
+
+        void gregorianFromDays( long z, long &y, int &m, int &d )
+        {
+            z += 719468;
+            long era = floorDiv( z, 146097 );
+            long doe = z - era * 146097;
+            long yoe = ( doe - doe / 1460 + doe / 36524 - doe / 146096 ) / 365;
+            long doy = doe - ( 365 * yoe + yoe / 4 - yoe / 100 );
+            long mp = ( 5 * doy + 2 ) / 153;
+            d = (int)( doy - ( 153 * mp + 2 ) / 5 + 1 );
+            m = (int)( mp < 10 ? mp + 3 : mp - 9 );
+            y = yoe + era * 400 + ( m <= 2 ? 1 : 0 );
+        }
+
+            // The Julian calendar on the same day numbering. Years run March to
+            // February so that the leap day ends each four-year cycle.
+        long julianRaw( long y, int m, int d )
+        {
+            y -= ( m <= 2 ) ? 1 : 0;
+            long era = floorDiv( y, 4 );
+            long yoe = y - era * 4;
+            long doy = ( 153 * ( m + ( m > 2 ? -3 : 9 ) ) + 2 ) / 5 + d - 1;
+            return era * 1461 + yoe * 365 + doy;
+        }
+
+        long julianOffset( void )
+        {
+                // Julian 5 October 1582 is Gregorian 15 October 1582.
+            static const long offset = daysFromGregorian( 1582, 10, 15 ) - julianRaw( 1582, 10, 5 );
+            return offset;
+        }
+
+        long daysFromJulian( long y, int m, int d )
+        {
+            return julianRaw( y, m, d ) + julianOffset();
+        }
+
+        void julianFromDays( long z, long &y, int &m, int &d )
+        {
+            z -= julianOffset();
+            long era = floorDiv( z, 1461 );
+            long doe = z - era * 1461;
+            long yoe = doe / 365;
+            if ( yoe > 3 )
+                yoe = 3;
+            long doy = doe - yoe * 365;
+            long mp = ( 5 * doy + 2 ) / 153;
+            d = (int)( doy - ( 153 * mp + 2 ) / 5 + 1 );
+            m = (int)( mp < 10 ? mp + 3 : mp - 9 );
+            y = yoe + era * 4 + ( m <= 2 ? 1 : 0 );
+        }
+
+        long gregorianStart( void )
+        {
+            static const long start = daysFromGregorian( 1582, 10, 15 );
+            return start;
+        }
+
+        bool gregorianLeap( long y )
+        {
+            if ( bHerschelCorrection && floorMod( y, 4000 ) == 0 )
+                return false;
+            return ( floorMod( y, 4 ) == 0 && floorMod( y, 100 ) != 0 ) || floorMod( y, 400 ) == 0;
+        }
+
+        bool plainGregorianLeap( long y )
+        {
+            return ( floorMod( y, 4 ) == 0 && floorMod( y, 100 ) != 0 ) || floorMod( y, 400 ) == 0;
+        }
+
+        int monthLength( int m, bool leap )
+        {
+            static const int days[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+            return ( m == 2 && leap ) ? 29 : days[ m - 1 ];
+        }
+
+            // Days of the Gregorian calendar dropped by the Herschel rule before
+            // the given month (astronomical year, month 1-12).
+        long herschelDropped( long y, int m )
+        {
+            if ( ! bHerschelCorrection || y < 4000 )
+                return 0;
+            long n = ( y - 1 ) / 4000;
+            if ( y % 4000 == 0 && m > 2 )
+                n++;
+            return n;
+        }
+
+        long astronomical( long year )
+        {
+            return ( year < 0 ) ? year + 1 : year;
+        }
+
+        long historical( long year )
+        {
+            return ( year <= 0 ) ? year - 1 : year;
+        }
+
+        bool beforeReform( long a, int m, int d )
+        {
+            return ( a < 1582 ) || ( a == 1582 && ( m < 10 || ( m == 10 && d <= 4 ) ) );
+        }
+    }
+
+        // Converts a historical calendar date to a day number. Returns false if
+        // the date does not exist.
+    bool CDate::DateToDay( int nDay, int nMonth, int nYear, long &lDay )
+    {
+        if ( nYear == 0 || nYear > MAX_YEAR || nYear < -MAX_YEAR || nMonth < 0 || nMonth > 11 || nDay < 1 )
+            return false;
+
+        long a = astronomical( nYear );
+        int m = nMonth + 1;
+        long unixDay;
+
+        if ( beforeReform( a, m, nDay ) )
+        {
+            if ( nDay > monthLength( m, floorMod( a, 4 ) == 0 ) )
+                return false;
+            unixDay = daysFromJulian( a, m, nDay );
+        }
+        else
+        {
+            if ( a == 1582 && m == 10 && nDay < 15 )
+                return false;       // 5-14 October 1582 never existed.
+            if ( nDay > monthLength( m, gregorianLeap( a ) ) )
+                return false;
+            unixDay = daysFromGregorian( a, m, nDay ) - herschelDropped( a, m );
+        }
+
+        lDay = unixDay + UNIX_EPOCH_DAY;
+        return true;
+    }
+
+        // Converts a day number to a historical calendar date.
+    void CDate::DayToDate( long lDay, int &nDay, int &nMonth, int &nYear )
+    {
+        long unixDay = lDay - UNIX_EPOCH_DAY;
+        long y;
+        int m, d;
+
+        if ( unixDay < gregorianStart() )
+        {
+            julianFromDays( unixDay, y, m, d );
+        }
+        else
+        {
+                // With the Herschel rule, labels after a dropped day are later
+                // labels of the plain Gregorian calendar.
+            long k = 0;
+            for ( int nPass = 0; nPass < 4; nPass++ )
+            {
+                gregorianFromDays( unixDay + k, y, m, d );
+                long kNext = herschelDropped( y, m );
+                if ( bHerschelCorrection && y % 4000 == 0 && m == 2 && d == 29 )
+                    kNext++;
+                if ( kNext == k )
+                    break;
+                k = kNext;
+            }
+            gregorianFromDays( unixDay + k, y, m, d );
+        }
+
+        nDay = d;
+        nMonth = m - 1;
+        nYear = (int)historical( y );
+    }
+
+    bool CDate::IsValidDate( int nDay, int nMonth, int nYear )
+    {
+        long lDay;
+        return DateToDay( nDay, nMonth, nYear, lDay );
+    }
 
     IMPLEMENT_OBJECT( CDate, CObject );
 
@@ -75,46 +277,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 
     CDate::CDate()
     {
-        if ( ! bInitialized )
-            Initialize();
-
         SetToCurrent();
         m_bIsGMT = true;
     }
 
     CDate::CDate( int nDay, int nMonth, int nYear, int nHour, int nMinute, int nSecond, int nMilli )
     {
-        if ( ! bInitialized )
-            Initialize();
-
-        m_lMilliseconds = (nHour * 3600000) + (nMinute * 60000) + (nSecond * 1000 ) + nMilli;
-        m_lEpochDay = GetYearDays( nYear - 1 );
-        if ( IsLeapYear( nYear ) )
-        {
-            m_lEpochDay += anSumLeapDays[ nMonth ];
-        }
-        else
-        {
-            if ( nYear == 1582 )
-            {
-                m_lEpochDay += anSum1582Days[ nMonth ];
-            }
-            else
-            {
-                m_lEpochDay += anSumMonthDays[ nMonth ];
-            }
-        }
-
-        m_lEpochDay += nDay;
-
         m_bIsGMT = false;
+        SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, nMilli );
     }
 
-    CDate::CDate( const CDate &oSource )
+    CDate::CDate( const CDate &oSource ) : CObject()
     {
-        if ( ! bInitialized )
-            Initialize();
-
         m_lMilliseconds = oSource.m_lMilliseconds;
         m_lEpochDay = oSource.m_lEpochDay;
         m_bIsGMT = oSource.m_bIsGMT;
@@ -122,62 +296,28 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 
     CDate::CDate( const char *strParse )
     {
-        if ( ! bInitialized )
-            Initialize();
-
         *this = GetSafeDate( strParse );
     }
 
+        // tm_year is the full year, tm_mon is 0-11, and tm_gmtoffset is the
+        // offset of the time given from UTC in seconds (east positive); the
+        // result is that time converted to UTC.
     CDate::CDate( tm_type &tmSource )
     {
-        if ( ! bInitialized )
-            Initialize();
+        m_bIsGMT = false;
 
         if ( ( tmSource.tm_year == 0 ) && ( tmSource.tm_mon == 0 ) && ( tmSource.tm_mday == 0 ) && ( tmSource.tm_msec == -1 ) )
         {
-            m_lEpochDay = 0;
-            m_lMilliseconds = -1;
+            SetInvalid();
             return;
         }
 
-        m_lMilliseconds = (tmSource.tm_hour * 3600000) + (tmSource.tm_min * 60000) + (tmSource.tm_sec * 1000 ) + tmSource.tm_msec;
-        m_lEpochDay = GetYearDays( tmSource.tm_year - 1 );
-        if ( IsLeapYear( tmSource.tm_year ) )
+        SetDate( tmSource.tm_mday, tmSource.tm_mon, tmSource.tm_year, tmSource.tm_hour, tmSource.tm_min, tmSource.tm_sec, tmSource.tm_msec );
+        if ( IsValid() && tmSource.tm_gmtoffset != 0 )
         {
-            m_lEpochDay += anSumLeapDays[ tmSource.tm_mon ];
+            Add( 0, 0, -tmSource.tm_gmtoffset );
         }
-        else
-        {
-            if ( tmSource.tm_year == 1582 )
-            {
-                m_lEpochDay += anSum1582Days[ tmSource.tm_mon ];
-            }
-            else
-            {
-                m_lEpochDay += anSumMonthDays[ tmSource.tm_mon ];
-            }
-        }
-
-        m_lEpochDay += tmSource.tm_mday;
-
-            // Add the GMT Offset
-        m_lMilliseconds += tmSource.tm_gmtoffset * 1000;
-
-        while ( m_lMilliseconds >= 86400000 )
-        {
-            m_lEpochDay++;
-            m_lMilliseconds -= 86400000;
-        }
-
-        while ( m_lMilliseconds < 0 )
-        {
-            m_lEpochDay--;
-            m_lMilliseconds += 86400000;
-        }
-
-        m_bIsGMT = false;
     }
-
 
     CDate::~CDate()
     {
@@ -195,19 +335,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 
     bool CDate::IsLeapYear( int nYear ) const
     {
-        if ( ( nYear < MIN_DATE ) || ( nYear > MAX_DATE ) )
-        {
+        if ( nYear == 0 || nYear > MAX_YEAR || nYear < -MAX_YEAR )
             return false;
-        }
 
-        if ( ( GetYearDays( nYear ) - GetYearDays(  nYear - 1 ) ) == 366 )
-        {
-            return true;
-        }
-        return false;
+        long a = astronomical( nYear );
+        if ( a < 1582 )
+            return floorMod( a, 4 ) == 0;
+        if ( a == 1582 )
+            return false;
+        return gregorianLeap( a );
     }
 
-    bool CDate::operator >( const CDate &oCompare )
+    bool CDate::operator >( const CDate &oCompare ) const
     {
         if ( m_lEpochDay > oCompare.m_lEpochDay )
             return true;
@@ -218,7 +357,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         return false;
     }
 
-    bool CDate::operator <( const CDate &oCompare )
+    bool CDate::operator <( const CDate &oCompare ) const
     {
         if ( m_lEpochDay < oCompare.m_lEpochDay )
             return true;
@@ -229,290 +368,82 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         return false;
     }
 
-    bool CDate::operator >=( const CDate &oCompare )
+    bool CDate::operator >=( const CDate &oCompare ) const
     {
-        if ( m_lEpochDay < oCompare.m_lEpochDay )
-            return false;
-
-        if ( ( m_lEpochDay == oCompare.m_lEpochDay ) && ( m_lMilliseconds < oCompare.m_lMilliseconds ) )
-            return false;
-
-        return true;
+        return ! ( *this < oCompare );
     }
 
-    bool CDate::operator <=( const CDate &oCompare )
+    bool CDate::operator <=( const CDate &oCompare ) const
     {
-        if ( m_lEpochDay > oCompare.m_lEpochDay )
-            return false;
-
-        if ( ( m_lEpochDay == oCompare.m_lEpochDay ) && ( m_lMilliseconds > oCompare.m_lMilliseconds ) )
-            return false;
-
-        return true;
+        return ! ( *this > oCompare );
     }
 
-    bool CDate::operator ==( const CDate &oCompare )
+    bool CDate::operator ==( const CDate &oCompare ) const
     {
-        if ( ( m_lEpochDay == oCompare.m_lEpochDay ) && ( m_lMilliseconds == oCompare.m_lMilliseconds ) )
-            return true;
-
-        return false;
+        return ( m_lEpochDay == oCompare.m_lEpochDay ) && ( m_lMilliseconds == oCompare.m_lMilliseconds );
     }
 
-    bool CDate::operator !=( const CDate &oCompare )
+    bool CDate::operator !=( const CDate &oCompare ) const
     {
-        if ( ( m_lEpochDay != oCompare.m_lEpochDay ) || ( m_lMilliseconds != oCompare.m_lMilliseconds ) )
-            return true;
-
-        return false;
+        return ! ( *this == oCompare );
     }
 
     void CDate::SetDate( int nDay, int nMonth, int nYear, int nHour, int nMinute, int nSecond, int nMilli )
     {
-        m_lMilliseconds = (nHour * 3600000) + (nMinute * 60000) + (nSecond * 1000 ) + nMilli;
-        m_lEpochDay = GetYearDays( nYear - 1 );
-        if ( IsLeapYear( nYear ) )
+        m_bIsGMT = false;
+
+        long lDay;
+        if ( ! DateToDay( nDay, nMonth, nYear, lDay ) ||
+             nHour < 0 || nHour > 23 || nMinute < 0 || nMinute > 59 || nSecond < 0 || nSecond > 59 || nMilli < 0 || nMilli > 999 )
         {
-            if ( nYear == 1582 )
-            {
-                m_lEpochDay += anSum1582Days[ nMonth ];
-            }
-            else
-            {
-                m_lEpochDay += anSumLeapDays[ nMonth ];
-            }
-        }
-        else
-        {
-            m_lEpochDay += anSumMonthDays[ nMonth ];
+            SetInvalid();
+            return;
         }
 
-        m_lEpochDay += nDay;
-        m_bIsGMT = false;
+        m_lEpochDay = lDay;
+        m_lMilliseconds = ( nHour * 3600000L ) + ( nMinute * 60000L ) + ( nSecond * 1000L ) + nMilli;
     }
 
+        // A C library struct tm style value: tm_year is years since 1900.
     void CDate::SetDate( tm_type &tmTime )
     {
-        int nYear = tmTime.tm_year + 1900;
-        m_lMilliseconds = (tmTime.tm_hour * 3600000) + (tmTime.tm_min * 60000) + (tmTime.tm_sec * 1000 );
-        m_lEpochDay = GetYearDays( nYear - 1 );
-
-        if ( IsLeapYear( tmTime.tm_year ) )
-        {
-            if ( nYear == 1582 )
-            {
-                m_lEpochDay += anSum1582Days[ tmTime.tm_mon ];
-            }
-            else
-            {
-                m_lEpochDay += anSumLeapDays[ tmTime.tm_mon ];
-            }
-        }
-        else
-        {
-            m_lEpochDay += anSumMonthDays[ tmTime.tm_mon ];
-        }
-
-        m_lEpochDay += tmTime.tm_mday;
-
-        m_bIsGMT = false;
+        SetDate( tmTime.tm_mday, tmTime.tm_mon, tmTime.tm_year + 1900, tmTime.tm_hour, tmTime.tm_min, tmTime.tm_sec, 0 );
     }
 
     void CDate::SetDate( void )
     {
-        time_t       nCurrent;
-        struct tm   *ptmCurrent;
-        int          nMilliseconds;
-
-#ifndef IASLIB_WIN32__
-        struct timeval tvCurrent;
-
-        gettimeofday( &tvCurrent, NULL);
-        nCurrent = tvCurrent.tv_sec;
-        nCurrent += m_lOffsetSeconds;
-        nMilliseconds = tvCurrent.tv_usec / 1000;
-#else
-        struct _timeb tstruct;
-
-        time( &nCurrent );
-        nCurrent += m_lOffsetSeconds;
-        _ftime64_s( &tstruct );
-        nMilliseconds = tstruct.millitm;
-#endif
-#ifdef IASLIB_WIN32__
-        ptmCurrent = new struct tm;
-		gmtime_s( ptmCurrent, &nCurrent );
-#else
-#ifdef IASLIB_MULTI_THREADED__
-        g_mutexSingleThread.Lock();
-#endif
-        ptmCurrent = gmtime( &nCurrent );
-#endif
-        if ( ptmCurrent )
-        {
-            m_lMilliseconds = (ptmCurrent->tm_hour * 3600000) + (ptmCurrent->tm_min * 60000) + (ptmCurrent->tm_sec * 1000 ) + nMilliseconds;
-            m_lEpochDay = GetYearDays(  ptmCurrent->tm_year + 1899 ) + ptmCurrent->tm_yday + 1; // Year day starts at zero.
-        }
-#ifdef IASLIB_WIN32__
-		delete ptmCurrent;
-#else
-#ifdef IASLIB_MULTI_THREADED__
-        g_mutexSingleThread.Unlock();
-#endif
-#endif
-        m_bIsGMT = true;
+        SetToCurrent();
     }
 
     int CDate::GetDay( void ) const
     {
-        int nYear = GetYear();
-        long nRemainder = m_lEpochDay - GetYearDays( nYear - 1 );
-        int nCount = 0;
-
-        if ( nYear == 1582 )
-        {
-            while ( nRemainder > an1582Days[ nCount ] )
-            {
-                nRemainder -= an1582Days[ nCount ];
-                nCount++;
-            }
-        }
-        else
-        {
-            if ( IsLeapYear( nYear ) )
-            {
-                while ( nRemainder > anLeapDays[ nCount ] )
-                {
-                    nRemainder -= anLeapDays[ nCount ];
-                    nCount++;
-                }
-            }
-            else
-            {
-                while ( nRemainder > anMonthDays[ nCount ] )
-                {
-                    nRemainder -= anMonthDays[ nCount ];
-                    nCount++;
-                }
-            }
-        }
-
-        return (int)nRemainder;
-    }
-
-    int CDate::GetDOY( void ) const
-    {
-        int nYear = GetYear();
-        long nRemainder = m_lEpochDay - GetYearDays( nYear - 1 );
-
-        return (int)nRemainder;
+        int nDay, nMonth, nYear;
+        DayToDate( m_lEpochDay, nDay, nMonth, nYear );
+        return nDay;
     }
 
     int CDate::GetMonth( void ) const
     {
-        int nYear = GetYear();
-        long nRemainder = m_lEpochDay - GetYearDays( nYear - 1 );
-        int nCount = 0;
-
-        if ( nYear == 1582 )
-        {
-            while ( nRemainder > an1582Days[ nCount ] )
-            {
-                nRemainder -= an1582Days[ nCount ];
-                nCount++;
-            }
-        }
-        else
-        {
-            if ( IsLeapYear( nYear ) )
-            {
-                while ( nRemainder > anLeapDays[ nCount ] )
-                {
-                    nRemainder -= anLeapDays[ nCount ];
-                    nCount++;
-                }
-            }
-            else
-            {
-                while ( nRemainder > anMonthDays[ nCount ] )
-                {
-                    nRemainder -= anMonthDays[ nCount ];
-                    nCount++;
-                }
-            }
-        }
-
-        return nCount;
+        int nDay, nMonth, nYear;
+        DayToDate( m_lEpochDay, nDay, nMonth, nYear );
+        return nMonth;
     }
-
-    /******************************************************************************
-    **  Get Year
-    **
-    **      This function basically performs a binary search of our valid years to
-    ** find a year bracket that surrounds our epoch date. This is about the fastest
-    ** way that we can pull a year "out of the hat" to determine what year this
-    ** epoch day represents.
-    **
-    ******************************************************************************/
 
     int CDate::GetYear( void ) const
     {
-        int nCount = 1;
-        int nStep = MAX_DATE;
+        int nDay, nMonth, nYear;
+        DayToDate( m_lEpochDay, nDay, nMonth, nYear );
+        return nYear;
+    }
 
-        bool bFound = false;
-
-        while ( ! bFound )
-        {
-            long nThis = GetYearDays( nCount );
-            long nNext = GetYearDays( nCount + 1 );
-            if ( ( nThis < m_lEpochDay ) && ( nNext >= m_lEpochDay ) )
-            {
-                nCount += 1; // Years are off by one?
-                bFound = true;
-            }
-            else
-            {
-                nStep /= 2;
-                if ( nStep == 0 )
-                {
-                    nStep = 1;
-                }
-
-                    // We're still at too small of a date
-                if ( nThis < m_lEpochDay )
-                {
-                        // Move forward.
-                    nCount += nStep;
-                    if ( nCount > MAX_DATE )
-                    {
-                        nCount = MAX_DATE;
-                        if ( nStep == 1 )
-                        {
-                                // We've gone past the end of what we represent, and we're stepping by one year. This
-                                // date is beyond our far end.
-                            bFound = true;
-                        }
-                    }
-                }
-                else
-                {
-                        // We're at too large of a date, step back.
-                    nCount -= nStep;
-                    if ( nCount < MIN_DATE )
-                    {
-                        nCount = MIN_DATE;
-                        if ( nStep == 1 )
-                        {
-                                // We've gone past the end of what we represent, and we're stepping by one year. This
-                                // date is beyond our far end.
-                            bFound = true;
-                        }
-                    }
-                }
-            }
-        }
-        return nCount;
+    int CDate::GetDOY( void ) const
+    {
+        int nDay, nMonth, nYear;
+        DayToDate( m_lEpochDay, nDay, nMonth, nYear );
+        long lFirst;
+        if ( ! DateToDay( 1, 0, nYear, lFirst ) )
+            return 0;
+        return (int)( m_lEpochDay - lFirst + 1 );
     }
 
     int CDate::GetHours( void ) const
@@ -549,6 +480,346 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     }
 
     /***********************************************************************************
+    **  ISO 8601
+    **
+    **      FormatISO8601 writes the extended format: "YYYY-MM-DD" for a date, or
+    ** "YYYY-MM-DDTHH:MM:SS[.sss]" with a "Z" when the date is known to be UTC.
+    ** Years use the proleptic Gregorian calendar and astronomical numbering;
+    ** years before 0000 or after 9999 are written with a sign and at least four
+    ** digits ("-0043", "+10000"), the ISO 8601 expanded representation.
+    **
+    ***********************************************************************************/
+
+    static CString isoYear( long y )
+    {
+        char buffer[ 32 ];
+        if ( y >= 0 && y <= 9999 )
+            snprintf( buffer, sizeof( buffer ), "%04ld", y );
+        else if ( y < 0 )
+            snprintf( buffer, sizeof( buffer ), "-%04ld", -y );
+        else
+            snprintf( buffer, sizeof( buffer ), "+%04ld", y );
+        return CString( buffer );
+    }
+
+    void CDate::GetISODate( long &lYear, int &nMonth, int &nDay ) const
+    {
+        gregorianFromDays( m_lEpochDay - UNIX_EPOCH_DAY, lYear, nMonth, nDay );
+    }
+
+    CString CDate::FormatISO8601( bool bTime, bool bMilliseconds ) const
+    {
+        if ( ! IsValid() )
+        {
+            return CString( "Invalid Date" );
+        }
+
+        long y;
+        int m, d;
+        GetISODate( y, m, d );
+
+        CString retVal = isoYear( y );
+        char buffer[ 64 ];
+        snprintf( buffer, sizeof( buffer ), "-%02d-%02d", m, d );
+        retVal += buffer;
+
+        if ( bTime )
+        {
+            if ( bMilliseconds )
+                snprintf( buffer, sizeof( buffer ), "T%02d:%02d:%02d.%03d", GetHours(), GetMinutes(), GetSeconds(), GetMillisecond() );
+            else
+                snprintf( buffer, sizeof( buffer ), "T%02d:%02d:%02d", GetHours(), GetMinutes(), GetSeconds() );
+            retVal += buffer;
+            if ( m_bIsGMT )
+                retVal += "Z";
+        }
+        return retVal;
+    }
+
+    namespace
+    {
+            // A small cursor over the ISO 8601 text.
+        struct CIsoCursor
+        {
+            const char *p;
+            const char *end;
+
+            bool atEnd( void ) const { return p >= end; }
+            char peek( size_t n = 0 ) const { return ( p + n < end ) ? p[ n ] : '\0'; }
+            bool isDigitAt( size_t n ) const { return ( p + n < end ) && isdigit( (unsigned char)p[ n ] ); }
+            size_t digitRun( void ) const
+            {
+                size_t n = 0;
+                while ( isDigitAt( n ) )
+                    n++;
+                return n;
+            }
+            long take( size_t n )
+            {
+                long v = 0;
+                for ( size_t i = 0; i < n; i++ )
+                    v = v * 10 + ( p[ i ] - '0' );
+                p += n;
+                return v;
+            }
+            bool accept( char ch )
+            {
+                if ( peek() == ch )
+                {
+                    p++;
+                    return true;
+                }
+                return false;
+            }
+        };
+
+            // Reads a fraction after '.' or ',' as milliseconds of the given unit.
+        bool isoFraction( CIsoCursor &c, long lUnitMs, long &lMs )
+        {
+            lMs = 0;
+            if ( c.peek() != '.' && c.peek() != ',' )
+                return true;
+            c.p++;
+            size_t n = c.digitRun();
+            if ( n == 0 )
+                return false;
+            double fraction = 0.0;
+            double scale = 0.1;
+            for ( size_t i = 0; i < n; i++ )
+            {
+                fraction += ( c.p[ i ] - '0' ) * scale;
+                scale /= 10.0;
+            }
+            c.p += n;
+            lMs = (long)( fraction * lUnitMs + 1e-6 );
+            return true;
+        }
+
+        int isoWeeksInYear( long y )
+        {
+                // A year has 53 weeks if it starts on a Thursday, or is a leap
+                // year starting on a Wednesday.
+            long jan1 = daysFromGregorian( y, 1, 1 );
+            long dow = floorMod( jan1 + 3, 7 );      // 0 = Monday
+            if ( dow == 3 || ( dow == 2 && plainGregorianLeap( y ) ) )
+                return 53;
+            return 52;
+        }
+    }
+
+    CDate CDate::ParseISO8601( const char *strValue, bool *pbValid )
+    {
+        CDate dttInvalid( 0L, -1L );
+        if ( pbValid )
+            *pbValid = false;
+        if ( strValue == NULL )
+            return dttInvalid;
+
+        std::string text( strValue );
+        while ( ! text.empty() && isspace( (unsigned char)text[ text.size() - 1 ] ) )
+            text.erase( text.size() - 1 );
+        size_t nStart = 0;
+        while ( nStart < text.size() && isspace( (unsigned char)text[ nStart ] ) )
+            nStart++;
+
+        CIsoCursor c;
+        c.p = text.c_str() + nStart;
+        c.end = text.c_str() + text.size();
+
+            // Year: four digits, or a sign and four or more (expanded).
+        long nSign = 1;
+        bool bExpanded = false;
+        if ( c.peek() == '+' || c.peek() == '-' )
+        {
+            nSign = ( c.peek() == '-' ) ? -1 : 1;
+            c.p++;
+            bExpanded = true;
+        }
+        size_t nYearDigits = c.digitRun();
+        if ( nYearDigits < 4 || ( ! bExpanded && nYearDigits > 4 && nYearDigits != 8 && nYearDigits != 7 ) || ( bExpanded && nYearDigits > 7 ) )
+            return dttInvalid;
+        if ( ! bExpanded && nYearDigits > 4 )
+            nYearDigits = 4;        // Basic format: YYYYMMDD or YYYYDDD follows.
+        long y = nSign * c.take( nYearDigits );
+
+        long unixDay;
+        bool bExtended = c.accept( '-' );
+
+        if ( c.peek() == 'W' || c.peek() == 'w' )
+        {
+                // Week date: YYYY-Www[-D] or YYYYWww[D].
+            c.p++;
+            if ( c.digitRun() < 2 )
+                return dttInvalid;
+            long w = c.take( 2 );
+            long dow = 1;
+            if ( bExtended ? c.accept( '-' ) : c.isDigitAt( 0 ) )
+            {
+                if ( ! c.isDigitAt( 0 ) )
+                    return dttInvalid;
+                dow = c.take( 1 );
+            }
+            if ( w < 1 || w > isoWeeksInYear( y ) || dow < 1 || dow > 7 )
+                return dttInvalid;
+            long jan4 = daysFromGregorian( y, 1, 4 );
+            long week1 = jan4 - floorMod( jan4 + 3, 7 );     // Monday of week 1
+            unixDay = week1 + ( w - 1 ) * 7 + ( dow - 1 );
+        }
+        else
+        {
+            size_t nDigits = c.digitRun();
+            long m = 1, d = 1;
+            if ( ( bExtended && nDigits == 3 ) || ( ! bExtended && nDigits == 3 ) )
+            {
+                    // Ordinal date: YYYY-DDD or YYYYDDD.
+                long ordinal = c.take( 3 );
+                if ( ordinal < 1 || ordinal > ( plainGregorianLeap( y ) ? 366 : 365 ) )
+                    return dttInvalid;
+                unixDay = daysFromGregorian( y, 1, 1 ) + ordinal - 1;
+            }
+            else
+            {
+                if ( bExtended )
+                {
+                    if ( nDigits != 2 )
+                        return dttInvalid;
+                    m = c.take( 2 );
+                    if ( c.accept( '-' ) )
+                    {
+                        if ( c.digitRun() != 2 )
+                            return dttInvalid;
+                        d = c.take( 2 );
+                    }
+                }
+                else if ( nDigits == 4 )
+                {
+                    m = c.take( 2 );
+                    d = c.take( 2 );
+                }
+                else if ( nDigits != 0 )
+                {
+                    return dttInvalid;      // Basic YYYYMM is not allowed.
+                }
+                if ( m < 1 || m > 12 || d < 1 || d > monthLength( (int)m, plainGregorianLeap( y ) ) )
+                    return dttInvalid;
+                unixDay = daysFromGregorian( y, (int)m, (int)d );
+            }
+        }
+
+            // Time: "T" (or a space, as RFC 3339 allows) then hh[:mm[:ss]] with a
+            // fraction on the last part.
+        long lMs = 0;
+        bool bZone = false;
+        long lOffsetMinutes = 0;
+
+        if ( ( c.peek() == 'T' || c.peek() == 't' || c.peek() == ' ' ) && c.isDigitAt( 1 ) )
+        {
+            c.p++;
+            if ( c.digitRun() < 2 )
+                return dttInvalid;
+            long h = c.take( 2 );
+            long mi = 0, s = 0, frac = 0;
+            bool bTimeExtended = false;
+
+            if ( c.peek() == ':' || c.isDigitAt( 0 ) )
+            {
+                bTimeExtended = c.accept( ':' );
+                if ( c.digitRun() < 2 )
+                    return dttInvalid;
+                mi = c.take( 2 );
+                if ( bTimeExtended ? c.accept( ':' ) : c.isDigitAt( 0 ) )
+                {
+                    if ( c.digitRun() < 2 )
+                        return dttInvalid;
+                    s = c.take( 2 );
+                    if ( ! isoFraction( c, 1000, frac ) )
+                        return dttInvalid;
+                }
+                else if ( ! isoFraction( c, 60000, frac ) )
+                {
+                    return dttInvalid;
+                }
+            }
+            else if ( ! isoFraction( c, 3600000, frac ) )
+            {
+                return dttInvalid;
+            }
+
+            if ( h == 24 )
+            {
+                    // 24:00 is the end of the day: midnight of the next day.
+                if ( mi != 0 || s != 0 || frac != 0 )
+                    return dttInvalid;
+            }
+            else if ( h > 23 || mi > 59 || s > 60 )
+            {
+                return dttInvalid;
+            }
+            if ( s == 60 )
+            {
+                    // A leap second cannot be represented; use the last
+                    // millisecond of the minute.
+                s = 59;
+                frac = 999;
+            }
+            lMs = h * 3600000L + mi * 60000L + s * 1000L + frac;
+
+                // Time zone: Z or +hh[[:]mm] / -hh[[:]mm].
+            if ( c.accept( 'Z' ) || c.accept( 'z' ) )
+            {
+                bZone = true;
+            }
+            else if ( c.peek() == '+' || c.peek() == '-' )
+            {
+                long nZoneSign = ( c.peek() == '-' ) ? -1 : 1;
+                c.p++;
+                if ( c.digitRun() < 2 )
+                    return dttInvalid;
+                long zh = c.take( 2 );
+                long zm = 0;
+                if ( c.accept( ':' ) )
+                {
+                    if ( c.digitRun() != 2 )
+                        return dttInvalid;
+                    zm = c.take( 2 );
+                }
+                else if ( c.digitRun() == 2 )
+                {
+                    zm = c.take( 2 );
+                }
+                if ( zh > 23 || zm > 59 )
+                    return dttInvalid;
+                bZone = true;
+                lOffsetMinutes = nZoneSign * ( zh * 60 + zm );
+            }
+        }
+
+        if ( ! c.atEnd() )
+            return dttInvalid;
+
+            // Convert to UTC when a zone was given.
+        long long llMs = (long long)lMs - (long long)lOffsetMinutes * 60000LL;
+        long lDays = (long)floorDiv( (long)( llMs / 1000 ), 86400 );
+        llMs -= (long long)lDays * MS_PER_DAY;
+        while ( llMs < 0 )
+        {
+            llMs += MS_PER_DAY;
+            lDays--;
+        }
+        while ( llMs >= MS_PER_DAY )
+        {
+            llMs -= MS_PER_DAY;
+            lDays++;
+        }
+
+        CDate dttResult( unixDay + lDays + UNIX_EPOCH_DAY, (long)llMs );
+        dttResult.m_bIsGMT = bZone;
+        if ( pbValid )
+            *pbValid = true;
+        return dttResult;
+    }
+
+    /***********************************************************************************
     **  FormatDate
     **
     **      Given a date value, this function returns a date in one of the standard
@@ -562,25 +833,24 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         CString strMonth;
         CString strDOWShort;
         CString strDOWLong;
-        if ( m_lMilliseconds == -1 )
+        if ( ! IsValid() )
         {
             strRetVal = "Invalid Date";
             return strRetVal;
         }
 
-        int nMonth = GetMonth();
-        int nDay = GetDate();
-        int nYear = GetFullYear();
-        int nYearShort = nYear % 100;
+        int nDay, nMonth, nYear;
+        DayToDate( m_lEpochDay, nDay, nMonth, nYear );
+        int nYearShort = (int)floorMod( nYear, 100 );
         int nHour = GetHours();
         int nMinute = GetMinutes();
         int nSecond = GetSeconds();
         int nMillisecond = GetMillisecond();
         int nDOW = GetDOW();
-        strDOWShort = strWeekDays.Substring( nDOW * 3, 3 );
-        strDOWLong = strWeekDaysLong.Substring( nDOW * 9, 9 );
+        strDOWShort = CString( pszWeekDays + nDOW * 3, 3 );
+        strDOWLong = CString( pszWeekDaysLong + nDOW * 9, 9 );
         strDOWLong.Trim();
-        strMonth = strHTTPMonths.Substring( nMonth * 3, 3 );
+        strMonth = CString( pszMonthNames + nMonth * 3, 3 );
         int n12Hour = nHour % 12;
         if ( n12Hour == 0 )
         {
@@ -591,6 +861,11 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             // Turn the month into 1-12 instead of 0-11
         nMonth++;
 
+            // The ISO 8601 based formats use the proleptic Gregorian calendar.
+        long lIsoYear;
+        int nIsoMonth, nIsoDay;
+        GetISODate( lIsoYear, nIsoMonth, nIsoDay );
+        CString strIsoYear = isoYear( lIsoYear );
 
         switch ( nDateFormat )
         {
@@ -632,19 +907,19 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                 break;
 
             case CDate::DF_YYYYMMDD:
-                strRetVal.Format( "%04d%02d%02d", nYear, nMonth, nDay );
+                strRetVal.Format( "%s%02d%02d", (const char *)strIsoYear, nIsoMonth, nIsoDay );
                 break;
 
             case CDate::DF_ISO_8601:
-                strRetVal.Format( "%04d-%02d-%02d %02d:%02d:%02d", nYear, nMonth, nDay, nHour, nMinute, nSecond );
+                strRetVal.Format( "%s-%02d-%02d %02d:%02d:%02d", (const char *)strIsoYear, nIsoMonth, nIsoDay, nHour, nMinute, nSecond );
                 break;
 
             case CDate::DF_ISO_8601_MS:
-                strRetVal.Format( "%04d-%02d-%02d %02d:%02d:%02d.%03d", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
+                strRetVal.Format( "%s-%02d-%02d %02d:%02d:%02d.%03d", (const char *)strIsoYear, nIsoMonth, nIsoDay, nHour, nMinute, nSecond, nMillisecond );
                 break;
 
             case CDate::DF_ISO_8601_MS_PACKED:
-                strRetVal.Format( "%04d%02d%02d%02d%02d%02d.%03d", nYear, nMonth, nDay, nHour, nMinute, nSecond, nMillisecond );
+                strRetVal.Format( "%s%02d%02d%02d%02d%02d.%03d", (const char *)strIsoYear, nIsoMonth, nIsoDay, nHour, nMinute, nSecond, nMillisecond );
                 break;
 
             case CDate::DF_HHMMSS:
@@ -653,6 +928,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 
             case CDate::DF_RFC7231:
                 strRetVal.Format( "%3s, %02d %3s %d %02d:%02d:%02d GMT", (const char *)strDOWShort, nDay, (const char *)strMonth, nYear, nHour, nMinute, nSecond );
+                break;
+
+            case CDate::DF_ISO_8601_FULL:
+                strRetVal = FormatISO8601( true, false );
+                break;
+
+            case CDate::DF_ISO_8601_FULL_MS:
+                strRetVal = FormatISO8601( true, true );
+                break;
+
+            case CDate::DF_ISO_8601_DATE:
+                strRetVal = FormatISO8601( false, false );
                 break;
 
             default:
@@ -709,7 +996,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     **
     **      Given a date value, this function returns a date in the standard HTTP format
     ** accepted and preferred format laid out by RFC 822 and updated in RFC 1123. The
-    ** format is "Www, dd Mmm yyyy hh:mm:ss GMT"
+    ** format is "Www, dd Mmm yyyy hh:mm:ss GMT". An invalid date gives a fixed,
+    ** well-formed date so that an HTTP header built from it stays parseable.
     **
     ***********************************************************************************/
 
@@ -717,7 +1005,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     {
         CString strRetVal = "";
 
-        if ( m_lMilliseconds == -1 )
+        if ( ! IsValid() )
         {
             strRetVal = "Tue, 25 Jan 2000 06:06:06 GMT";
             return strRetVal;
@@ -734,9 +1022,15 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     ** date. Dates that contain letters in addition to numbers are accepted and parsed.
     ** Dates that are acceptable are of the following forms, with their interpreted
     ** value given after the equals sign. For these examples, the current date is
-    ** assumed as August 13th, 1998 at 13:05:20 GMT. All whitespace in the dates is
-    ** ignored. The function returns the date and time in the string format given
-    ** which can be parsed without fail by the standard date routines.
+    ** assumed as August 13th, 1998 at 13:05:20 GMT. The function returns an invalid
+    ** date (IsValid() is false) for text that is not a date, or a date or time
+    ** that does not exist (30 February, hour 25).
+    **
+    **      ISO 8601 text is read by ParseISO8601 (proleptic Gregorian calendar);
+    ** everything else is read in the historical calendar. Years written with three or
+    ** more digits are taken literally ("0044" is AD 44); one- and two-digit years
+    ** fall in the window from 30 years before to 70 years after the current year.
+    ** Times with a time zone are converted to UTC.
     **
     **          ""                                  = "08/13/1998  13:05:20"
     **          "01/01/1998  12:24:44"              = "01/01/1998  12:24:44"
@@ -756,31 +1050,37 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     **          "Start of day"                      = "08/13/1998  00:00:00"
     **          "August 13th, 1998 at 13:05:20 GMT" = "08/13/1998  13:05:20"
     **          "Aug 14 1998 5:03 PM"               = "08/14/1998  17:03:00"
+    **          "1998-08-13T13:05:20Z"              = "08/13/1998  13:05:20"
+    **          "13.08.1998"                        = "08/13/1998  00:00:00"
     **
     ***********************************************************************************/
     CDate CDate::GetSafeDate( const char *strValue )
     {
-        CString     strWork = "";
-        CString     strRetVal = "";
-        CString     strParse = "";
-        CString     strTime = "";
-        CString     strMonth = "";
-        CString     strDate = "";
-        CString     strYear = "";
-        CString     strHour = "";
-        CString     strMinute = "";
-        CString     strSecond = "";
-        CDate       dttDate;
-        CString     strTemp = strValue;
+        CString     strWork = strValue ? strValue : "";
+        CString     strTemp;
 
-        strWork = strValue;
         strWork.Trim();
+        if ( strWork.GetLength() == 0 )
+        {
+            return CDate();     // An empty string means now.
+        }
+
+            // ISO 8601 first: it has exact rules, and "2001-06-02" must not be
+            // read through the slash formats.
+        bool bIso = false;
+        CDate dttIso = ParseISO8601( strWork, &bIso );
+        if ( bIso )
+        {
+            return dttIso;
+        }
+
+        strTemp = strWork;
         strWork.ToUpperCase();
         strTemp.ToLowerCase();
-        strTemp.Trim();
 
             // Get rid of nasty hyphen-style dates.
         strWork.Replace( '-', '/' );
+        strTemp.Replace( '-', '/' );
 
         if ( strWork != strTemp )
         {
@@ -808,6 +1108,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         int         nHour = 0;
         int         nMinute = 0;
         int         nSecond = 0;
+
+        strTime.Trim();
 
         if ( strTime.IndexOf( ":" ) != NOT_FOUND )
         {
@@ -908,31 +1210,26 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     {
         CString strValue = pszValue;
         strValue.ToUpperCase();
-        CDate dttRetVal = CDate( );
+        strValue.Trim();
 
-        if ( ( strValue.IndexOf( "GMT-" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT+" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT -" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT +" ) != NOT_FOUND ) || ( strValue.IndexOf( "GMT" ) != NOT_FOUND ) )
-        {
-            return CDate::DateParse( strValue );
-        }
-
-            // Check for the "NOW" format which is just the current time
-        if ( strValue.IndexOf( "NOW" ) != NOT_FOUND )
+            // "Now", "Today" and "Start of day" only at the start, so that dates
+            // that merely contain those letters are not mistaken for them.
+        if ( strValue.IndexOf( "NOW" ) == 0 )
         {
             return GetNowDate( strValue );
         }
 
-        if ( strValue.IndexOf( "TODAY" ) != NOT_FOUND )
+        if ( strValue.IndexOf( "TODAY" ) == 0 )
         {
             return GetTodayDate( strValue );
         }
 
-        if ( strValue.IndexOf( "START OF DAY" ) != NOT_FOUND )
+        if ( strValue.IndexOf( "START OF DAY" ) == 0 )
         {
             return GetTodayDate( "TODAY" );
         }
 
         return CDate::DateParse( strValue );
-
     }
 
 
@@ -973,24 +1270,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmTemp.tm_hour = 0;
             int nOffset = GetHMS( strWork, tmTemp );
 
-            if ( bAdd )
-            {
-                dttNow.m_lMilliseconds += nOffset;
-                if ( dttNow.m_lMilliseconds > 86399999 )
-                {
-                    dttNow.m_lEpochDay++;
-                    dttNow.m_lMilliseconds -= 86400000;
-                }
-            }
-            else
-            {
-                dttNow.m_lMilliseconds -= nOffset;
-                if ( dttNow.m_lMilliseconds < 0 )
-                {
-                    dttNow.m_lEpochDay--;
-                    dttNow.m_lMilliseconds += 86400000;
-                }
-            }
+            dttNow.Add( 0, 0, ( bAdd ? nOffset : -nOffset ) / 1000 );
         }
 
         return dttNow;
@@ -1046,6 +1326,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         return dttNow;
     }
 
+        // Puts a one- or two-digit year in the window from 30 years before to 70
+        // years after the current year.
     int CDate::AdjustTwoDigitYear( int nYear )
     {
         nYear = nYear % 100;
@@ -1077,60 +1359,57 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         return nYear;
     }
 
-    int CDate::Elapsed( const CDate &oThen )
+        // Milliseconds from oThen to this date (positive when this is later).
+    long long CDate::Elapsed( const CDate &oThen ) const
     {
-        int nDays = 0;
-        int nMillis;
+        return ( (long long)( m_lEpochDay - oThen.m_lEpochDay ) * MS_PER_DAY ) + ( m_lMilliseconds - oThen.m_lMilliseconds );
+    }
 
-        nDays = m_lEpochDay - oThen.m_lEpochDay;
-        nMillis = m_lMilliseconds - oThen.m_lMilliseconds;
-
-        return (nDays * 86400000) + nMillis;
+        // Days from oThen to this date (positive when this is later).
+    int CDate::ElapsedDays( const CDate &oThen ) const
+    {
+        return (int)( m_lEpochDay - oThen.m_lEpochDay );
     }
 
     CDate &CDate::Add( int nDays, int nMinutes, int nSeconds )
     {
-        m_lEpochDay += nDays;
-        while ( nMinutes > 1440 )
+        if ( ! IsValid() )
         {
-            m_lEpochDay += 1;
-            nMinutes -= 1440;
+            return *this;
         }
 
-        while ( nMinutes < -1440 )
+        long long llMs = (long long)m_lMilliseconds + (long long)nMinutes * 60000LL + (long long)nSeconds * 1000LL;
+        long long llDays = (long long)m_lEpochDay + nDays;
+
+        llDays += llMs / MS_PER_DAY;
+        llMs %= MS_PER_DAY;
+        if ( llMs < 0 )
         {
-            m_lEpochDay -= 1;
-            nMinutes += 1440;
+            llMs += MS_PER_DAY;
+            llDays--;
         }
 
-        m_lMilliseconds += nMinutes * 60000;
+        m_lEpochDay = (long)llDays;
+        m_lMilliseconds = (long)llMs;
 
-        while ( nSeconds > 86400 )
+        return *this;
+    }
+
+    CDate &CDate::StartOfDay( void )
+    {
+        if ( IsValid() )
         {
-            m_lEpochDay += 1;
-            nSeconds -= 86400;
+            m_lMilliseconds = 0;
         }
+        return *this;
+    }
 
-        while ( nSeconds < -86400 )
+    CDate &CDate::StartOfHour( void )
+    {
+        if ( IsValid() )
         {
-            m_lEpochDay -= 1;
-            nSeconds += 86400;
+            m_lMilliseconds -= m_lMilliseconds % 3600000L;
         }
-
-        m_lMilliseconds += nSeconds * 1000;
-
-        while ( m_lMilliseconds >= 86400000 )
-        {
-            m_lEpochDay++;
-            m_lMilliseconds -= 86400000;
-        }
-
-        while ( m_lMilliseconds < 0 )
-        {
-            m_lEpochDay--;
-            m_lMilliseconds += 86400000;
-        }
-
         return *this;
     }
 
@@ -1166,8 +1445,13 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 
         strMonth.ToUpperCase();
         strMonth = strMonth.Substring( 0, 3 );
-        int nMonth = (int)strMonths.IndexOf( strMonth );
-        nMonth /= 3;
+        size_t nFound = ( strMonth.GetLength() == 3 ) ? strMonths.IndexOf( strMonth ) : NOT_FOUND;
+        if ( nFound == NOT_FOUND || ( nFound % 3 ) != 0 )
+        {
+            dttDate.SetInvalid();
+            return dttDate;
+        }
+        int nMonth = (int)( nFound / 3 );
         int nDay = atoi( strDay );
         int nYear = atoi( strYear );
 
@@ -1197,23 +1481,23 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     /***********************************************************************************
     **  ParseUnix
     **
-    **      This function is made to convert a Unix based Time_T value into our date
-    ** format. This is actually a pretty easy conversion. All we need to do is find out
-    ** how many days it represents (by dividing by 86400), add that to the day for
-    ** January 1, 1970 (the last day of 1969 + 1 ), and multiply the remaining seconds
-    ** by 1000 to make them into milliseconds.
+    **      Converts a Unix time_t (seconds since 1 January 1970 UTC, which may be
+    ** negative) into a date.
     **
     ***********************************************************************************/
     CDate CDate::ParseUnix( time_t tValue )
     {
-        long    lValue = (long) tValue;
-        long    lDays = lValue / 86400;
-        long    lSeconds = lValue % 86400;
-        CDate   dttDate;
+        long long llValue = (long long)tValue;
+        long long llDays = llValue / 86400;
+        long long llSeconds = llValue % 86400;
+        if ( llSeconds < 0 )
+        {
+            llSeconds += 86400;
+            llDays--;
+        }
 
-        dttDate.m_lEpochDay = lDays + GetYearDays( 1969 ) + 1;
-        dttDate.m_lMilliseconds = lSeconds * 1000;
-
+        CDate dttDate( (long)( llDays + UNIX_EPOCH_DAY ), (long)( llSeconds * 1000 ) );
+        dttDate.m_bIsGMT = true;
         return dttDate;
     }
 
@@ -1224,6 +1508,16 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     ** formats.
     **
     ***********************************************************************************/
+    static int httpMonth( const CString &strMonths, const CString &strName )
+    {
+        if ( strName.GetLength() != 3 )
+            return -1;
+        size_t nFound = strMonths.IndexOf( strName + "|" );
+        if ( nFound == NOT_FOUND || ( nFound % 4 ) != 0 )
+            return -1;
+        return (int)( nFound / 4 );
+    }
+
     CDate CDate::ParseHTTP( const char *strValue )
     {
         CDate       dttDate;
@@ -1270,7 +1564,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                 strWork = strWork.Substring( nTemp + 1 );
                 nTemp = (int)strWork.IndexOf( ' ' );
                 strTemp = strWork.Substring( 0, nTemp );
-                nMonth = (int)strMonth.IndexOf( strTemp ) / 4;
+                nMonth = httpMonth( strMonth, strTemp );
 
                     // Trim the month off.
                 strWork = strWork.Substring( nTemp + 1 );
@@ -1296,6 +1590,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                 strTemp = strWork.Substring( 0, nTemp );
                 nSecond = atoi( strTemp );
                 dttDate.SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, 0 );
+                dttDate.m_bIsGMT = dttDate.IsValid();
             }
             else
             {
@@ -1311,7 +1606,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                     strWork = strWork.Substring( nTemp + 1 );
                     nTemp = (int)strWork.IndexOf( '-' );
                     strTemp = strWork.Substring( 0, nTemp );
-                    nMonth = (int)strMonth.IndexOf( strTemp ) / 4;
+                    nMonth = httpMonth( strMonth, strTemp );
 
                         // Trim the month off.
                     strWork = strWork.Substring( nTemp + 1 );
@@ -1338,6 +1633,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                     strTemp = strWork.Substring( 0, nTemp );
                     nSecond = atoi( strTemp );
                     dttDate.SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, 0 );
+                    dttDate.m_bIsGMT = dttDate.IsValid();
                 }
                 else
                 {
@@ -1347,7 +1643,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                             // Find the end of the Month.
                         nTemp = (int)strWork.IndexOf( ' ' );
                         strTemp = strWork.Substring( 0, nTemp );
-                        nMonth = (int)strMonth.IndexOf( strTemp ) / 4;
+                        nMonth = httpMonth( strMonth, strTemp );
 
                             // Trim the Month off.
                         strWork = strWork.Substring( nTemp + 1 );
@@ -1380,6 +1676,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                         nYear = atoi( strTemp );
 
                         dttDate.SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, 0 );
+                        dttDate.m_bIsGMT = dttDate.IsValid();
                     }
                     else
                     {
@@ -1389,6 +1686,10 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                 }
             }
         }
+        else
+        {
+            dttDate = Parse( strValue );
+        }
 
         return dttDate;
     }
@@ -1397,14 +1698,11 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     **  SynchronizeToTimeServer
     **
     **      This function allows the system to synchronize our current date and time to
-    ** a reference time server. This allows us to keep our time and date accurate to
-    ** plus or minus one second. This is especially useful since most of the real world
-    ** servers do not seem to be NTP slaved to a reference server.
-    **      To use this function, some outside source must get the value of the reference
-    ** time server and then send it to this function. The function then determines the
-    ** difference (in seconds) between the current time and date, and the date sent by
-    ** the reference server. This is then loaded into the static "m_lOffsetSeconds" value
-    ** that is used whenever the current time and date are retrieved.
+    ** a reference time server. Some outside source must get the value of the reference
+    ** time server (in seconds since 1 January 1900, as time servers give it) and pass
+    ** it to this function. It records the difference between that and the system
+    ** clock in the static "m_lOffsetSeconds", which is applied whenever the current
+    ** time and date are retrieved. The system clock itself is never changed.
     **      This whole thing seemed like a good idea after I noticed that the production
     ** servers were running up to 15 minutes out of sync with the real time and up to
     ** ten minutes out of sync with each other. It seems that the situation is totally
@@ -1413,210 +1711,62 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
     ***********************************************************************************/
     void CDate::SynchronizeToTimeServer( unsigned long lServerTime )
     {
-        unsigned long  nCurrent;
+        long long llServer = (long long)lServerTime - NTP_TO_UNIX_SECONDS;
+        long long llCurrent;
+
 #ifndef IASLIB_WIN32__
         struct timeval tvCurrent;
+        gettimeofday( &tvCurrent, NULL );
+        llCurrent = (long long)tvCurrent.tv_sec;
 #else
         struct _timeb tvCurrent;
+        _ftime64_s( &tvCurrent );
+        llCurrent = (long long)tvCurrent.time;
 #endif
-
-        // First we need to correct the long value to put it into the same terms as the
-        // value we get from gettimeofday (Time servers give you seconds since Jan 1, 1900,
-        // gettimeofday, the seconds since Jan 1, 1970)
-        lServerTime -= DATE_OFFSET_FOR_TIME_SERVER;
-
-#ifndef IASLIB_WIN32__
-        // Next, we try to set the time on this machine. Hey, why not, we might be running as
-        // root. If that's the case, then we won't need the offset seconds.
-
-        tvCurrent.tv_sec = (time_t)lServerTime;
-        tvCurrent.tv_usec = 0;
-        if ( settimeofday( &tvCurrent, NULL ) != 0 )
-        {
-                // Didn't work, we need to set up the offset.
-            gettimeofday( &tvCurrent, NULL);
-            nCurrent = (unsigned long)tvCurrent.tv_sec;
-#else
-            _ftime64_s( &tvCurrent );
-            nCurrent = (unsigned long)tvCurrent.time;
-#endif
-            m_lOffsetSeconds = (long)((long)lServerTime - (long)nCurrent);
-#ifndef IASLIB_WIN32__
-        }
-        else
-        {
-            m_lOffsetSeconds = 0;
-        }
-#endif
+        m_lOffsetSeconds = (long)( llServer - llCurrent );
     }
 
     void CDate::SetToCurrent( void )
     {
-        time_t       nCurrent;
-        struct tm   *ptmCurrent;
-        int          nMilliseconds;
+        long long llSeconds;
+        long long llMilliseconds;
 
 #ifndef IASLIB_WIN32__
         struct timeval tvCurrent;
 
-        gettimeofday( &tvCurrent, NULL);
-        nCurrent = tvCurrent.tv_sec;
-        nCurrent += m_lOffsetSeconds;
-        nMilliseconds = tvCurrent.tv_usec / 1000;
+        gettimeofday( &tvCurrent, NULL );
+        llSeconds = (long long)tvCurrent.tv_sec;
+        llMilliseconds = tvCurrent.tv_usec / 1000;
 #else
         struct _timeb tstruct;
 
-        time( &nCurrent );
-        nCurrent += m_lOffsetSeconds;
         _ftime64_s( &tstruct );
-        nMilliseconds = tstruct.millitm;
+        llSeconds = (long long)tstruct.time;
+        llMilliseconds = tstruct.millitm;
 #endif
-#ifdef IASLIB_WIN32__
-        ptmCurrent = new struct tm;
-		gmtime_s( ptmCurrent, &nCurrent );
-#else
-#ifdef IASLIB_MULTI_THREADED__
-        g_mutexSingleThread.Lock();
-#endif
-		ptmCurrent = gmtime( &nCurrent );
-#endif
-        if ( ptmCurrent )
-        {
-            m_lMilliseconds = (ptmCurrent->tm_hour * 3600000) + (ptmCurrent->tm_min * 60000) + (ptmCurrent->tm_sec * 1000 ) + nMilliseconds;
-            m_lEpochDay = GetYearDays(  ptmCurrent->tm_year + 1899 ) + ptmCurrent->tm_yday + 1; // Year day starts at zero.
-        }
-#ifdef IASLIB_WIN32__
-		delete ptmCurrent;
-#else
-#ifdef IASLIB_MULTI_THREADED__
-        g_mutexSingleThread.Unlock();
-#endif
-#endif
-    }
+        llSeconds += m_lOffsetSeconds;
 
-    long CDate::GetYearDays( int nYear )
-    {
-        if ( anYearDays[ nYear + MAX_DATE ] != -1 )
+        long long llDays = llSeconds / 86400;
+        long long llRemainder = llSeconds % 86400;
+        if ( llRemainder < 0 )
         {
-            return anYearDays[ nYear + MAX_DATE ];
+            llRemainder += 86400;
+            llDays--;
         }
 
-        long lDay = 0;
-        int  nCount;
-
-            // THERE IS NO YEAR ZERO! That's why the millenium starts on 2001.
-        if ( nYear == 0 )
-            nYear = -1;
-
-        if ( nYear < MIN_DATE )
-        {
-            nYear = MIN_DATE;
-        }
-
-        if ( nYear > MAX_DATE )
-        {
-            nYear = MAX_DATE;
-        }
-
-        if ( nYear < 0 )
-        {
-            nCount = 0;
-            while ( nCount != nYear )
-            {
-                if ( ( (-nCount) % 4 ) == 0 )
-                    lDay -= 366;
-                else
-                    lDay -= 365;
-
-                anYearDays[ nCount + MAX_DATE ] = lDay;
-
-                nCount--;
-            }
-        }
-        else
-        {
-            nCount = 1;
-            while ( nCount <= nYear )
-            {
-                if ( ( nCount % 4 ) == 0 )
-                {
-                    if ( nCount > 1582 )
-                    {
-                        // We have to do the Gregorian Shuffle
-                        if ( ( nCount % 100 ) == 0 )
-                        {
-                            if ( ( nCount % 400 ) != 0 )
-                            {
-                                lDay += 365;
-                            }
-                            else
-                            {
-                                if ( bHerschelCorrection && ( ( nCount % 4000 ) == 0 ) )
-                                {
-                                    lDay += 365;
-                                }
-                                else
-                                {
-                                    lDay += 366;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            lDay += 366;
-                        }
-                    }
-                    else
-                    {
-                        lDay += 366;
-                    }
-                }
-                else
-                {
-                    if ( nCount == 1582 )
-                    {
-                        lDay += 354;
-                    }
-                    else
-                    {
-                        lDay += 365;
-                    }
-                }
-
-                anYearDays[ nCount + MAX_DATE ] = lDay;
-
-                nCount++;
-            }
-        }
-
-        return lDay;
+        m_lEpochDay = (long)( llDays + UNIX_EPOCH_DAY );
+        m_lMilliseconds = (long)( llRemainder * 1000 + llMilliseconds );
+        m_bIsGMT = true;
     }
 
     void CDate::SetHerschelCorrection( bool bEnabled )
     {
-        if ( bInitialized && ( bEnabled == bHerschelCorrection ) )
-        {
-            return;
-        }
         bHerschelCorrection = bEnabled;
-            // The cached year lengths depend on the rule, so rebuild them.
-        Initialize();
     }
 
     bool CDate::GetHerschelCorrection( void )
     {
         return bHerschelCorrection;
-    }
-
-    void CDate::Initialize( void )
-    {
-        for ( int nCount = 0; nCount <= DATE_RANGE ; nCount++ )
-        {
-            anYearDays[ nCount ] = -1;
-        }
-        GetYearDays( MIN_DATE );
-        GetYearDays( MAX_DATE );
-        bInitialized = true;
     }
 
     int CDate::FixAMPM( int nHour, int nAMPM )
@@ -1629,10 +1779,14 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             case AMPM_AM:
 	            if ( nHour == 12 )
 	                nHour = 0;
+	            else if ( nHour > 12 || nHour < 1 )
+                    nHour = -1;         // "13 AM" is not a time.
 	            break;
 
             case AMPM_PM:
-                if ( nHour != 12 )
+                if ( nHour > 12 || nHour < 1 )
+                    nHour = -1;
+                else if ( nHour != 12 )
 	                nHour += 12;
 	            break;
 	    }
@@ -1640,17 +1794,237 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         return nHour;
     }
 
+    namespace
+    {
+            // AdjustTime's offset argument for patterns without a time zone.
+        const long NO_ZONE = -999999L;
+
+            // Facts about the text being parsed that the sscanf patterns lose:
+            // which numbers were written with three or more digits (so "0044"
+            // is a year, not a two-digit year), whether the first number was
+            // such a year (YYYY/MM/DD), the milliseconds, and whether a time
+            // zone was given.
+        struct CDateParseContext
+        {
+            std::vector<long>   longNumbers;
+            bool                yearFirst;
+            int                 milliseconds;
+            bool                zone;
+        };
+
+        thread_local CDateParseContext g_parseContext;
+
+        bool restBlank( const char *pszText, int nUsed )
+        {
+            if ( nUsed < 0 )
+                return false;
+            for ( const char *p = pszText + nUsed; *p; p++ )
+            {
+                if ( ! isspace( (unsigned char)*p ) )
+                    return false;
+            }
+            return true;
+        }
+
+        bool isLongNumber( long lValue )
+        {
+            for ( size_t nX = 0; nX < g_parseContext.longNumbers.size(); nX++ )
+            {
+                if ( g_parseContext.longNumbers[ nX ] == lValue )
+                    return true;
+            }
+            return false;
+        }
+
+        bool isWeekdayName( const std::string &word )
+        {
+            static const char *names[] = { "sun", "sunday", "mon", "monday", "tue", "tues", "tuesday", "wed", "wednesday",
+                                           "thu", "thur", "thurs", "thursday", "fri", "friday", "sat", "saturday", NULL };
+            for ( int nX = 0; names[ nX ]; nX++ )
+            {
+                if ( word == names[ nX ] )
+                    return true;
+            }
+            return false;
+        }
+
+            // Puts the text in the form the patterns expect: lower case, no
+            // leading weekday, no ordinal suffixes ("13th"), commas and "at" as
+            // spaces, "GMT +5" joined, and milliseconds removed and recorded.
+        std::string normalizeDateText( const char *pszText, CDateParseContext &ctx )
+        {
+            std::string text( pszText ? pszText : "" );
+            for ( size_t nX = 0; nX < text.size(); nX++ )
+                text[ nX ] = (char)tolower( (unsigned char)text[ nX ] );
+
+            ctx.longNumbers.clear();
+            ctx.yearFirst = false;
+            ctx.milliseconds = 0;
+            ctx.zone = false;
+
+                // Fractional seconds: ":ss.fff"
+            for ( size_t nX = 0; nX + 4 < text.size(); nX++ )
+            {
+                if ( text[ nX ] == ':' && isdigit( (unsigned char)text[ nX + 1 ] ) && isdigit( (unsigned char)text[ nX + 2 ] ) &&
+                     text[ nX + 3 ] == '.' && isdigit( (unsigned char)text[ nX + 4 ] ) )
+                {
+                    size_t nEnd = nX + 4;
+                    int nMs = 0;
+                    int nDigits = 0;
+                    while ( nEnd < text.size() && isdigit( (unsigned char)text[ nEnd ] ) )
+                    {
+                        if ( nDigits < 3 )
+                        {
+                            nMs = nMs * 10 + ( text[ nEnd ] - '0' );
+                            nDigits++;
+                        }
+                        nEnd++;
+                    }
+                    while ( nDigits < 3 )
+                    {
+                        nMs *= 10;
+                        nDigits++;
+                    }
+                    ctx.milliseconds = nMs;
+                    text.erase( nX + 3, nEnd - ( nX + 3 ) );
+                    break;
+                }
+            }
+
+                // Sybase writes milliseconds as a fourth time field: "hh:mm:ss:fff".
+            for ( size_t nX = 0; nX + 12 <= text.size() + 4 && nX + 7 < text.size(); nX++ )
+            {
+                if ( text[ nX ] == ':' && isdigit( (unsigned char)text[ nX + 1 ] ) && isdigit( (unsigned char)text[ nX + 2 ] ) &&
+                     text[ nX + 3 ] == ':' && isdigit( (unsigned char)text[ nX + 4 ] ) && isdigit( (unsigned char)text[ nX + 5 ] ) &&
+                     text[ nX + 6 ] == ':' && nX + 9 < text.size() && isdigit( (unsigned char)text[ nX + 7 ] ) &&
+                     isdigit( (unsigned char)text[ nX + 8 ] ) && isdigit( (unsigned char)text[ nX + 9 ] ) &&
+                     ( nX + 10 == text.size() || ! isdigit( (unsigned char)text[ nX + 10 ] ) ) )
+                {
+                    ctx.milliseconds = ( text[ nX + 7 ] - '0' ) * 100 + ( text[ nX + 8 ] - '0' ) * 10 + ( text[ nX + 9 ] - '0' );
+                    text.erase( nX + 6, 4 );
+                        // "...:111pm" -> "... pm"
+                    if ( nX + 6 < text.size() && isalpha( (unsigned char)text[ nX + 6 ] ) )
+                        text.insert( nX + 6, " " );
+                    break;
+                }
+            }
+
+                // Trim.
+            size_t nStart = 0;
+            while ( nStart < text.size() && isspace( (unsigned char)text[ nStart ] ) )
+                nStart++;
+            text.erase( 0, nStart );
+
+                // A leading weekday name adds nothing (and is not checked).
+            size_t nWord = 0;
+            while ( nWord < text.size() && isalpha( (unsigned char)text[ nWord ] ) )
+                nWord++;
+            if ( nWord > 0 && isWeekdayName( text.substr( 0, nWord ) ) &&
+                 ( nWord == text.size() || text[ nWord ] == ',' || text[ nWord ] == ' ' || text[ nWord ] == '.' ) )
+            {
+                size_t nNext = nWord;
+                while ( nNext < text.size() && ( text[ nNext ] == ',' || text[ nNext ] == ' ' || text[ nNext ] == '.' ) )
+                    nNext++;
+                text.erase( 0, nNext );
+            }
+
+            std::string result;
+            for ( size_t nX = 0; nX < text.size(); nX++ )
+            {
+                char ch = text[ nX ];
+
+                    // Ordinal suffixes after a number.
+                if ( nX > 0 && isdigit( (unsigned char)text[ nX - 1 ] ) && nX + 1 < text.size() )
+                {
+                    std::string two = text.substr( nX, 2 );
+                    bool bEnd = ( nX + 2 >= text.size() ) || ! isalpha( (unsigned char)text[ nX + 2 ] );
+                    if ( bEnd && ( two == "st" || two == "nd" || two == "rd" || two == "th" ) )
+                    {
+                        nX++;
+                        continue;
+                    }
+                }
+
+                result += ( ch == ',' ) ? ' ' : ch;
+            }
+
+                // " at " between the date and the time.
+            size_t nAt;
+            while ( ( nAt = result.find( " at " ) ) != std::string::npos )
+                result.replace( nAt, 4, " " );
+
+                // "gmt +5:40" -> "gmt+5:40" (hyphens are already slashes).
+            static const char *zones[] = { "gmt", "utc", NULL };
+            for ( int nZ = 0; zones[ nZ ]; nZ++ )
+            {
+                size_t nPos = 0;
+                while ( ( nPos = result.find( zones[ nZ ], nPos ) ) != std::string::npos )
+                {
+                    size_t nAfter = nPos + 3;
+                    size_t nSpace = nAfter;
+                    while ( nSpace < result.size() && result[ nSpace ] == ' ' )
+                        nSpace++;
+                    if ( nSpace > nAfter && nSpace < result.size() && ( result[ nSpace ] == '+' || result[ nSpace ] == '/' ) )
+                        result.erase( nAfter, nSpace - nAfter );
+                    nPos = nAfter;
+                }
+            }
+
+                // Note numbers written with three or more digits.
+            bool bFirst = true;
+            for ( size_t nX = 0; nX < result.size(); )
+            {
+                if ( isdigit( (unsigned char)result[ nX ] ) )
+                {
+                    size_t nEnd = nX;
+                    long lValue = 0;
+                    while ( nEnd < result.size() && isdigit( (unsigned char)result[ nEnd ] ) )
+                    {
+                        if ( nEnd - nX < 9 )
+                            lValue = lValue * 10 + ( result[ nEnd ] - '0' );
+                        nEnd++;
+                    }
+                    if ( nEnd - nX >= 3 )
+                    {
+                        ctx.longNumbers.push_back( lValue );
+                        if ( bFirst )
+                            ctx.yearFirst = true;
+                    }
+                    bFirst = false;
+                    nX = nEnd;
+                }
+                else
+                {
+                    nX++;
+                }
+            }
+
+            return result;
+        }
+    }
+
+    CDate CDate::FinishParse( tm_type &tmVals )
+    {
+        tmVals.tm_msec = g_parseContext.milliseconds;
+        CDate dttResult( tmVals );
+        if ( dttResult.IsValid() && g_parseContext.zone )
+        {
+            dttResult.m_bIsGMT = true;
+        }
+        return dttResult;
+    }
+
     CDate CDate::DateParse( const char *strRawDate )
     {
-        CString     strDate = strRawDate;
+        CDateParseContext &ctx = g_parseContext;
+        std::string strNormal = normalizeDateText( strRawDate, ctx );
+        const char *strDate = strNormal.c_str();
         CDate       dttNow;
-        char        str_mon[500], str_wday[500], str_gmtoff[500], str_ampm[500], str_trash[500];
-        int         tm_sec, tm_min, tm_hour, tm_mday, tm_year;
-        long        tm_mon, tm_wday, ampm, gmtoff;
+        char        str_mon[500] = "", str_wday[500] = "", str_gmtoff[500] = "", str_ampm[500] = "", str_trash[500] = "";
+        int         tm_sec = 0, tm_min = 0, tm_hour = 0, tm_mday = 0, tm_year = 0;
+        long        tm_mon = 0, tm_wday = 0, ampm, gmtoff = 0;
+        int         nUsed = -1;
         tm_type     tmVals;
-
-            // sscanf_s has problems with leading/trailing spaces.
-        strDate.Trim();
 
         tmVals.tm_msec = 0;
         tmVals.tm_sec = 0;
@@ -1661,7 +2035,101 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         tmVals.tm_year = dttNow.GetYear();
         tmVals.tm_isdst = 0;
         tmVals.tm_gmtoffset = 0;
+        tmVals.tm_wday = 0;
+        tmVals.tm_yday = 0;
         ampm = AMPM_NONE;
+
+            /* YYYYMMDDHHMMSS[.fff] (DF_ISO_8601_MS_PACKED): ISO 8601 basic format without the "T". */
+        {
+            size_t nDigits = 0;
+            while ( isdigit( (unsigned char)strDate[ nDigits ] ) )
+                nDigits++;
+            if ( nDigits == 14 && ( strDate[ 14 ] == '\0' || strDate[ 14 ] == '.' ) )
+            {
+                std::string strIso = std::string( strDate, 8 ) + "T" + std::string( strDate + 8 );
+                bool bIso = false;
+                CDate dttIso = ParseISO8601( strIso.c_str(), &bIso );
+                if ( bIso )
+                    return dttIso;
+            }
+        }
+
+            /* DD/mth/YY:HH:MM:SS (Netscape and Apache logs, no zone) */
+        if ( ( sscanf( strDate, "%d/%400[a-zA-Z]/%d:%d:%d:%d%n", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, &nUsed ) == 6 )
+             && restBlank( strDate, nUsed ) && ScanMonths( str_mon, tm_mon ) )
+        {
+            tmVals.tm_mday = tm_mday;
+            tmVals.tm_mon = tm_mon;
+            tmVals.tm_year = tm_year;
+            tmVals.tm_hour = tm_hour;
+            tmVals.tm_min = tm_min;
+            tmVals.tm_sec = tm_sec;
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
+        }
+
+            /* mth DD YY */
+        if ( ( sscanf( strDate, "%400[a-zA-Z] %d %d%n", str_mon, &tm_mday, &tm_year, &nUsed ) == 3 )
+             && restBlank( strDate, nUsed ) && ScanMonths( str_mon, tm_mon ) )
+        {
+            tmVals.tm_mday = tm_mday;
+            tmVals.tm_mon = tm_mon;
+            tmVals.tm_year = tm_year;
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
+        }
+
+            /* mth DD HH:MM:SS zone YY (asctime with a zone, weekday removed) */
+        if ( ( sscanf( strDate, "%400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ] %d%n", str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_year, &nUsed ) == 7 )
+             && restBlank( strDate, nUsed ) && ScanMonths( str_mon, tm_mon ) && ScanGMTOffset( str_gmtoff, gmtoff ) )
+        {
+            tmVals.tm_mday = tm_mday;
+            tmVals.tm_mon = tm_mon;
+            tmVals.tm_year = tm_year;
+            tmVals.tm_hour = tm_hour;
+            tmVals.tm_min = tm_min;
+            tmVals.tm_sec = tm_sec;
+            AdjustTime( tmVals, gmtoff );
+            return FinishParse( tmVals );
+        }
+
+            /* mth DD HH:MM:SS YY (asctime, weekday removed) */
+        if ( ( sscanf( strDate, "%400[a-zA-Z] %d %d:%d:%d %d%n", str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, &tm_year, &nUsed ) == 6 )
+             && restBlank( strDate, nUsed ) && ScanMonths( str_mon, tm_mon ) )
+        {
+            tmVals.tm_mday = tm_mday;
+            tmVals.tm_mon = tm_mon;
+            tmVals.tm_year = tm_year;
+            tmVals.tm_hour = tm_hour;
+            tmVals.tm_min = tm_min;
+            tmVals.tm_sec = tm_sec;
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
+        }
+
+            /* DD.MM.YY [HH:MM[:SS]] (day first, as written in much of Europe) */
+        {
+            int nDotDay = 0, nDotMonth = 0, nDotYear = 0;
+            int nFields = 0;
+            tm_hour = tm_min = tm_sec = 0;
+            if ( ( sscanf( strDate, "%d.%d.%d %d:%d:%d%n", &nDotDay, &nDotMonth, &nDotYear, &tm_hour, &tm_min, &tm_sec, &nUsed ) == 6 ) && restBlank( strDate, nUsed ) )
+                nFields = 6;
+            else if ( ( sscanf( strDate, "%d.%d.%d %d:%d%n", &nDotDay, &nDotMonth, &nDotYear, &tm_hour, &tm_min, &nUsed ) == 5 ) && restBlank( strDate, nUsed ) )
+                nFields = 5;
+            else if ( ( sscanf( strDate, "%d.%d.%d%n", &nDotDay, &nDotMonth, &nDotYear, &nUsed ) == 3 ) && restBlank( strDate, nUsed ) )
+                nFields = 3;
+            if ( nFields > 0 )
+            {
+                tmVals.tm_mday = nDotDay;
+                tmVals.tm_mon = nDotMonth - 1;
+                tmVals.tm_year = nDotYear;
+                tmVals.tm_hour = ( nFields >= 5 ) ? tm_hour : 0;
+                tmVals.tm_min = ( nFields >= 5 ) ? tm_min : 0;
+                tmVals.tm_sec = ( nFields == 6 ) ? tm_sec : 0;
+                AdjustTime( tmVals, NO_ZONE );
+                return FinishParse( tmVals );
+            }
+        }
 
         /* And do the sscanfs.  WARNING: you can add more formats here,
         ** but be careful!  You can easily screw up the parsing of existing
@@ -1671,9 +2139,9 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             /* DD/mth/YY:HH:MM:SS zone */
         if (
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d:%d:%d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d:%d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%d/%400[a-zA-Z]/%d:%d:%d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%d/%400[a-zA-Z]/%d:%d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #endif
         &&
             ( ScanMonths( str_mon, tm_mon )  )
@@ -1688,7 +2156,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* DD/mth/YY HH:MM:SS ampm zone */
@@ -1696,18 +2164,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
+                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
 #else
-                ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
+                ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #endif
             )
             &&
@@ -1723,7 +2191,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* DD/mth/YY HH:MM ampm zone */
@@ -1731,18 +2199,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
+                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
 #else
-                ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
+                ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #else
-            ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #endif
             )
         &&
@@ -1757,8 +2225,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, gmtoff );
+            return FinishParse( tmVals );
         }
 
             /* DD/mth/YY HH:MM:SS ampm */
@@ -1790,8 +2258,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD/mth/YY HH:MM ampm */
@@ -1823,8 +2291,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD mth YY HH:MM:SS ampm zone */
@@ -1832,18 +2300,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
 #else
-                ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #endif
             )
         &&
@@ -1859,7 +2327,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* mth DD??, YY at HH:MM:SS ampm zone */
@@ -1867,18 +2335,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
+                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
+                ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
+            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
 #endif
             )
         &&
@@ -1894,7 +2362,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* mth DD??, YY at HH:MM:SS ampm */
@@ -1926,8 +2394,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* mth DD??, YY at HH:MM ampm zone */
@@ -1935,18 +2403,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
 #endif
             )
         &&
@@ -1961,7 +2429,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* mth DD??, YY at HH:MM ampm */
@@ -1992,8 +2460,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* mth DD YY HH:MM:SS ampm zone */
@@ -2001,18 +2469,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #endif
             )
         &&
@@ -2028,7 +2496,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* mth DD YY HH:MM:SS ampm */
@@ -2045,9 +2513,9 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
+            ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
 #endif
             )
         &&
@@ -2060,8 +2528,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* mth DD YY HH:MM ampm zone */
@@ -2069,18 +2537,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
+                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM] %400[^\t:\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
+                ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d %400[^\t:\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #endif
             )
         &&
@@ -2095,7 +2563,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* mth DD YY HH:MM ampm */
@@ -2112,9 +2580,9 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min ) == 5 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min ) == 5 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-zA-Z], %d at %d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min ) == 5 )
+            ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min ) == 5 )
 #endif
             )
         &&
@@ -2126,8 +2594,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD mth YY HH:MM ampm zone */
@@ -2135,18 +2603,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
+                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
 #else
-                ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
+                ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #else
-            ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d %400[^\t:\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #endif
             )
         &&
@@ -2162,7 +2630,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* DD mth YY HH:MM:SS ampm */
@@ -2194,8 +2662,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
             /* DD mth YY HH:MM ampm */
         if (
@@ -2226,8 +2694,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD mth HH:MM:SS ampm */
@@ -2258,8 +2726,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD mth HH:MM ampm */
@@ -2290,8 +2758,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM:SS ampm zone DD/mth/YY */
@@ -2299,18 +2767,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %400[^\t:\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
+                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
 #else
-                ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %400[^\t:\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
+                ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d %400[^\t:\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+            ( sscanf_s( strDate, "%d:%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #else
-            ( sscanf( strDate, "%d:%d:%d %400[^\t:\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+            ( sscanf( strDate, "%d:%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #endif
             )
         &&
@@ -2326,7 +2794,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM ampm zone DD/mth/YY */
@@ -2334,18 +2802,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %400[^\t:\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #else
-                ( sscanf( strDate, "%d:%d %400[apmAPM] %400[^\t:\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+                ( sscanf( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d %400[^:  \n] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
+            ( sscanf_s( strDate, "%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
 #else
-            ( sscanf( strDate, "%d:%d %400[^:  \n] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
+            ( sscanf( strDate, "%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
 #endif
             )
         &&
@@ -2361,7 +2829,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM:SS ampm DD/mth/YY */
@@ -2393,8 +2861,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM ampm DD/mth/YY */
@@ -2426,8 +2894,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM:SS ampm zone DD mth YY */
@@ -2435,18 +2903,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %400[^\t:\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
+                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
 #else
-                ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %400[^\t:\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
+                ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d %400[^\t:\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+            ( sscanf_s( strDate, "%d:%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #else
-            ( sscanf( strDate, "%d:%d:%d %400[^\t:\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+            ( sscanf( strDate, "%d:%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #endif
             )
         &&
@@ -2462,7 +2930,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM ampm zone DD mth YY */
@@ -2470,18 +2938,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %400[^\t:\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #else
-                ( sscanf( strDate, "%d:%d %400[apmAPM] %400[^\t:\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
+                ( sscanf( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d %400[^:  \n] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
+            ( sscanf_s( strDate, "%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
 #else
-            ( sscanf( strDate, "%d:%d %400[^:  \n] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
+            ( sscanf( strDate, "%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
 #endif
             )
         &&
@@ -2497,7 +2965,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM:SS ampm DD mth YY */
@@ -2529,8 +2997,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM ampm DD mth YY */
@@ -2562,8 +3030,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD/mth/YY HH:MM:SS ampm zone */
@@ -2571,18 +3039,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
+                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
+                ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
+            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
+            ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
 #endif
             )
         &&
@@ -2601,7 +3069,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD/mth/YY HH:MM ampm zone */
@@ -2609,18 +3077,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[^:     \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[^:     \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
 #endif
             )
         &&
@@ -2639,7 +3107,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD/mth/YY HH:MM:SS ampm */
@@ -2674,8 +3142,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD/mth/YY HH:MM ampm */
@@ -2710,8 +3178,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD mth YY HH:MM:SS ampm zone */
@@ -2719,18 +3187,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
+                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
+                ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
+            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
+            ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
 #endif
             )
         &&
@@ -2749,7 +3217,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD mth YY HH:MM ampm zone */
@@ -2757,18 +3225,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^:  \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
+                ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[^:     \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[^:     \n]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
 #endif
             )
         &&
@@ -2787,7 +3255,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD mth YY HH:MM:SS ampm */
@@ -2822,8 +3290,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* wdy, DD mth YY HH:MM ampm */
@@ -2858,8 +3326,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = 0;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* wdy mth DD HH:MM:SS ampm zone YY */
@@ -2867,18 +3335,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_year ) == 9 )
+                ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_year ) == 9 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t:\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_year ) == 9 )
+                ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_year ) == 9 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[^:  \n] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_year ) == 8 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_year ) == 8 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[^:  \n] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_year ) == 8 )
+            ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_year ) == 8 )
 #endif
             )
         &&
@@ -2897,7 +3365,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_sec = tm_sec;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* wdy mth DD HH:MM ampm zone YY */
@@ -2905,18 +3373,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^:  \n] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_year ) == 8 )
+                ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_year ) == 8 )
 #else
-                ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^:  \n] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_year ) == 8 )
+                ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_year ) == 8 )
 #endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[^:     \n] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff, &tm_year ) == 7 )
+            ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff, &tm_year ) == 7 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[^:     \n] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff, &tm_year ) == 7 )
+            ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff, &tm_year ) == 7 )
 #endif
             )
         &&
@@ -2935,7 +3403,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_sec = 0;
             tmVals.tm_year = tm_year;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
             /* mth DD HH:MM:SS ampm */
@@ -2966,8 +3434,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* mth DD HH:MM ampm */
@@ -2997,8 +3465,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD/mth/YY */
@@ -3015,8 +3483,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD mth YY */
@@ -3033,8 +3501,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
             tmVals.tm_year = tm_year;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* MM/DD/YY HH:MM:SS ampm zone */
@@ -3042,22 +3510,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
+                ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
 #else
-                ( sscanf( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
+                ( sscanf( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #else
-            ( sscanf( strDate, "%ld/%d/%d %d:%d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
+            ( sscanf( strDate, "%ld/%d/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3071,7 +3537,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD/YYYY HH:MM:SS ampm */
@@ -3093,7 +3559,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 #endif
         )
         {
-            if ( tm_mon > 12 )
+            if ( tm_mon > 12 || ctx.yearFirst )
             {
                     // Format YYYY/MM/DD Cannot be determined by any other means.
                 int nTemp = tm_year;
@@ -3109,8 +3575,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* MM/DD HH:MM:SS ampm zone */
@@ -3118,22 +3584,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 7  )
+                ( sscanf_s( strDate, "%ld/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 7  )
 #else
-                ( sscanf( strDate, "%ld/%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 7  )
+                ( sscanf( strDate, "%ld/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 7  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 6 )
+            ( sscanf_s( strDate, "%ld/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 6 )
 #else
-            ( sscanf( strDate, "%ld/%d %d:%d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 6 )
+            ( sscanf( strDate, "%ld/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 6 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3146,7 +3610,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD HH:MM:SS ampm */
@@ -3175,8 +3639,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD HH:MM:SS ampm zone */
@@ -3184,22 +3648,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 6  )
+                ( sscanf_s( strDate, "%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 6  )
 #else
-                ( sscanf( strDate, "%d %d:%d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 6  )
+                ( sscanf( strDate, "%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 6  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d:%d %400[^\t:\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 5 )
+            ( sscanf_s( strDate, "%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 5 )
 #else
-            ( sscanf( strDate, "%d %d:%d:%d %400[^\t:\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 5 )
+            ( sscanf( strDate, "%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 5 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3209,7 +3671,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* DD HH:MM:SS ampm */
@@ -3235,8 +3697,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* MM/DD/YY HH:MM ampm zone */
@@ -3244,22 +3706,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d/%d %d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7  )
+                ( sscanf_s( strDate, "%ld/%d/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7  )
 #else
-                ( sscanf( strDate, "%ld/%d/%d %d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7  )
+                ( sscanf( strDate, "%ld/%d/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf_s( strDate, "%ld/%d/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #else
-            ( sscanf( strDate, "%ld/%d/%d %d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
+            ( sscanf( strDate, "%ld/%d/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3271,9 +3731,9 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            tmVals.tm_sec = tm_sec;
+            tmVals.tm_sec = 0;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD/YYYY HH:MM ampm */
@@ -3295,7 +3755,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 #endif
         )
         {
-            if ( tm_mon > 12 )
+            if ( tm_mon > 12 || ctx.yearFirst )
             {
                     // Format YYYY/MM/DD Cannot be determined by any other means.
                 int nTemp = tm_year;
@@ -3310,8 +3770,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* MM/DD HH:MM ampm zone */
@@ -3319,22 +3779,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d %d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 6  )
+                ( sscanf_s( strDate, "%ld/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 6  )
 #else
-                ( sscanf( strDate, "%ld/%d %d:%d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 6  )
+                ( sscanf( strDate, "%ld/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 6  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 5 )
+            ( sscanf_s( strDate, "%ld/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 5 )
 #else
-            ( sscanf( strDate, "%ld/%d %d:%d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 5 )
+            ( sscanf( strDate, "%ld/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 5 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3346,7 +3804,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD HH:MM ampm */
@@ -3374,8 +3832,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mon--;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD HH:MM ampm zone */
@@ -3383,22 +3841,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 5  )
+                ( sscanf_s( strDate, "%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 5  )
 #else
-                ( sscanf( strDate, "%d %d:%d %400[apmAPM] %400[^:     \n]", &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 5  )
+                ( sscanf( strDate, "%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 5  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d %400[^\t:\n\r ]", &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 4 )
+            ( sscanf_s( strDate, "%d %d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 4 )
 #else
-            ( sscanf( strDate, "%d %d:%d %400[^\t:\n\r ]", &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 4 )
+            ( sscanf( strDate, "%d %d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 4 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3407,7 +3863,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* DD HH:MM ampm */
@@ -3432,8 +3888,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* MM/DD/YY HH ampm zone */
@@ -3441,22 +3897,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d/%d %d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm, str_gmtoff ) == 6  )
+                ( sscanf_s( strDate, "%ld/%d/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm, str_gmtoff ) == 6  )
 #else
-                ( sscanf( strDate, "%ld/%d/%d %d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm, str_gmtoff ) == 6  )
+                ( sscanf( strDate, "%ld/%d/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm, str_gmtoff ) == 6  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_gmtoff ) == 5 )
+            ( sscanf_s( strDate, "%ld/%d/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_gmtoff ) == 5 )
 #else
-            ( sscanf( strDate, "%ld/%d/%d %d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_gmtoff ) == 5 )
+            ( sscanf( strDate, "%ld/%d/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_gmtoff ) == 5 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3468,7 +3922,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD/YYYY HH ampm */
@@ -3490,7 +3944,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 #endif
         )
         {
-            if ( tm_mon > 12 )
+            if ( tm_mon > 12 || ctx.yearFirst )
             {
                     // Format YYYY/MM/DD Cannot be determined by any other means.
                 int nTemp = tm_year;
@@ -3504,8 +3958,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mon--;
             tmVals.tm_year = tm_year;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* MM/DD HH ampm zone */
@@ -3513,22 +3967,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d %d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 5  )
+                ( sscanf_s( strDate, "%ld/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 5  )
 #else
-                ( sscanf( strDate, "%ld/%d %d %400[apmAPM] %400[^:     \n]", &tm_mon, &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 5  )
+                ( sscanf( strDate, "%ld/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 5  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_gmtoff ) == 4 )
+            ( sscanf_s( strDate, "%ld/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_gmtoff ) == 4 )
 #else
-            ( sscanf( strDate, "%ld/%d %d %400[^\t:\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_gmtoff ) == 4 )
+            ( sscanf( strDate, "%ld/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_gmtoff ) == 4 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3539,7 +3991,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mon--;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD HH ampm */
@@ -3566,8 +4018,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                 // Months go from 0 to 11, not 1 to 12
             tmVals.tm_mon--;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD HH ampm zone */
@@ -3575,22 +4027,20 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             (
             (
 #ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %d %400[apmAPM] %400[^:     \n]", &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 4  )
+                ( sscanf_s( strDate, "%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 4  )
 #else
-                ( sscanf( strDate, "%d %d %400[apmAPM] %400[^:     \n]", &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 4  )
+                ( sscanf( strDate, "%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 4  )
 #endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
 #ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d %400[^\t:\n\r ]", &tm_mday, &tm_hour, str_gmtoff ) == 3 )
+            ( sscanf_s( strDate, "%d %d %400[^\t\n\r ]", &tm_mday, &tm_hour, str_gmtoff ) == 3 )
 #else
-            ( sscanf( strDate, "%d %d %400[^\t:\n\r ]", &tm_mday, &tm_hour, str_gmtoff ) == 3 )
+            ( sscanf( strDate, "%d %d %400[^\t\n\r ]", &tm_mday, &tm_hour, str_gmtoff ) == 3 )
 #endif
             )
-            &&
-            ( ScanMonths( str_mon, tm_mon ) )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
         )
@@ -3598,7 +4048,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             AdjustTime( tmVals, gmtoff );
-            return CDate( tmVals );
+            return FinishParse( tmVals );
         }
 
         /* DD HH:MM ampm */
@@ -3623,18 +4073,18 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_mday = tm_mday;
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD/YYYY */
 #ifdef IASLIB_WIN32__
         if ( sscanf_s( strDate, "%ld/%d/%d", &tm_mon, &tm_mday, &tm_year ) == 3 )
 #else
-        if ( sscanf( strDate, "%ld/%d/%d", &tm_mon, &tm_mday, &tm_year ) == 3 )
+        if ( ( sscanf( strDate, "%ld/%d/%d%n", &tm_mon, &tm_mday, &tm_year, &nUsed ) == 3 ) && restBlank( strDate, nUsed ) )
 #endif
         {
-            if ( tm_mon > 12 )
+            if ( tm_mon > 12 || ctx.yearFirst )
             {
                     // Format YYYY/MM/DD Cannot be determined by any other means.
                 int nTemp = tm_year;
@@ -3647,23 +4097,23 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                 // Months go from 0 to 11, not 1 to 12
             tmVals.tm_mon--;
             tmVals.tm_year = tm_year;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
         /* MM/DD */
 #ifdef IASLIB_WIN32__
         if ( sscanf_s( strDate, "%ld/%d", &tm_mon, &tm_mday ) == 2 )
 #else
-        if ( sscanf( strDate, "%ld/%d", &tm_mon, &tm_mday ) == 2 )
+        if ( ( sscanf( strDate, "%ld/%d%n", &tm_mon, &tm_mday, &nUsed ) == 2 ) && restBlank( strDate, nUsed ) )
 #endif
         {
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
                 // Months go from 0 to 11, not 1 to 12
             tmVals.tm_mon--;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
         /* HH:MM:SS ampm */
@@ -3688,8 +4138,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
             tmVals.tm_sec = tm_sec;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* HH:MM ampm */
@@ -3713,8 +4163,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         {
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
             tmVals.tm_min = tm_min;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* DD mth */
@@ -3723,7 +4173,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 #ifdef IASLIB_WIN32__
             ( sscanf_s( strDate, "%d %400[a-zA-Z]", &tm_mday, str_mon ) == 2 )
 #else
-            ( sscanf( strDate, "%d %400[a-zA-Z]", &tm_mday, str_mon ) == 2 )
+            ( ( sscanf( strDate, "%d %400[a-zA-Z]%n", &tm_mday, str_mon, &nUsed ) == 2 ) && restBlank( strDate, nUsed ) )
 #endif
             )
         &&
@@ -3732,36 +4182,31 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         {
             tmVals.tm_mon = tm_mon;
             tmVals.tm_mday = tm_mday;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
         /* YYYYMMDD */
-        if (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%4d%2ld%2d", &tm_year, &tm_mon, &tm_mday ) == 2 )
-#else
-            ( sscanf( strDate, "%4d%2ld%2d", &tm_year, &tm_mon, &tm_mday ) == 2 )
-#endif
-        )
+        if ( ( sscanf( strDate, "%4d%2ld%2d%n", &tm_year, &tm_mon, &tm_mday, &nUsed ) == 3 ) && restBlank( strDate, nUsed ) )
         {
             tmVals.tm_year = tm_year;
-            tmVals.tm_mon = tm_mon;
+            tmVals.tm_mon = tm_mon - 1;
             tmVals.tm_mday = tm_mday;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            ctx.longNumbers.push_back( tm_year );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
         /* DD */
 #ifdef IASLIB_WIN32__
         if ( sscanf_s( strDate, "%d", &tm_mday ) == 1 )
 #else
-        if ( sscanf( strDate, "%d", &tm_mday ) == 1 )
+        if ( ( sscanf( strDate, "%d%n", &tm_mday, &nUsed ) == 1 ) && restBlank( strDate, nUsed ) )
 #endif
         {
             tmVals.tm_mday = tm_mday;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
             /* mth DD */
@@ -3770,7 +4215,7 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
 #ifdef IASLIB_WIN32__
             ( sscanf_s( strDate, "%400[a-zA-Z] %d", str_mon, &tm_mday ) == 2 )
 #else
-            ( sscanf( strDate, "%400[a-zA-Z] %d", str_mon, &tm_mday ) == 2 )
+            ( ( sscanf( strDate, "%400[a-zA-Z] %d%n", str_mon, &tm_mday, &nUsed ) == 2 ) && restBlank( strDate, nUsed ) )
 #endif
             )
         &&
@@ -3779,16 +4224,12 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         {
             tmVals.tm_mon = tm_mon;
             tmVals.tm_mday = tm_mday;
-            AdjustTime( tmVals, 0 );
-            return CDate( tmVals );
+            AdjustTime( tmVals, NO_ZONE );
+            return FinishParse( tmVals );
         }
 
-        tmVals.tm_msec = -1;
-        tmVals.tm_mday = 0;
-        tmVals.tm_mon = 0;
-        tmVals.tm_year = 0;
-
-        return CDate( tmVals );
+            // Nothing matched: not a date.
+        return CDate( 0L, -1L );
     }
 
     bool CDate::ScanTokens( Token_Type *aTokens, int nLength, CString strCompare, long &lValue )
@@ -3874,6 +4315,8 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
         return ScanTokens( MonthTable, 23, strMonth, lValue );
     }
 
+        // Offsets are in seconds east of UTC (UTC+1 is 3600, EST is -18000).
+        // Hyphens have been turned into slashes, so "/0500" is UTC-5.
     bool CDate::ScanGMTOffset( const char *pszOffset, long &lValue )
     {
         static Token_Type GMTOffsetTable[] = {
@@ -3891,82 +4334,110 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
                                                 { "1000", 36000L }, { "+1000", 36000L }, { "/1000", -36000L },
                                                 { "1100", 39600L }, { "+1100", 39600L }, { "/1100", -39600L },
                                                 { "1200", 43200L }, { "+1200", 43200L }, { "/1200", -43200L },
-                                                { "cet", 3600L }, { "ced", 7200L }, /* Central European time */
-                                                { "mez", 3600L }, { "mesz", 7200L },    /* Mitteleuropdische Zeit */
-                                                { "jst", 32400L }, { "jdt", 36000L },   /* Japan time */
-                                                { "bst", -3600L },
-                                                { "nst", -12600L },
+                                                { "wet", 0L }, { "west", 3600L },                   /* Western European time */
+                                                { "cet", 3600L }, { "cest", 7200L }, { "ced", 7200L }, /* Central European time */
+                                                { "mez", 3600L }, { "mesz", 7200L },                /* Mitteleuropdische Zeit */
+                                                { "eet", 7200L }, { "eest", 10800L },               /* Eastern European time */
+                                                { "jst", 32400L }, { "jdt", 36000L },               /* Japan time */
+                                                { "bst", 3600L },                                   /* British Summer Time */
+                                                { "nst", -12600L }, { "ndt", -9000L },              /* Newfoundland */
                                                 { "ast", -14400L }, { "adt", -10800L },
                                                 { "est", -18000L }, { "edt", -14400L },
                                                 { "cst", -21600L }, { "cdt", -18000L },
                                                 { "mst", -25200L }, { "mdt", -21600L },
                                                 { "pst", -28800L }, { "pdt", -25200L },
+                                                { "akst", -32400L }, { "akdt", -28800L },
                                                 { "yst", -32400L }, { "ydt", -28800L },
                                                 { "hst", -36000L }, { "hdt", -32400L },
-                                                { "a", -3600L }, { "b", -7200L }, { "c", -10800L }, { "d", -14400L },
-                                                { "e", -18000L }, { "f", -21600L }, { "g", -25200L }, { "h", -28800L },
-                                                { "i", -32400L }, { "k", -36000L }, { "l", -39600L }, { "m", -43200L },
-                                                { "n", 3600L }, { "o", 7200L }, { "p", 10800L }, { "q", 14400L },
-                                                { "r", 18000L }, { "s", 21600L }, { "t", 25200L }, { "u", 28800L },
-                                                { "v", 32400L }, { "w", 36000L }, { "x", 39600L }, { "y", 43200L },
+                                                    /* Military zones: A-M (no J) are east of UTC, N-Y west, Z is UTC. */
+                                                { "a", 3600L }, { "b", 7200L }, { "c", 10800L }, { "d", 14400L },
+                                                { "e", 18000L }, { "f", 21600L }, { "g", 25200L }, { "h", 28800L },
+                                                { "i", 32400L }, { "k", 36000L }, { "l", 39600L }, { "m", 43200L },
+                                                { "n", -3600L }, { "o", -7200L }, { "p", -10800L }, { "q", -14400L },
+                                                { "r", -18000L }, { "s", -21600L }, { "t", -25200L }, { "u", -28800L },
+                                                { "v", -32400L }, { "w", -36000L }, { "x", -39600L }, { "y", -43200L },
                                                 { "z", 0L },
                                             };
         CString strOffset = pszOffset;
         strOffset.ToLowerCase();
+        strOffset.Trim();
+        lValue = 0;
+
         if ( ScanTokens( GMTOffsetTable, sizeof( GMTOffsetTable ) / sizeof( Token_Type ), strOffset, lValue ) )
             return true;
 
-        if ( strOffset.IndexOf( "gmt" ) != NOT_FOUND )
+            // Numeric offsets: [gmt|utc|ut] then a sign, then h, hh, hhmm, h:mm
+            // or hh:mm. Without the prefix the sign is required.
+        std::string text( (const char *)strOffset );
+        if ( text.compare( 0, 3, "gmt" ) == 0 || text.compare( 0, 3, "utc" ) == 0 )
+            text.erase( 0, 3 );
+        else if ( text.compare( 0, 2, "ut" ) == 0 )
+            text.erase( 0, 2 );
+
+        if ( text.empty() || ( text[0] != '+' && text[0] != '/' ) )
+            return false;
+        long lSign = ( text[0] == '/' ) ? -1 : 1;
+        text.erase( 0, 1 );
+
+        long lHours = 0;
+        long lMinutes = 0;
+        size_t nColon = text.find( ':' );
+        if ( nColon != std::string::npos )
         {
-            strOffset = strOffset.Substring( strOffset.IndexOf( "gmt" ) + 3 );
-            bool bAdd = true;
-
-                // Remember, we converted "-" to "/"
-            if ( strOffset.IndexOf( "/" ) != NOT_FOUND )
-            {
-                bAdd = false;
-                strOffset = strOffset.Substring( strOffset.IndexOf( "/" ) + 1 );
-            }
-
-            if ( strOffset.IndexOf( "+" ) != NOT_FOUND )
-            {
-                bAdd = true;
-                strOffset = strOffset.Substring( strOffset.IndexOf( "+" ) + 1 );
-            }
-
-            strOffset.Trim();
-
-            // What's left should be an offset (HHMMSS) or (HH:MM:SS) or some variation thereof.
-            tm_type tmTime;
-            tmTime.tm_hour=0;
-
-            long lMilliseconds = GetHMS( strOffset, tmTime );
-
-            lValue = lMilliseconds / 1000;
-
-            if ( ! bAdd )
-            {
-                lValue = -lValue;
-            }
-            return true;
+            std::string hours = text.substr( 0, nColon );
+            std::string minutes = text.substr( nColon + 1 );
+            if ( hours.empty() || hours.size() > 2 || minutes.size() != 2 )
+                return false;
+            for ( size_t nX = 0; nX < hours.size(); nX++ )
+                if ( ! isdigit( (unsigned char)hours[ nX ] ) ) return false;
+            for ( size_t nX = 0; nX < minutes.size(); nX++ )
+                if ( ! isdigit( (unsigned char)minutes[ nX ] ) ) return false;
+            lHours = atol( hours.c_str() );
+            lMinutes = atol( minutes.c_str() );
         }
         else
-            lValue = 0;
+        {
+            if ( text.empty() || text.size() > 4 || text.size() == 3 )
+                return false;
+            for ( size_t nX = 0; nX < text.size(); nX++ )
+                if ( ! isdigit( (unsigned char)text[ nX ] ) ) return false;
+            if ( text.size() <= 2 )
+            {
+                lHours = atol( text.c_str() );
+            }
+            else
+            {
+                lHours = atol( text.substr( 0, 2 ).c_str() );
+                lMinutes = atol( text.substr( 2, 2 ).c_str() );
+            }
+        }
 
-        return false;
+        if ( lHours > 14 || lMinutes > 59 )
+            return false;
+
+        lValue = lSign * ( lHours * 3600 + lMinutes * 60 );
+        return true;
     }
 
+        // Records the time zone (or NO_ZONE) and resolves one- and two-digit
+        // years. Years written with three or more digits are used as they are.
     void CDate::AdjustTime( tm_type &tmVals, long gmtoff )
     {
-        if ( tmVals.tm_year < 100 )
+        if ( tmVals.tm_year >= 0 && tmVals.tm_year < 100 && ! isLongNumber( tmVals.tm_year ) )
         {
             tmVals.tm_year = AdjustTwoDigitYear( tmVals.tm_year );
         }
-        if ( tmVals.tm_year < 1000 )
+
+        if ( gmtoff == NO_ZONE )
         {
-            tmVals.tm_year += 1900;
+            tmVals.tm_gmtoffset = 0;
+            g_parseContext.zone = false;
         }
-        tmVals.tm_gmtoffset = gmtoff;
+        else
+        {
+            tmVals.tm_gmtoffset = gmtoff;
+            g_parseContext.zone = true;
+        }
     }
 
     void CDate::TZAdjust( int nOffset )
@@ -3991,31 +4462,25 @@ static CMutex g_mutexSingleThread; // NOLINT(cert-err58-cpp)
             m_bIsGMT = true;
         }
     }
-    
+
+        // The current time in seconds since 1 January 1970 UTC.
     CString CDate::EpochTimestamp( void )
     {
         CDate dttNow;
-        dttNow.SetToCurrent();
-        static CDate dttEpoch( 01, 01, 1970, 00, 00, 00 );
+        long long llSeconds = (long long)( dttNow.m_lEpochDay - UNIX_EPOCH_DAY ) * 86400LL + dttNow.m_lMilliseconds / 1000;
 
-        int days = dttNow.ElapsedDays( dttEpoch );
-        unsigned long long epoch = ( (unsigned long long)days * (unsigned long long)86400 ) + (unsigned long long)dttNow.m_lOffsetSeconds;
-
-        CString retVal( (const char *)(std::to_string( epoch )).c_str() );
+        CString retVal( (const char *)(std::to_string( llSeconds )).c_str() );
 
         return retVal;
     }
 
+        // The current time in seconds since 1 January 1900 UTC (the NTP epoch).
     CString CDate::NTPTimestamp( void )
     {
         CDate dttNow;
-        dttNow.SetToCurrent();
-        static CDate dttNTPEpoch( 01, 01, 1900, 00, 00, 00 );
+        long long llSeconds = (long long)( dttNow.m_lEpochDay - UNIX_EPOCH_DAY ) * 86400LL + dttNow.m_lMilliseconds / 1000 + NTP_TO_UNIX_SECONDS;
 
-        int days = dttNow.ElapsedDays( dttNTPEpoch );
-        unsigned long long epoch = ( (unsigned long long)days * (unsigned long long)86400 ) + (unsigned long long)dttNow.m_lOffsetSeconds;
-
-        CString retVal( (const char *)(std::to_string( epoch )).c_str() );
+        CString retVal( (const char *)(std::to_string( llSeconds )).c_str() );
 
         return retVal;
     }

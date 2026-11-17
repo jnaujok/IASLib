@@ -37,7 +37,7 @@ bool testMemoryStream() {
         int nMSec;
         Timer1.TotalElapsed(Timer2, nSec, nMSec );
         CDate dttEnd;
-        printf( "%01d.%03d - Wall Time\n", dttEnd.Elapsed( dttStart ) / 1000, dttEnd.Elapsed( dttStart ) % 1000 );
+        printf( "%01d.%03d - Wall Time\n", (int)( dttEnd.Elapsed( dttStart ) / 1000 ), (int)( dttEnd.Elapsed( dttStart ) % 1000 ) );
         printf( "%01d.%06d - CPU Time To Load\n", nSec, nMSec );
 
         CXMLIndex *pIndex = xDoc.GetIndex();
@@ -81,7 +81,7 @@ bool testFileStream( int argc, char *argv[] ) {
         int nMSec;
         Timer1.TotalElapsed(Timer2, nSec, nMSec );
         CDate dttEnd;
-        printf( "%01d.%03d - Wall Time\n", dttEnd.Elapsed( dttStart ) / 1000, dttEnd.Elapsed( dttStart ) % 1000 );
+        printf( "%01d.%03d - Wall Time\n", (int)( dttEnd.Elapsed( dttStart ) / 1000 ), (int)( dttEnd.Elapsed( dttStart ) % 1000 ) );
         printf( "%01d.%06d - CPU Time To Load\n", nSec, nMSec );
         CXMLIndex *pIndex = xDoc.GetIndex();
 
