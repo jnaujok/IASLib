@@ -20,7 +20,9 @@
 #ifndef IASLIB__
 #define IASLIB__
 
-#pragma pack(push, 1)
+// Note: this header must not change structure packing. The library's own
+// sources include the individual headers directly, so packing here would give
+// applications a different layout for every class than the library uses.
 
 #ifndef IASLIB_WIN32__
 #ifndef IASLIB_SUN__
@@ -355,6 +357,5 @@
 #include "XML/XMLIndex.h"
 #include "XML/XMLProperty.h"
 
-#pragma pack(pop)
 
 #endif // IASLIB__

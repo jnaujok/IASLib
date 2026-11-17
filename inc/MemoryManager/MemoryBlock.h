@@ -25,10 +25,9 @@
 #define HANDLE_PRAGMA_PACK_PUSH_POP
 #endif
 
-#ifdef IASLIB_WIN32__
+    // Save and restore the packing on every platform, so that it does not
+    // leak into the headers included after this one.
 #pragma pack( push, _standard_packing_ )
-#endif
-
 #pragma pack(1)
 
 namespace IASLib
@@ -44,9 +43,7 @@ namespace IASLib
     };
 }
 
-#ifdef IASLIB_WIN32__
 #pragma pack( pop, _standard_packing_ )
-#endif
 
 
 #endif // IASLIB_MEMORYFIXEDHEAP_H__
