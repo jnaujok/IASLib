@@ -24,26 +24,64 @@ namespace IASLib
 {
     IMPLEMENT_OBJECT( CGenericServer, CThread );
 
-    CGenericServer::CGenericServer( void )
+    CGenericServer::CGenericServer( void ) : CThread( "GenericServer", true, false, true )
     {
-            CSocket            *m_pSocket;
-            CUDPSocket         *m_pUdpSocket;
-            CInternetAddress      m_localAddress;
+        m_pSocket = NULL;
+        m_pUdpSocket = NULL;
+        m_bStarted = false;
+        m_bJoined = false;
     }
 
-    CGenericServer::CGenericServer( CSocket *pSocket )
+    CGenericServer::CGenericServer( CSocket *pSocket ) : CThread( "GenericServer", true, false, true )
     {
-
+        m_pSocket = pSocket;
+        m_pUdpSocket = NULL;
+        m_bStarted = false;
+        m_bJoined = false;
     }
 
-    CGenericServer::CGenericServer( CUDPSocket *pUdpSocket )
+    CGenericServer::CGenericServer( CUDPSocket *pUdpSocket ) : CThread( "GenericServer", true, false, true )
     {
-
+        m_pSocket = NULL;
+        m_pUdpSocket = pUdpSocket;
+        m_bStarted = false;
+        m_bJoined = false;
     }
 
     CGenericServer::~CGenericServer( void )
     {
+            // A thread that was never started is still waiting to run, so let
+            // it run (it sees the shutdown request) and wait for it.
+        Stop();
+        Wait();
+    }
 
+    void CGenericServer::Start( void )
+    {
+        if ( ! m_bStarted )
+        {
+            m_bStarted = true;
+            Resume();
+        }
+    }
+
+    void CGenericServer::Stop( void )
+    {
+        RequestShutdown();
+    }
+
+    void CGenericServer::Wait( void )
+    {
+        Start();
+        if ( ! m_bJoined )
+        {
+            m_bJoined = true;
+#ifdef IASLIB_PTHREAD__
+            pthread_join( m_ptThreadID, NULL );
+#else
+            Join();
+#endif
+        }
     }
 } // namespace IASLib
 

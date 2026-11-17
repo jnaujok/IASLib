@@ -29,29 +29,48 @@
 
 namespace IASLib
 {
+    /**
+     * The server thread is created suspended; call Start() once the object
+     * is fully constructed. Run() is the thread body and is meant to be
+     * overridden by a concrete server. Server objects belong to the
+     * application (they are never deleted by the thread monitor), and a
+     * derived class whose Run() uses its own members must call Stop() and
+     * Wait() in its destructor so the thread has finished before those
+     * members are destroyed.
+     */
     class CGenericServer : public CThread
     {
         private:
             CSocket            *m_pSocket;
             CUDPSocket         *m_pUdpSocket;
             CInternetAddress    m_localAddress;
+            bool                m_bStarted;
+            bool                m_bJoined;
 
         public:
                                 CGenericServer( void );
                                 CGenericServer( CSocket *pSocket );
                                 CGenericServer( CUDPSocket *pUdpSocket );
+
             virtual            ~CGenericServer( void );
 
                                 DEFINE_OBJECT( CGenericServer );
 
+                // Lets the server thread begin running Run().
+            virtual void        Start( void );
+                // Asks Run() to finish; see IsShutdown().
+            virtual void        Stop( void );
+                // Waits for the server thread to finish. Starts it first if it
+                // was never started, so that it can exit.
+            virtual void        Wait( void );
+
+            bool                IsStarted( void ) { return m_bStarted; }
+
         protected:
             CSocket            *getSocket( void ) { return m_pSocket; }
             void                setSocket( CSocket *pSocket ) { m_pSocket = pSocket; }
-
             CUDPSocket         *getUdpSocket( void ) { return m_pUdpSocket; }
             void                setUdpSocket( CUDPSocket *pUdpSocket ) { m_pUdpSocket = pUdpSocket; }
-
-
    };
 } // namespace IASLib
 

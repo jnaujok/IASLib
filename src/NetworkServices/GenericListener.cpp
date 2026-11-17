@@ -39,6 +39,7 @@ namespace IASLib
 
     CGenericListener::CGenericListener( const char *strName, CUDPSocket *pSocket, CInternetAddress &internetAddress, CString incomingData ) : CThreadTask( strName ), m_internetAddress( internetAddress ), m_pSocket( pSocket )
     {
+        m_pClientSocket = NULL;
         m_pInStream = new CStringStream( incomingData );
         m_pOutStream = new CStringStream(); // Output only String Stream
     }
@@ -51,12 +52,14 @@ namespace IASLib
         }
         else
         {
-            if ( m_internetAddress.isValid() )
-            {
-                CStringStream *pOut = (CStringStream *)m_pOutStream;
-                CString data = pOut->GetString();
+            CStringStream *pOut = (CStringStream *)m_pOutStream;
+            CString data = pOut->GetString();
 
-                m_pSocket->Send( data, data.GetLength(), m_internetAddress );
+                // Nothing is sent when there is no response (for example, SIP
+                // never answers an ACK).
+            if ( ( m_pSocket ) && ( m_internetAddress.isValid() ) && ( data.GetLength() > 0 ) )
+            {
+                m_pSocket->Send( data, (int)data.GetLength(), m_internetAddress );
             }
 
             delete m_pInStream;

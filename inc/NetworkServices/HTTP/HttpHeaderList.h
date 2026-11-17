@@ -34,8 +34,7 @@ namespace IASLib
 
                                 DEFINE_OBJECT( CHttpHeaderList );
 
-            virtual CIterator  *Enumerate( void );
-
+        protected:
             virtual CHeader    *newHeader( const CString &name );
     }; // Class CHttpHeaderList
 }  // Namespace IASLib

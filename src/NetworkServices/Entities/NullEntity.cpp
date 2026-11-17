@@ -1,30 +1,29 @@
 /**
  * Null Entity class
  *
- * This is the class for returning an empty entity body.
+ * This is the class for an empty entity body.
  *
  * Author: Jeffrey R. Naujok
  * Created: August 23, 2019
+ *
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
  */
 
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/Entities/NullEntity.h"
-#include "Logging/LogSink.h"
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CNullEntity, CEntity );
-    IASLIB_REGISTER_ENTITY( CNullEntity );
 
     CNullEntity::CNullEntity( void )
     {
-
     }
 
     CNullEntity::~CNullEntity( void )
     {
-
     }
 
     CString CNullEntity::toString( void )
@@ -32,14 +31,8 @@ namespace IASLib
         return CString( "" );
     }
 
-    CEntity *CNullEntity::generateEntity( CStream &stream, size_t nContentLength )
+    CEntity *CNullEntity::generateEntity( const CString &body )
     {
-        if ( nContentLength > 0 )
-        {
-            stream.IsEOS();
-            WARN_LOG( "Null Entity generated for a non-zero length content: %d bytes", nContentLength );
-        }
-
         return new CNullEntity();
     }
 }; // namespace IASLib

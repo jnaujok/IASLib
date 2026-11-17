@@ -1,13 +1,13 @@
 /**
  * Header class
  *
- * This class encapsulates a single generic header for HTTP or 
+ * This class encapsulates a single generic header for HTTP or
  * SIP style transactions. It stores one or more values attached
  * to a named header.
  *
  * Author: Jeffrey R. Naujok
  * Created: May 20, 2019
- * 
+ *
  * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
@@ -27,25 +27,37 @@ namespace IASLib
     {
         private:
             CString name;
+            CString key;            // Lower-case version of the name, used for lookups.
             CStringArray values;
 
         public:
             DEFINE_OBJECT(CHeader);
 
-            CHeader( CString name );
+            CHeader( const CString &name );
             CHeader( void );
             CHeader( const CHeader &oSource );
+            CHeader &operator =( const CHeader &oSource );
 
             virtual ~CHeader( void );
 
-            virtual CString getName( void );
-            virtual void setName( CString name );
+            virtual CString getName( void ) const;
+            virtual void setName( const CString &name );
 
-            virtual CString getValue( void );
-            virtual void setValue( CString value );
+                // The lower-case form of the name. Header names are case-insensitive.
+            virtual CString getKey( void ) const;
 
-            virtual void addValue( CString value );
-            virtual CStringArray getValues( void );
+                // Returns the first value, or an empty string if there are none.
+            virtual CString getValue( void ) const;
+            virtual void setValue( const CString &value );
+            virtual void addValue( const CString &value );
+            virtual CStringArray getValues( void ) const;
+            virtual size_t getValueCount( void ) const;
+
+                // Used by parsers to append a folded (continuation) line to the
+                // most recently added value.
+            virtual void appendToLastValue( const CString &text );
+
+            static CString makeKey( const CString &name );
     };
 } // namespace IASLib
 

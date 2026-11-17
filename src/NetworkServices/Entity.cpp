@@ -5,6 +5,9 @@
  *
  * Author: Jeffrey R. Naujok
  * Created: May 23, 2019
+ *
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
  */
 
 #ifdef IASLIB_NETWORKING__
@@ -12,84 +15,155 @@
 #include "Entity.h"
 #include "Logging/LogSink.h"
 #include "Streams/Stream.h"
+#include "NetworkServices/Entities/NullEntity.h"
+#include "NetworkServices/Entities/RawEntity.h"
+#include "NetworkServices/Entities/SdpEntity.h"
+#include "NetworkServices/Entities/TextPlainEntity.h"
+
+#include <map>
+#include <mutex>
+#include <string>
 
 namespace IASLib
 {
-    CHash CEntity::m_entityMap( CHash::SMALL );
-    size_t CEntity::entityCount = 0;
-    CEntity *CEntity::entities[512];
-    bool CEntity::m_initialized = false;
-
     IMPLEMENT_OBJECT( CEntity, CObject );
+
+    namespace
+    {
+            // The registry is created on first use so that registrations made
+            // during static initialisation in other files are safe.
+        std::mutex &registryMutex( void )
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        std::map<std::string, CEntity *> &registry( void )
+        {
+            static std::map<std::string, CEntity *> entities;
+            return entities;
+        }
+
+            // Must be called with the registry mutex held.
+        void registerLocked( CEntity *entity )
+        {
+            CString type = CEntity::mediaType( entity->getMimeType() );
+            registry()[ std::string( (const char *)type ) ] = entity;
+        }
+
+            // Must be called with the registry mutex held.
+        void ensureBuiltIns( void )
+        {
+            static bool registered = false;
+            if ( ! registered )
+            {
+                static CTextPlainEntity textPlain;
+                static CSDPEntity sdp;
+
+                    // Do not replace types an application registered first.
+                if ( registry().find( "text/plain" ) == registry().end() )
+                    registerLocked( &textPlain );
+                if ( registry().find( "application/sdp" ) == registry().end() )
+                    registerLocked( &sdp );
+
+                registered = true;
+            }
+        }
+    }
 
     CEntity::CEntity( void )
     {
-
     }
 
     CEntity::~CEntity( void )
     {
-
     }
 
-    CEntity *CEntity::getEntity( const char *mimeType, CStream &stream, size_t nContentLength )
+    CString CEntity::mediaType( const char *contentType )
     {
-        initHash();
+        CString retVal( contentType ? contentType : "" );
+        size_t nSemi = retVal.IndexOf( ';' );
+        if ( nSemi != NOT_FOUND )
+        {
+            retVal = retVal.Substring( 0, (int)nSemi );
+        }
+        retVal.Trim();
+        retVal.ToLowerCase();
+        return retVal;
+    }
+
+    CEntity *CEntity::getEntity( const char *contentType, const CString &body )
+    {
+        if ( body.GetLength() == 0 )
+        {
+            return new CNullEntity();
+        }
+
+        CString type = mediaType( contentType );
+        CEntity *prototype = NULL;
+
+        {
+            std::lock_guard<std::mutex> lock( registryMutex() );
+            ensureBuiltIns();
+            std::map<std::string, CEntity *>::iterator it = registry().find( std::string( (const char *)type ) );
+            if ( it != registry().end() )
+            {
+                prototype = it->second;
+            }
+        }
+
         CEntity *pRetVal = NULL;
 
-        DEBUG_LOG( "Getting Entity mimeType=[%s]", 
-                (const char *)mimeType );
-
-        if ( m_entityMap.HasKey( mimeType ) )
+        if ( prototype )
         {
-            CEntity *temp = (CEntity *)m_entityMap.Get( mimeType );
-            pRetVal = temp->generateEntity( stream, nContentLength );
+            pRetVal = prototype->generateEntity( body );
         }
 
         if ( pRetVal == NULL )
         {
-            ERROR_LOG( "No Entity Found! mimeType=[%s]", 
-                    mimeType );
+            CString rawType = ( type.GetLength() > 0 ) ? CString( contentType ) : CString( "application/octet-stream" );
+            rawType.Trim();
+            pRetVal = new CRawEntity( rawType, body );
         }
 
         return pRetVal;
     }
 
+    CEntity *CEntity::getEntity( const char *contentType, CStream &stream, size_t nContentLength )
+    {
+        CString body;
+
+        if ( nContentLength > 0 )
+        {
+            char *achBuffer = new char[ nContentLength + 1 ];
+            int nRead = stream.GetBuffer( achBuffer, (int)nContentLength );
+            achBuffer[ ( nRead > 0 ) ? nRead : 0 ] = '\0';
+            if ( nRead > 0 )
+            {
+                body = CString( achBuffer, (size_t)nRead );
+            }
+            delete [] achBuffer;
+        }
+
+        return getEntity( contentType, body );
+    }
+
     void CEntity::registerEntity( CEntity *entity )
     {
-        size_t nX = 0;
-
-        while ( nX < IASLIB_MAX_DEFINED_ENTITIES && entities[ nX ] != NULL )
+        if ( entity )
         {
-            nX++;
+            std::lock_guard<std::mutex> lock( registryMutex() );
+            registerLocked( entity );
         }
-        entities[nX] = entity;
     }
 
     bool CEntity::isValidEntity( const char *mimeType )
     {
-        initHash();
-        CString strMimeType(mimeType);
-        strMimeType.ToLowerCase();
-        if ( m_entityMap.HasKey( strMimeType ) )
-            return true;
+        CString type = mediaType( mimeType );
 
-        return false;
-    }
-
-    void CEntity::initHash( void )
-    {
-        if ( m_initialized == false )
-        {
-            size_t x = 0;
-
-            while ( entities[x] )
-            {
-                m_entityMap.Push( entities[x]->getMimeType(), entities[x]);
-                x++;
-            }
-            m_initialized = true;
-        }
+        std::lock_guard<std::mutex> lock( registryMutex() );
+        ensureBuiltIns();
+        return ( registry().find( std::string( (const char *)type ) ) != registry().end() );
     }
 }; // namespace IASLib
 

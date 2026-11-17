@@ -1,10 +1,14 @@
 /**
- * SIP Headers class
+ * Header List class
  *
- * This class encapsulates a set of SIP header fields in a SIP request or response.
+ * This class encapsulates a set of header fields in an HTTP or SIP
+ * style request or response.
  *
  * Author: Jeffrey R. Naujok
  * Created: May 20, 2019
+ *
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
  */
 
 #include "HeaderList.h"
@@ -16,253 +20,310 @@ namespace IASLib
 {
     IMPLEMENT_OBJECT( CHeaderList, CObject );
 
-    CHeaderList::CHeaderList( CStream &headerStream ) : m_hashHeaders( CHash::SMALL )
+    CHeaderList::CHeaderList( CStream &headerStream ) : m_aHeaders()
     {
         m_bModifiable = false;
-        CStream &localStream = headerStream;
+        m_bComplete = false;
+        m_bMalformed = false;
+        parse( headerStream );
+    }
 
-        if ( ! localStream.IsEOS() )
+    CHeaderList::CHeaderList( const CHeaderList &oSource ) : CObject(), m_aHeaders()
+    {
+        m_bModifiable = true;
+        m_bComplete = false;
+        m_bMalformed = false;
+        copyFrom( oSource );
+    }
+
+    CHeaderList::CHeaderList( void ) : m_aHeaders()
+    {
+        m_bModifiable = true;
+        m_bComplete = false;
+        m_bMalformed = false;
+    }
+
+    CHeaderList &CHeaderList::operator =( const CHeaderList &oSource )
+    {
+        if ( this != &oSource )
         {
-            CString line = localStream.GetLine();
-
-            // Headers are ended by a blank line.
-            while ( line.GetLength() > 0 )
-            {
-                size_t nSeparator = line.IndexOf( ':' );
-
-                if ( nSeparator != NOT_FOUND )
-                {
-                    CString name = line.Substring( 0, nSeparator );
-                    CString hashName = name;
-                    hashName.ToLowerCase();
-                    CHeader *temp;
-
-                    // Under standard rules, two lines with the same header name become an addative list.
-                    if ( m_hashHeaders.HasKey( hashName ) )
-                    {
-                        temp = (CHeader *)m_hashHeaders.Get( hashName );
-                    }
-                    else
-                    {
-                        temp = newHeader(name);
-                        m_hashHeaders.Push( hashName, temp );
-                    }
-
-                    // Deal with multi-tokens
-                    temp->addValue( line.Substring( nSeparator + 1 ).Trim() );
-                }
-                if ( ! localStream.IsEOS() )
-                {
-                    line = localStream.GetLine();
-                }
-                else
-                {
-                    // Stream has ended.
-                    break;
-                }
-            }
-
+            clear();
+            copyFrom( oSource );
         }
+        return *this;
     }
-
-    CHeaderList::CHeaderList( CHeaderList &oSource ) : m_hashHeaders( CHash::SMALL )
-    {
-        m_bModifiable = true;
-        m_hashHeaders = oSource.m_hashHeaders;
-    }
-
-    CHeaderList::CHeaderList( void )  : m_hashHeaders( CHash::SMALL )
-    {
-        m_bModifiable = true;
-    }
-
 
     CHeaderList::~CHeaderList( void )
     {
-        m_hashHeaders.DeleteAll();
+        clear();
     }
 
-    CHeader *CHeaderList::newHeader( CString &name )
+    void CHeaderList::copyFrom( const CHeaderList &oSource )
+    {
+        for ( size_t nX = 0; nX < oSource.m_aHeaders.Count(); nX++ )
+        {
+            CHeader *pSource = (CHeader *)oSource.m_aHeaders.Get( nX );
+            CHeader *pCopy = newHeader( pSource->getName() );
+            CStringArray values = pSource->getValues();
+            for ( size_t nY = 0; nY < values.Count(); nY++ )
+            {
+                pCopy->addValue( values[ nY ] );
+            }
+            m_aHeaders.Append( pCopy );
+        }
+        m_bComplete = oSource.m_bComplete;
+        m_bMalformed = oSource.m_bMalformed;
+    }
+
+    void CHeaderList::clear( void )
+    {
+        m_aHeaders.DeleteAll();
+    }
+
+    CString CHeaderList::canonicalName( const CString &name )
+    {
+        return name;
+    }
+
+    CHeader *CHeaderList::newHeader( const CString &name )
     {
         return new CHeader( name );
     }
 
+    int CHeaderList::findIndex( const CString &key )
+    {
+        for ( size_t nX = 0; nX < m_aHeaders.Count(); nX++ )
+        {
+            CHeader *pHeader = (CHeader *)m_aHeaders.Get( nX );
+            if ( pHeader->getKey() == key )
+            {
+                return (int)nX;
+            }
+        }
+        return -1;
+    }
+
+    bool CHeaderList::parse( CStream &headerStream )
+    {
+        CHeader *pLastHeader = NULL;
+
+        m_bComplete = false;
+
+        while ( ! headerStream.IsEOS() )
+        {
+            CString line = headerStream.GetLine();
+
+                // Accept CRLF (the standard) as well as bare LF line endings.
+            if ( ( line.GetLength() > 0 ) && ( line[ line.GetLength() - 1 ] == '\r' ) )
+            {
+                line = line.Substring( 0, (int)line.GetLength() - 1 );
+            }
+
+                // A blank line ends the headers.
+            if ( line.GetLength() == 0 )
+            {
+                m_bComplete = true;
+                break;
+            }
+
+                // Lines starting with whitespace continue the previous header
+                // (RFC 3261 section 7.3.1, RFC 7230 obs-fold).
+            if ( ( line[0] == ' ' ) || ( line[0] == '\t' ) )
+            {
+                if ( pLastHeader )
+                {
+                    CString continuation = line;
+                    continuation.Trim();
+                    pLastHeader->appendToLastValue( continuation );
+                }
+                else
+                {
+                    m_bMalformed = true;
+                }
+                continue;
+            }
+
+            size_t nSeparator = line.IndexOf( ':' );
+
+            if ( nSeparator == NOT_FOUND || nSeparator == 0 )
+            {
+                m_bMalformed = true;
+                continue;
+            }
+
+                // Whitespace is permitted before the colon.
+            CString name = line.Substring( 0, (int)nSeparator );
+            name.Trim();
+            if ( name.GetLength() == 0 )
+            {
+                m_bMalformed = true;
+                continue;
+            }
+            name = canonicalName( name );
+
+            CString value = line.Substring( nSeparator + 1 );
+            value.Trim();
+
+            CString key = CHeader::makeKey( name );
+            int nIndex = findIndex( key );
+            if ( nIndex >= 0 )
+            {
+                pLastHeader = (CHeader *)m_aHeaders.Get( (size_t)nIndex );
+            }
+            else
+            {
+                pLastHeader = newHeader( name );
+                m_aHeaders.Append( pLastHeader );
+            }
+
+            pLastHeader->addValue( value );
+        }
+
+        return m_bComplete;
+    }
+
     void CHeaderList::addHeader( const char *key, const char *value )
     {
-        CString hashKey = key;
-        hashKey.ToLowerCase();
+        CString name = canonicalName( CString( key ) );
+        int nIndex = findIndex( CHeader::makeKey( name ) );
 
-        if ( m_hashHeaders.HasKey( hashKey ) )
+        if ( nIndex >= 0 )
         {
-            CHeader *temp = (CHeader *)m_hashHeaders.Get(hashKey);
-            temp->setValue( value );
+            ((CHeader *)m_aHeaders.Get( (size_t)nIndex ))->setValue( CString( value ) );
         }
         else
         {
-            CHeader *temp = new CHeader( key );
-            temp->setValue( value );
-            m_hashHeaders.Push( hashKey, temp );
+            CHeader *temp = newHeader( name );
+            temp->setValue( CString( value ) );
+            m_aHeaders.Append( temp );
         }
     }
 
-    void CHeaderList::addHeader( const char *key, IASLib::CStringArray &values )
+    void CHeaderList::addHeader( const char *key, const CStringArray &values )
     {
-        CString hashKey = key;
-        hashKey.ToLowerCase();
-
-        if ( m_hashHeaders.HasKey( hashKey ) )
+        for ( size_t nX = 0; nX < values.Count(); nX++ )
         {
-            CHeader *temp = (CHeader *)m_hashHeaders.Get(hashKey);
-            for ( size_t nX = 0; nX < values.Count(); nX++ )
-            {
-                temp->addValue( values[nX]);
-            }
+            appendHeader( key, values[ nX ] );
+        }
+    }
+
+    void CHeaderList::appendHeader( const char *key, const char *value )
+    {
+        CString name = canonicalName( CString( key ) );
+        int nIndex = findIndex( CHeader::makeKey( name ) );
+
+        if ( nIndex >= 0 )
+        {
+            ((CHeader *)m_aHeaders.Get( (size_t)nIndex ))->addValue( CString( value ) );
         }
         else
         {
-            CHeader *temp = new CHeader( key );
-            for ( size_t nX = 0; nX < values.Count(); nX++ )
-            {
-                temp->addValue( values[nX]);
-            }
-            m_hashHeaders.Push(hashKey, temp );
+            CHeader *temp = newHeader( name );
+            temp->addValue( CString( value ) );
+            m_aHeaders.Append( temp );
         }
     }
 
     bool CHeaderList::hasHeader( const char *name )
     {
-        CString hashKey = name;
-        hashKey.ToLowerCase();
-        return m_hashHeaders.HasKey( hashKey );
+        return ( findIndex( CHeader::makeKey( canonicalName( CString( name ) ) ) ) >= 0 );
     }
 
-    // Returns an unmodifiable List of all of the header string values
-    // of the given named header.
     const CStringArray CHeaderList::allValues( const char *name )
     {
-        CString hashKey = name;
-        hashKey.ToLowerCase();
+        CHeader *header = getHeader( name );
 
-        if ( m_hashHeaders.HasKey( hashKey ) )
+        if ( header )
         {
-            CHeader *header = (CHeader *)m_hashHeaders.Get(hashKey);
             return header->getValues();
         }
         return CStringArray();
     }
 
-    // Returns the first header string value of the given named (and
-    // possibly multi-valued) header.
     CString CHeaderList::firstValue( const char *name )
     {
-        CString hashKey = name;
-        hashKey.ToLowerCase();
+        CHeader *header = getHeader( name );
 
-        if ( m_hashHeaders.HasKey( hashKey ) )
+        if ( header )
         {
-            CHeader *header = (CHeader *)m_hashHeaders.Get( hashKey );
-            if ( header != NULL )
-            {
-                return header->getValues()[0];
-            }
+            return header->getValue();
         }
-        return NULL;
+        return CString( "" );
     }
 
-    // Returns the first header string value of the given named (and
-    // possibly multi-valued) header.
     long CHeaderList::firstValueAsLong( const char *name )
     {
-        CString hashKey = name;
-        hashKey.ToLowerCase();
+        CString val = firstValue( name );
+        val.Trim();
 
-        if ( m_hashHeaders.HasKey( hashKey ) )
+        if ( ( val.GetLength() > 0 ) && ( val.IsDigits() ) )
         {
-            CHeader *header = (CHeader *)m_hashHeaders.Get(hashKey);
-            if ( header != NULL )
-            {
-                CString val = header->getValue();
-                if ( val.IsDigits() )
-                    return atol(val);
-            }
+            return atol( val );
         }
         return 0L;
     }
 
-    // Returns an unmodifiable multi Map view of the entire set of
-    // headers in the form Key: CString Value: CStringArray. Note that
-    // this hash map must be deleted by the caller.
     CHash *CHeaderList::map( void )
     {
-        CIterator *iter = m_hashHeaders.Enumerate();
         CHash *retVal = new CHash( CHash::SMALL );
 
-        while ( iter->HasMore() )
+        for ( size_t nX = 0; nX < m_aHeaders.Count(); nX++ )
         {
-            CHeader *header = (CHeader *)iter->Next();
-            CString name = header->getName();
+            CHeader *header = (CHeader *)m_aHeaders.Get( nX );
             CStringArray *values = new CStringArray();
             *values = header->getValues();
-            retVal->Push( name, (CObject *)values );
+            retVal->Push( header->getName(), (CObject *)values );
         }
-        delete iter;
 
         return retVal;
     }
 
+    CIterator *CHeaderList::Enumerate( void )
+    {
+        return m_aHeaders.Enumerate();
+    }
+
     CString CHeaderList::toString( void )
     {
-        CIterator *iter = m_hashHeaders.Enumerate();
         CString retVal;
 
-        while ( iter->HasMore() )
+        for ( size_t nX = 0; nX < m_aHeaders.Count(); nX++ )
         {
-            CHeader *header = (CHeader *)iter->Next();
+            CHeader *header = (CHeader *)m_aHeaders.Get( nX );
             CString name = header->getName();
-            CStringArray *values = new CStringArray();
-            *values = header->getValues();
-            for ( size_t nX = 0; nX < values->GetCount(); nX++ )
+            CStringArray values = header->getValues();
+
+            for ( size_t nY = 0; nY < values.Count(); nY++ )
             {
                 retVal += name;
                 retVal += ": ";
-                retVal += (*values)[nX];
+                retVal += values[ nY ];
                 retVal += "\r\n";
             }
-            delete values;
         }
-        delete iter;
 
         return retVal;
     }
 
     CHeader *CHeaderList::getHeader( const char *key )
     {
-        CString hashKey = key;
-        hashKey.ToLowerCase();
+        int nIndex = findIndex( CHeader::makeKey( canonicalName( CString( key ) ) ) );
 
-        if ( m_hashHeaders.HasKey( hashKey ) )
+        if ( nIndex >= 0 )
         {
-            CHeader *header = (CHeader *)m_hashHeaders.Get( hashKey );
-            if ( header != NULL )
-            {
-                return header;
-            }
+            return (CHeader *)m_aHeaders.Get( (size_t)nIndex );
         }
         return NULL;
     }
 
     void CHeaderList::removeHeader( const char *key )
     {
-        CString hashKey = key;
-        hashKey.ToLowerCase();
+        int nIndex = findIndex( CHeader::makeKey( canonicalName( CString( key ) ) ) );
 
-        if ( m_hashHeaders.HasKey( hashKey ) )
+        if ( nIndex >= 0 )
         {
-            CHeader *header = (CHeader *)m_hashHeaders.Remove( hashKey );
-            if ( header != NULL )
-            {
-                delete header;
-            }
+            CHeader *header = (CHeader *)m_aHeaders.Remove( (size_t)nIndex );
+            delete header;
         }
     }
 }; // namespace IASLib

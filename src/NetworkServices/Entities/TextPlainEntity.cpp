@@ -1,10 +1,13 @@
 /**
  * Text/Plain Entity class
  *
- * This is the class for returning a body encoded using text/plain encoding.
+ * This is the class for a body encoded using text/plain encoding.
  *
  * Author: Jeffrey R. Naujok
  * Created: September 13, 2019
+ *
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
  */
 
 #ifdef IASLIB_NETWORKING__
@@ -13,27 +16,18 @@
 
 namespace IASLib
 {
-
     IMPLEMENT_OBJECT( CTextPlainEntity, CEntity );
-    IASLIB_REGISTER_ENTITY( CTextPlainEntity );
 
     CTextPlainEntity::CTextPlainEntity( void )
     {
-
     }
 
-    CTextPlainEntity::CTextPlainEntity( CStream &stream, size_t nContentLength )
+    CTextPlainEntity::CTextPlainEntity( const CString &body ) : m_strBody( body )
     {
-        char *achBuffer = new char[ nContentLength + 1 ];
-        memset( achBuffer, 0, nContentLength + 1 );
-        stream.GetBuffer( achBuffer, nContentLength );
-        m_strBody = CString( achBuffer, nContentLength );
-        delete [] achBuffer;
     }
 
     CTextPlainEntity::~CTextPlainEntity( void )
     {
-
     }
 
     CString CTextPlainEntity::toString( void )
@@ -41,11 +35,10 @@ namespace IASLib
         return m_strBody;
     }
 
-
-    CEntity *CTextPlainEntity::generateEntity( CStream &stream, size_t nContentLength )
+    CEntity *CTextPlainEntity::generateEntity( const CString &body )
     {
-        return new CTextPlainEntity( stream, nContentLength );
+        return new CTextPlainEntity( body );
     }
-
 }; // namespace IASLib
+
 #endif // IASLIB_NETWORKING__

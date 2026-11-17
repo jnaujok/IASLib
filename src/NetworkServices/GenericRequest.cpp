@@ -2,7 +2,7 @@
  * Generic Request class
  *
  * This class encapsulates a Generic request, including the request line,
- * headers, and a handle to the stream with the request.
+ * headers and body.
  *
  * Author: Jeffrey R. Naujok
  * Created: September 19, 2019
@@ -14,103 +14,27 @@
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/GenericRequest.h"
-#include "NetworkServices/GenericServer.h"
-#include "BaseTypes/StringTokenizer.h"
+#include "Streams/StringStream.h"
 #include "Logging/LogSink.h"
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CGenericRequest, CObject );
 
-    CGenericRequest::CGenericRequest( CInternetAddress &internetAddress ) : m_InternetAddress( internetAddress )
-    {
-    }
-
-    bool CGenericRequest::parse( CStream &requestStream )
+    CGenericRequest::CGenericRequest( const CInternetAddress &internetAddress ) : m_InternetAddress( internetAddress )
     {
         m_bIsValid = false;
         m_bInbound = true;
-        m_bIsValid = false;
-        CString line = requestStream.GetLine();
-
-        // Skip preceding blank lines
-        while ( (line.Length() == 0) && (!requestStream.IsEOS() ))
-        {
-            line = requestStream.GetLine();
-        }
-
-        // Did we get a non-blank line before the end of stream?
-        if ( line.Length() > 0 )
-        {
-            // Now that we have a non-blank line, break it into tokens based on spaces.
-            // The SIP protocol (RFC 3261) explicitly requires space characters between
-            // elements of the Request Line.
-            // Request-Line  =  Method SP Request-URI SP SIP-Version CRLF
-            CStringTokenizer stTokens(line.Trim(), " ");
-
-            // Did we get tokens?
-            if (stTokens.HasMoreTokens() )
-            {
-                // SIP commands should have 3 parts
-                if ( stTokens.CountTokens() == 3 )
-                {
-                    m_requestType = stTokens.NextToken();
-                    m_uri = stTokens.NextToken();
-                    m_version = stTokens.NextToken();
-
-                    // Once we have the request, we can go ahead and get the headers
-                    // We use the pure-virtual to get the correct header list type
-                    m_pHeaders = this->getHeaderList( requestStream );
-
-                    // Look for the content-type header
-                    CString contentType = m_pHeaders->firstValue( "content-type" );
-                    if ( contentType.Length() > 0 )
-                    {
-                        contentType.ToLowerCase();
-                        DEBUG_LOG( "Content-Type=[%s]", (const char *)contentType );
-                    }
-                    else
-                    {
-                        DEBUG_LOG( "No content-type found - defaulting to [text/plain]." );
-                        contentType = "text/plain";
-                    }
-                    CString contentLength = m_pHeaders->firstValue( "content-length" );
-                    size_t nContentLength = 0;
-
-                    if ( contentLength.Length() > 0 )
-                    {
-                        nContentLength = (size_t)atoi( contentLength );
-                    }
-                    else
-                    {
-                        nContentLength = requestStream.bytesRemaining();
-                    }
-
-                    m_bodyEntity = CEntity::getEntity( contentType, requestStream, nContentLength );
-
-                    m_bIsValid = true;
-                }
-                else
-                {
-                    // Return invalid request response
-                    m_bIsValid = false;
-                }
-
-            }
-            else
-            {
-                // Return invalid request response
-                m_bIsValid = false;
-            }
-        }
-
-        return m_bIsValid;
+        m_pHeaders = NULL;
+        m_bodyEntity = NULL;
     }
 
     CGenericRequest::CGenericRequest( void )
     {
         m_bIsValid = true;
         m_bInbound = false;
+        m_pHeaders = NULL;
+        m_bodyEntity = NULL;
     }
 
     CGenericRequest::~CGenericRequest( void )
@@ -123,6 +47,131 @@ namespace IASLib
         m_bodyEntity = NULL;
     }
 
+    CString CGenericRequest::stripLineEnding( const CString &line )
+    {
+        if ( ( line.GetLength() > 0 ) && ( line[ line.GetLength() - 1 ] == '\r' ) )
+        {
+            return line.Substring( 0, (int)line.GetLength() - 1 );
+        }
+        return line;
+    }
+
+    void CGenericRequest::setParseError( const char *reason )
+    {
+        if ( m_strParseError.GetLength() == 0 )
+        {
+            m_strParseError = reason;
+        }
+        m_bIsValid = false;
+    }
+
+    bool CGenericRequest::parse( const CString &message )
+    {
+        CStringStream stream( message );
+        return parse( stream );
+    }
+
+    bool CGenericRequest::parse( CStream &requestStream )
+    {
+        m_bIsValid = false;
+        m_bInbound = true;
+        m_strParseError = "";
+
+        if ( m_pHeaders )
+        {
+            delete m_pHeaders;
+            m_pHeaders = NULL;
+        }
+        if ( m_bodyEntity )
+        {
+            delete m_bodyEntity;
+            m_bodyEntity = NULL;
+        }
+
+            // Skip any blank lines before the request line (RFC 3261 7.5,
+            // RFC 7230 3.5). These include keep-alive CRLFs.
+        CString line;
+        bool bFound = false;
+        while ( ! requestStream.IsEOS() )
+        {
+            line = stripLineEnding( requestStream.GetLine() );
+            if ( line.GetLength() > 0 )
+            {
+                bFound = true;
+                break;
+            }
+        }
+
+        if ( ! bFound )
+        {
+            setParseError( "Empty message" );
+            return false;
+        }
+
+            // Request-Line = Method SP Request-URI SP Version CRLF
+        size_t nFirst = line.IndexOf( ' ' );
+        size_t nLast = line.LastIndexOf( ' ' );
+        if ( ( nFirst == NOT_FOUND ) || ( nFirst == nLast ) )
+        {
+            setParseError( "Malformed request line" );
+            return false;
+        }
+
+        m_requestType = line.Substring( 0, (int)nFirst );
+        m_uri = line.Substring( nFirst + 1, (int)( nLast - nFirst - 1 ) );
+        m_version = line.Substring( nLast + 1 );
+        m_uri.Trim();
+
+        if ( ( m_requestType.GetLength() == 0 ) || ( m_uri.GetLength() == 0 ) || ( m_version.GetLength() == 0 ) ||
+             ( m_uri.IndexOf( ' ' ) != NOT_FOUND ) )
+        {
+            setParseError( "Malformed request line" );
+            return false;
+        }
+
+            // Use the protocol's header list type.
+        m_pHeaders = this->getHeaderList( requestStream );
+
+        bool bOk = true;
+        if ( m_pHeaders->isMalformed() )
+        {
+            setParseError( "Malformed header line" );
+            bOk = false;
+        }
+
+        size_t nAvailable = requestStream.bytesRemaining();
+        size_t nContentLength = nAvailable;
+
+        if ( m_pHeaders->hasHeader( "content-length" ) )
+        {
+            CString contentLength = m_pHeaders->firstValue( "content-length" );
+            contentLength.Trim();
+            if ( ( contentLength.GetLength() == 0 ) || ( ! contentLength.IsDigits() ) || ( contentLength.GetLength() > 9 ) )
+            {
+                setParseError( "Invalid Content-Length" );
+                bOk = false;
+                nContentLength = 0;
+            }
+            else
+            {
+                nContentLength = (size_t)atol( contentLength );
+                if ( nContentLength > nAvailable )
+                {
+                    setParseError( "Message body is shorter than Content-Length" );
+                    bOk = false;
+                    nContentLength = nAvailable;
+                }
+                    // Any bytes beyond Content-Length are ignored (RFC 3261 18.3).
+            }
+        }
+
+        CString contentType = m_pHeaders->firstValue( "content-type" );
+        m_bodyEntity = CEntity::getEntity( contentType, requestStream, nContentLength );
+
+        m_bIsValid = bOk;
+        return m_bIsValid;
+    }
+
     void CGenericRequest::setRequestType( const char *requestType )
     {
         m_requestType = requestType;
@@ -130,40 +179,72 @@ namespace IASLib
 
     void CGenericRequest::setUri( const char *uri )
     {
-
+        m_uri = uri;
     }
 
     void CGenericRequest::setVersion( const char *version )
     {
+        m_version = version;
+    }
 
+    CHeaderList *CGenericRequest::getHeaders( void )
+    {
+        if ( m_pHeaders == NULL )
+        {
+            m_pHeaders = newHeaderList();
+        }
+        return m_pHeaders;
     }
 
     CString CGenericRequest::getHeaderValue( const char *headerName )
     {
-
+        if ( m_pHeaders )
+        {
+            return m_pHeaders->firstValue( headerName );
+        }
+        return CString( "" );
     }
+
     void CGenericRequest::setHeaderValue( const char *headerName, const char *headerValue )
     {
-
+        getHeaders()->addHeader( headerName, headerValue );
     }
 
     CStringArray CGenericRequest::getHeaderValues( const char *headerName )
     {
-
+        if ( m_pHeaders )
+        {
+            return m_pHeaders->allValues( headerName );
+        }
+        return CStringArray();
     }
+
     void CGenericRequest::setHeaderValues( const char *headerName, CStringArray headerValues )
     {
-
+        getHeaders()->removeHeader( headerName );
+        getHeaders()->addHeader( headerName, headerValues );
     }
 
-    CString CGenericRequest::getHeaderValue( CString name )
+    bool CGenericRequest::hasHeader( const char *headerName )
     {
-
+        return ( m_pHeaders != NULL ) && m_pHeaders->hasHeader( headerName );
     }
 
-    CStringArray CGenericRequest::getHeaderValues( CString name )
+    void CGenericRequest::removeHeader( const char *headerName )
     {
+        if ( m_pHeaders )
+        {
+            m_pHeaders->removeHeader( headerName );
+        }
+    }
 
+    void CGenericRequest::setEntity( CEntity *entity )
+    {
+        if ( ( m_bodyEntity ) && ( m_bodyEntity != entity ) )
+        {
+            delete m_bodyEntity;
+        }
+        m_bodyEntity = entity;
     }
 }; // namespace IASLib
 

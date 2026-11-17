@@ -26,8 +26,10 @@ namespace IASLib
         return new CHttpHeader( name );
     }
 
-    CHttpHeaderList::CHttpHeaderList( CStream &oInputStream ) : CHeaderList( oInputStream )
+    CHttpHeaderList::CHttpHeaderList( CStream &oInputStream ) : CHeaderList()
     {
+        m_bModifiable = false;
+        parse( oInputStream );
     }
 
     CHttpHeaderList::CHttpHeaderList( void ) : CHeaderList()
@@ -38,12 +40,6 @@ namespace IASLib
     CHttpHeaderList::~CHttpHeaderList( void )
     {
         // Nothing to do, handled by the base class.
-    }
-
-    CIterator *CHttpHeaderList::Enumerate( void )
-    {
-        // TODO: Fix this
-        return NULL;
     }
 
 } // Namespace IASLib
