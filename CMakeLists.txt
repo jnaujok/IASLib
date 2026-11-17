@@ -22,6 +22,9 @@ option(USE_MEMORY_DEBUGGING "Use memory debugging features." ON)
 # explicitly (-DUSE_JSON=ON) when working on it.
 option(USE_JSON "Enable JSON support." OFF)
 option(USE_HERSCHEL_CORRECTION "CDate treats years divisible by 4000 as common years by default." OFF)
+# Windows always uses ICU (icu.dll) for named time zones; this turns it on
+# elsewhere, where zone files are normally used, mainly for testing.
+option(USE_TIMEZONE_ICU "Named time zones may come from the ICU library (non-Windows)." OFF)
 
 #Bring the headers, such as Student.h into the project
 include_directories(
@@ -173,6 +176,9 @@ if (USE_JSON)
 endif()
 if (USE_HERSCHEL_CORRECTION)
     add_definitions(-DIASLIB_HERSCHEL_CORRECTION__)
+endif()
+if (USE_TIMEZONE_ICU AND NOT WIN32)
+    add_definitions(-DIASLIB_TIMEZONE_ICU__)
 endif()
 
 

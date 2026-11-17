@@ -11,6 +11,14 @@
  *      Zone files with leap seconds (the "right/" zones) are not accepted,
  * since their times are not UTC.
  *
+ *      Windows has no zone files. There, zones not found in $TZDIR (which
+ * can point at zone files shipped with a program) come from the copy of the
+ * IANA data in Windows' own ICU library (icu.dll, Windows 10 version 1903 and
+ * later; icuin.dll on some earlier versions of Windows 10), loaded when first
+ * needed. Without either, named zones are not found. Other systems can use
+ * ICU too when built with IASLIB_TIMEZONE_ICU__ (CMake USE_TIMEZONE_ICU),
+ * which is mainly for testing.
+ *
  *	Author: Jeffrey R. Naujok
  *	Created: November 17, 2026
  *
@@ -35,6 +43,12 @@ namespace IASLib
                 // (or no zone database). Names are case-sensitive.
             static std::shared_ptr<const CTimeZone> Find( const char *pszName );
 
+                // The zone from ICU only, or NULL if ICU is not available or has
+                // no such zone. Find() uses this where there are no zone files.
+            static std::shared_ptr<const CTimeZone> FindInICU( const char *pszName );
+                // True if this build can use ICU and the library is present.
+            static bool         IsICUAvailable( void );
+
                 // The zone's name, for example "America/New_York".
             const std::string  &GetName( void ) const { return m_strName; }
 
@@ -55,15 +69,18 @@ namespace IASLib
 
         private:
             struct CRule;
+            struct CICUZone;
 
             std::string                 m_strName;
             std::vector<long long>      m_aTransitions;     // UTC seconds, ascending
             std::vector<int>            m_aOffsets;         // offset after each transition
             int                         m_nInitialOffset;   // before the first transition
             std::shared_ptr<CRule>      m_pRule;            // after the last, if any
+            std::shared_ptr<CICUZone>   m_pICU;             // set for a zone from ICU
 
             CTimeZone( void );
             static std::shared_ptr<const CTimeZone> Load( const std::string &strName );
+            static std::shared_ptr<const CTimeZone> LoadICU( const std::string &strName );
             bool                Parse( const std::vector<unsigned char> &aData );
             static std::shared_ptr<CRule> ParseRule( const std::string &strRule );
             static int          RuleOffsetAt( const CRule &rule, long long llUtcSeconds );

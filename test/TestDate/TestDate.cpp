@@ -17,6 +17,8 @@
 #include <random>
 #include <memory>
 #include <string>
+#include <thread>
+#include <atomic>
 #include <vector>
 
 using namespace IASLib;
@@ -1074,6 +1076,95 @@ static void testNamedZones( void )
     CHECK( nyNoon.AssumeTimeZone( "America/New_York" ) && near( nyNoon.GetJulianDate(), 2451545.0, 1.0 / 86400000.0 ) );
 }
 
+    // ICU zones (what Windows uses) against the zone files, where this build
+    // can use ICU (always on Windows; USE_TIMEZONE_ICU elsewhere).
+static void testICUZones( void )
+{
+    printf( "ICU time zones\n" );
+    if ( ! CTimeZone::IsICUAvailable() )
+    {
+        CHECK( ! CTimeZone::FindInICU( "America/New_York" ) );
+        printf( "  (ICU not used in this build; skipped)\n" );
+        return;
+    }
+    std::shared_ptr<const CTimeZone> ny = CTimeZone::FindInICU( "America/New_York" );
+    CHECK( ny && ny->GetName() == "America/New_York" );
+    CHECK( ny == CTimeZone::FindInICU( "America/New_York" ) );
+    if ( ! ny )
+        return;
+    CHECK( ny->OffsetAt( 979560000LL ) == -18000 );
+    CHECK( ny->OffsetAt( 995198400LL ) == -14400 );
+    CHECK( ny->OffsetAt( 986108399LL ) == -18000 && ny->OffsetAt( 986108400LL ) == -14400 );
+    CHECK( ny->OffsetAt( 4118400000LL ) == -14400 );
+    int offset = 0;
+    bool gap = false;
+    ny->OffsetForLocal( 986092200LL, offset, gap );
+    CHECK( offset == -18000 && gap );
+    ny->OffsetForLocal( 1004232600LL, offset, gap );
+    CHECK( offset == -14400 && ! gap );
+    std::shared_ptr<const CTimeZone> paris = CTimeZone::FindInICU( "Europe/Paris" );
+    CHECK( paris && paris->OffsetAt( 1635640200LL ) == 7200 );          // 2021-10-31 00:30Z, before
+    CHECK( paris && paris->OffsetAt( 1635643800LL ) == 3600 );          // 01:30Z, after the clocks go back
+    std::shared_ptr<const CTimeZone> kolkata = CTimeZone::FindInICU( "Asia/Kolkata" );
+    CHECK( kolkata && kolkata->OffsetAt( 946728000LL ) == 19800 );
+
+        // One ICU calendar per zone, shared by threads under its lock.
+    {
+        std::vector<std::thread> threads;
+        std::atomic<int> wrong( 0 );
+        for ( int n = 0; n < 4; n++ )
+            threads.push_back( std::thread( [&wrong, ny, n]() {
+                for ( int i = 0; i < 2000; i++ )
+                {
+                    long long t = ( i % 2 ) ? 979560000LL : 995198400LL;
+                    if ( ny->OffsetAt( t + n ) != ( ( i % 2 ) ? -18000 : -14400 ) )
+                        wrong++;
+                    CTimeZone::FindInICU( "Europe/Paris" );
+                }
+            } ) );
+        for ( size_t n = 0; n < threads.size(); n++ )
+            threads[ n ].join();
+        CHECK( wrong == 0 );
+    }
+
+        // ICU must not quietly turn unknown names into GMT.
+    const char *bad[] = { "Mars/Base", "../etc/passwd", "America/New York", "Nowhere" };
+    for ( size_t n = 0; n < sizeof( bad ) / sizeof( bad[0] ); n++ )
+        CHECK_EQ_STR( bad[ n ], CTimeZone::FindInICU( bad[ n ] ) ? "found" : "not found", "not found" );
+
+        // The same offsets as the zone files, where both have the zone. Their
+        // tzdata releases can differ, and history is still being corrected
+        // (Iran's 1977-79 changes were revised in 2022), so this covers 1990
+        // onwards; mismatches are listed.
+    if ( ! CTimeZone::Find( "America/New_York" ) )
+        return;
+    const char *zones[] = { "America/New_York", "Europe/London", "Australia/Sydney", "Asia/Kolkata",
+                            "America/Sao_Paulo", "Pacific/Chatham", "Europe/Dublin", "America/St_Johns",
+                            "Pacific/Apia", "America/Nuuk", "Asia/Jerusalem", "Australia/Lord_Howe",
+                            "America/Santiago", "Asia/Tehran", "Europe/Paris", "America/Los_Angeles" };
+    std::mt19937_64 random( 1903 );
+    std::uniform_int_distribution<long long> instants( 631152000LL, 4102444800LL );
+    for ( size_t z = 0; z < sizeof( zones ) / sizeof( zones[0] ); z++ )
+    {
+        std::shared_ptr<const CTimeZone> files = CTimeZone::Find( zones[ z ] );
+        std::shared_ptr<const CTimeZone> icu = CTimeZone::FindInICU( zones[ z ] );
+        if ( ! files || ! icu )
+            continue;
+        int mismatches = 0;
+        long long first = 0;
+        for ( int n = 0; n < 3000; n++ )
+        {
+            long long t = instants( random );
+            if ( files->OffsetAt( t ) != icu->OffsetAt( t ) && mismatches++ == 0 )
+                first = t;
+        }
+        if ( mismatches )
+            printf( "  %s: %d differ between ICU and the zone files, first at %lld (%d vs %d)\n", zones[ z ],
+                    mismatches, first, icu->OffsetAt( first ), files->OffsetAt( first ) );
+        CHECK( mismatches == 0 );
+    }
+}
+
 int main( int argc, char *argv[] )
 {
         // Dates without a zone take the system zone, so run in UTC unless a
@@ -1100,6 +1191,7 @@ int main( int argc, char *argv[] )
     testUnknownZoneDefault();
     testDefaultTimezone();
     testNamedZones();
+    testICUZones();
 
     setZone( savedTestZone.empty() ? NULL : savedTestZone.c_str() );
 

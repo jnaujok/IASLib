@@ -2,7 +2,8 @@
  * Time Zone
  *
  *      Reads IANA time zone files (TZif, RFC 8536) and evaluates their POSIX
- * daylight saving rules. See TimeZone.h.
+ * daylight saving rules, or asks ICU where there are no zone files (Windows).
+ * See TimeZone.h.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: November 17, 2026
@@ -20,6 +21,25 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <stdint.h>
+
+#if defined( IASLIB_WIN32__ ) && ! defined( IASLIB_TIMEZONE_ICU__ )
+#define IASLIB_TIMEZONE_ICU__
+#endif
+
+#ifdef IASLIB_TIMEZONE_ICU__
+#ifdef IASLIB_WIN32__
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+#endif
 
 namespace IASLib
 {
@@ -474,7 +494,176 @@ namespace IASLib
         return std::shared_ptr<const CTimeZone>();
     }
 
-    std::shared_ptr<const CTimeZone> CTimeZone::Find( const char *pszName )
+#ifdef IASLIB_TIMEZONE_ICU__
+    namespace
+    {
+            // The few ICU C functions used, loaded at run time so that a
+            // program still starts where ICU is missing. ICU's UChar is 16 bits
+            // and its enums are ints; these are the values from ucal.h.
+        typedef void   *( *IcuOpen )( const uint16_t *zone, int32_t length, const char *locale, int type, int *status );
+        typedef void    ( *IcuClose )( void *calendar );
+        typedef void    ( *IcuSetMillis )( void *calendar, double millis, int *status );
+        typedef int32_t ( *IcuGet )( const void *calendar, int field, int *status );
+        typedef int32_t ( *IcuCanonical )( const uint16_t *id, int32_t length, uint16_t *result, int32_t capacity, int8_t *isSystemId, int *status );
+
+        const int ICU_GREGORIAN = 1;        // UCAL_GREGORIAN
+        const int ICU_ZONE_OFFSET = 15;     // UCAL_ZONE_OFFSET, milliseconds
+        const int ICU_DST_OFFSET = 16;      // UCAL_DST_OFFSET, milliseconds
+
+        bool icuFailed( int status ) { return status > 0; }    // U_FAILURE
+
+        struct CIcuApi
+        {
+            bool            ok;
+            IcuOpen         open;
+            IcuClose        close;
+            IcuSetMillis    setMillis;
+            IcuGet          get;
+            IcuCanonical    canonical;
+
+            CIcuApi( void ) : ok( false ), open( NULL ), close( NULL ), setMillis( NULL ), get( NULL ), canonical( NULL ) {}
+        };
+
+#ifdef IASLIB_WIN32__
+            // Windows' ICU exports the plain C names. Only the system copy is
+            // loaded, never one from the program's directory or the path.
+        bool loadIcuFrom( const wchar_t *pszLibrary, CIcuApi &api )
+        {
+            HMODULE module = LoadLibraryExW( pszLibrary, NULL, LOAD_LIBRARY_SEARCH_SYSTEM32 );
+            if ( module == NULL )
+                return false;
+            api.open = (IcuOpen)(void *)GetProcAddress( module, "ucal_open" );
+            api.close = (IcuClose)(void *)GetProcAddress( module, "ucal_close" );
+            api.setMillis = (IcuSetMillis)(void *)GetProcAddress( module, "ucal_setMillis" );
+            api.get = (IcuGet)(void *)GetProcAddress( module, "ucal_get" );
+            api.canonical = (IcuCanonical)(void *)GetProcAddress( module, "ucal_getCanonicalTimeZoneID" );
+            if ( api.open && api.close && api.setMillis && api.get && api.canonical )
+                return true;
+            FreeLibrary( module );
+            return false;
+        }
+
+        CIcuApi loadIcu( void )
+        {
+            CIcuApi api;
+                // icu.dll from Windows 10 version 1903; icuin.dll before that.
+            api.ok = loadIcuFrom( L"icu.dll", api ) || loadIcuFrom( L"icuin.dll", api );
+            return api;
+        }
+#else
+            // Elsewhere ICU's names carry its major version ("ucal_open_74"),
+            // except where it was built without them (macOS's libicucore).
+        void *icuSymbol( void *library, const char *pszName, const std::string &suffix )
+        {
+            return dlsym( library, ( std::string( pszName ) + suffix ).c_str() );
+        }
+
+        bool loadIcuFrom( void *library, const std::string &suffix, CIcuApi &api )
+        {
+            api.open = (IcuOpen)icuSymbol( library, "ucal_open", suffix );
+            api.close = (IcuClose)icuSymbol( library, "ucal_close", suffix );
+            api.setMillis = (IcuSetMillis)icuSymbol( library, "ucal_setMillis", suffix );
+            api.get = (IcuGet)icuSymbol( library, "ucal_get", suffix );
+            api.canonical = (IcuCanonical)icuSymbol( library, "ucal_getCanonicalTimeZoneID", suffix );
+            return api.open && api.close && api.setMillis && api.get && api.canonical;
+        }
+
+        CIcuApi loadIcu( void )
+        {
+            CIcuApi api;
+            std::vector<std::string> names;
+            names.push_back( "libicucore.dylib" );
+            names.push_back( "libicui18n.so" );
+            for ( int version = 99; version >= 50; version-- )
+                names.push_back( "libicui18n.so." + std::to_string( version ) );
+            for ( size_t n = 0; n < names.size() && ! api.ok; n++ )
+            {
+                void *library = dlopen( names[ n ].c_str(), RTLD_NOW | RTLD_LOCAL );
+                if ( library == NULL )
+                    continue;
+                if ( loadIcuFrom( library, "", api ) )
+                    api.ok = true;
+                for ( int version = 99; version >= 50 && ! api.ok; version-- )
+                    api.ok = loadIcuFrom( library, "_" + std::to_string( version ), api );
+                if ( ! api.ok )
+                    dlclose( library );
+            }
+            return api;
+        }
+#endif
+
+            // Loaded once, on first use (thread-safe static initialisation).
+        const CIcuApi &icu( void )
+        {
+            static CIcuApi api = loadIcu();
+            return api;
+        }
+    }
+
+        // An ICU calendar set to the zone. ICU calendars are not thread-safe, so
+        // each zone's is used under its own lock.
+    struct CTimeZone::CICUZone
+    {
+        std::mutex  mutex;
+        void       *calendar;
+        IcuClose    close;
+
+        CICUZone( void ) : calendar( NULL ), close( NULL ) {}
+        ~CICUZone( void ) { if ( calendar && close ) close( calendar ); }
+    };
+
+    std::shared_ptr<const CTimeZone> CTimeZone::LoadICU( const std::string &name )
+    {
+        const CIcuApi &api = icu();
+        if ( ! api.ok )
+            return std::shared_ptr<const CTimeZone>();
+
+            // Names are ASCII (see validName). ICU quietly gives GMT for zones
+            // it does not know, so check the name is one of its zones first.
+        std::vector<uint16_t> id( name.begin(), name.end() );
+        uint16_t canonical[ 256 ];
+        int8_t isSystemId = 0;
+        int status = 0;
+        api.canonical( &id[0], (int32_t)id.size(), canonical, 256, &isSystemId, &status );
+        if ( icuFailed( status ) || ! isSystemId )
+            return std::shared_ptr<const CTimeZone>();
+
+        std::shared_ptr<CICUZone> icuZone = std::make_shared<CICUZone>();
+        icuZone->close = api.close;
+        status = 0;
+        icuZone->calendar = api.open( &id[0], (int32_t)id.size(), "", ICU_GREGORIAN, &status );
+        if ( icuFailed( status ) || icuZone->calendar == NULL )
+            return std::shared_ptr<const CTimeZone>();
+
+        std::shared_ptr<CTimeZone> zone( new CTimeZone() );
+        zone->m_strName = name;
+        zone->m_pICU = icuZone;
+        return zone;
+    }
+
+    bool CTimeZone::IsICUAvailable( void )
+    {
+        return icu().ok;
+    }
+#else
+    struct CTimeZone::CICUZone
+    {
+    };
+
+    std::shared_ptr<const CTimeZone> CTimeZone::LoadICU( const std::string & )
+    {
+        return std::shared_ptr<const CTimeZone>();
+    }
+
+    bool CTimeZone::IsICUAvailable( void )
+    {
+        return false;
+    }
+#endif
+
+        // Looks a zone up in a cache, loading it the first time.
+    static std::shared_ptr<const CTimeZone> findCached( const char *pszName, bool bICUOnly,
+                                                        std::shared_ptr<const CTimeZone> ( *load )( const std::string &, bool ) )
     {
         if ( pszName == NULL )
             return std::shared_ptr<const CTimeZone>();
@@ -482,21 +671,54 @@ namespace IASLib
         if ( ! validName( name ) )
             return std::shared_ptr<const CTimeZone>();
 
-        static std::mutex cacheMutex;
-        static std::map< std::string, std::shared_ptr<const CTimeZone> > cache;
+            // Never destroyed: zones stay valid until the process ends, and ICU
+            // calendars are not closed during exit, when ICU (on Windows, a DLL
+            // that may already be unloaded) can no longer be called safely.
+        static std::mutex &cacheMutex = *new std::mutex;
+        static std::map< std::string, std::shared_ptr<const CTimeZone> > &cache =
+            *new std::map< std::string, std::shared_ptr<const CTimeZone> >;
 
+        std::string key = ( bICUOnly ? "icu:" : "" ) + name;
         std::lock_guard<std::mutex> lock( cacheMutex );
-        std::map< std::string, std::shared_ptr<const CTimeZone> >::iterator it = cache.find( name );
+        std::map< std::string, std::shared_ptr<const CTimeZone> >::iterator it = cache.find( key );
         if ( it != cache.end() )
             return it->second;
-        std::shared_ptr<const CTimeZone> zone = Load( name );
+        std::shared_ptr<const CTimeZone> zone = load( name, bICUOnly );
         if ( zone )
-            cache[ name ] = zone;
+            cache[ key ] = zone;
         return zone;
+    }
+
+    std::shared_ptr<const CTimeZone> CTimeZone::Find( const char *pszName )
+    {
+            // Zone files first (including any $TZDIR points at), then ICU.
+        return findCached( pszName, false, []( const std::string &name, bool ) {
+            std::shared_ptr<const CTimeZone> zone = Load( name );
+            return zone ? zone : LoadICU( name );
+        } );
+    }
+
+    std::shared_ptr<const CTimeZone> CTimeZone::FindInICU( const char *pszName )
+    {
+        return findCached( pszName, true, []( const std::string &name, bool ) { return LoadICU( name ); } );
     }
 
     int CTimeZone::OffsetAt( long long llUtc ) const
     {
+#ifdef IASLIB_TIMEZONE_ICU__
+        if ( m_pICU )
+        {
+            const CIcuApi &api = icu();
+            std::lock_guard<std::mutex> lock( m_pICU->mutex );
+            int status = 0;
+            api.setMillis( m_pICU->calendar, (double)llUtc * 1000.0, &status );
+            int32_t zone = api.get( m_pICU->calendar, ICU_ZONE_OFFSET, &status );
+            int32_t dst = api.get( m_pICU->calendar, ICU_DST_OFFSET, &status );
+            if ( icuFailed( status ) )
+                return 0;
+            return (int)( ( zone + dst ) / 1000 );
+        }
+#endif
         if ( m_aTransitions.empty() || llUtc < m_aTransitions[0] )
         {
             if ( m_aTransitions.empty() && m_pRule )
