@@ -1040,6 +1040,14 @@ namespace IASLib
         return strRetVal;
     }
 
+        // The current time as the parser and "Today" see it: local time in the
+        // system's zone, unless dates without a zone are being treated as UTC.
+    static CDate localNow( void )
+    {
+        CDate dttNow;
+        return bUnknownZoneIsLocal ? dttNow.ToLocalTime() : dttNow;
+    }
+
     /***********************************************************************************
     **  GetSafeDate
     **
@@ -1305,15 +1313,15 @@ namespace IASLib
     /***********************************************************************************
     **  GetTodayDate
     **
-    **      Part of the GetAlphaDate hierarchy, this function returns the current date
-    ** at midnight and allows offsets in days either forward (+) or backward (-) from
-    ** today's date.
+    **      Part of the GetAlphaDate hierarchy, this function returns the current local
+    ** date at midnight and allows offsets in days either forward (+) or backward (-)
+    ** from today's date.
     **
     ***********************************************************************************/
     CDate CDate::GetTodayDate( const char *strValue )
     {
-            // Get Today's Date
-        CDate dttNow;
+            // Today's date in the system's zone (or UTC; see localNow).
+        CDate dttNow = localNow();
 
             // Cut off the "Today" at the start of the value.
         CString strWork = strValue;
@@ -1347,7 +1355,13 @@ namespace IASLib
                 dttNow.m_lEpochDay -= nOffset;
         }
 
-            // Move it to midnight
+            // Midnight. A local date keeps no stored zone, so midnight gets the
+            // offset in force then (which can differ from now's on the day the
+            // clocks change).
+        if ( bUnknownZoneIsLocal )
+        {
+            return CDate( dttNow.m_lEpochDay, 0L );
+        }
         dttNow.m_lMilliseconds = 0;
         return dttNow;
     }
@@ -1358,7 +1372,7 @@ namespace IASLib
     {
         nYear = nYear % 100;
 
-        CDate dttNow;
+        CDate dttNow = localNow();
         int nNowYear = dttNow.GetFullYear() % 100;
         int nCentury = ( dttNow.GetFullYear() / 100 ) * 100;
         int nLess = 0;
@@ -2302,7 +2316,8 @@ namespace IASLib
         CDateParseContext &ctx = g_parseContext;
         std::string strNormal = normalizeDateText( strRawDate, ctx );
         const char *strDate = strNormal.c_str();
-        CDate       dttNow;
+            // Missing date parts default to the local date (see localNow).
+        CDate       dttNow = localNow();
         char        str_mon[500] = "", str_wday[500] = "", str_gmtoff[500] = "", str_ampm[500] = "", str_trash[500] = "";
         int         tm_sec = 0, tm_min = 0, tm_hour = 0, tm_mday = 0, tm_year = 0;
         long        tm_mon = 0, tm_wday = 0, ampm, gmtoff = 0;

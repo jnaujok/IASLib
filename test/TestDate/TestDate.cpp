@@ -802,6 +802,42 @@ static void testUnknownZoneDefault( void )
         // With the system zone set to UTC the default changes nothing.
     setZone( "UTC" );
     CHECK( noon.GetUTCOffset() == 0 && near( noon.GetJulianDate(), 2451545.0, ms ) );
+    printf( "\"Today\" and missing date parts use the local date\n" );
+    bool bDiffersFromUtc = false;
+    const char *zones[] = { "Etc/GMT-14", "Etc/GMT+12", "America/Denver", "Asia/Tokyo" };   // UTC+14, UTC-12, ...
+    for ( size_t z = 0; z < sizeof( zones ) / sizeof( zones[0] ); z++ )
+    {
+        setZone( zones[ z ] );
+        time_t t = time( NULL );
+        struct tm local, utc;
+        localtime_r( &t, &local );
+        gmtime_r( &t, &utc );
+        CDate localDate( local.tm_mday, local.tm_mon, local.tm_year + 1900 );
+        CDate utcDate( utc.tm_mday, utc.tm_mon, utc.tm_year + 1900 );
+        if ( localDate.GetEpochDay() != utcDate.GetEpochDay() )
+            bDiffersFromUtc = true;
+
+        CDate today = CDate::Parse( "Today" );
+        CHECK_EQ_STR( zones[ z ], hist( today ), hist( localDate ) );
+        CHECK( ! today.HasTimeZone() && today.GetSOD() == 0 );
+        CHECK( CDate::Parse( "Start of day" ) == today );
+        CHECK( CDate::Parse( "Today + 1" ).GetEpochDay() == today.GetEpochDay() + 1 );
+        long long sinceMidnight = CDate().Elapsed( today );
+        CHECK( sinceMidnight >= 0 && sinceMidnight < 25LL * 3600000LL );
+        CDate timeOnly = CDate::Parse( "10:05" );
+        CHECK( timeOnly.GetEpochDay() == localDate.GetEpochDay() && timeOnly.GetHour() == 10 );
+        CHECK( CDate::Parse( "1-17" ).GetYear() == local.tm_year + 1900 );
+
+        CDate::SetUnknownTimeZoneLocal( false );
+        CDate utcToday = CDate::Parse( "Today" );
+        CHECK_EQ_STR( zones[ z ], hist( utcToday ), hist( utcDate ) );
+        CHECK( utcToday.IsGMT() );
+        CDate::SetUnknownTimeZoneLocal( true );
+    }
+        // At any moment UTC+14 or UTC-12 is on a different date from UTC, so
+        // the checks above really did tell the local date from the UTC one.
+    CHECK( bDiffersFromUtc );
+    setZone( "UTC" );
 }
 
 int main( int argc, char *argv[] )
