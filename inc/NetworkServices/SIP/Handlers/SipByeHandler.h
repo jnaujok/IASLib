@@ -1,7 +1,9 @@
 /**
  * SIP Bye Handler class
  *
- * This class handles Ack requests for the SIP server.
+ * This server keeps no dialogs, so a BYE cannot match one and is
+ * answered with 481 Call/Transaction Does Not Exist (RFC 3261 15.1.2).
+ * Applications that accept calls replace this handler.
  *
  * Author: Jeffrey R. Naujok
  * Created: September 16, 2019
@@ -31,5 +33,5 @@ namespace IASLib
 } // namespace IASLib
 
 #endif // IASLIB_SIPBYEHANDLER_H__
-#endif // IASLIB_NETWORKING__
 
+#endif // IASLIB_NETWORKING__

@@ -1,7 +1,10 @@
 /**
  * SIP Options Handler class
  *
- * This class handles Options requests for the SIP server.
+ * Answers OPTIONS (RFC 3261 section 11) with 200 OK and this server's
+ * capabilities: Allow (the methods of all of the server's handlers),
+ * Accept, Accept-Encoding, Accept-Language and, if the server supports any
+ * extensions, Supported. No session description is included.
  *
  * Author: Jeffrey R. Naujok
  * Created: September 13, 2019

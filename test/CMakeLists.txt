@@ -10,3 +10,7 @@ add_executable(TestXMLDocument TestXMLDocument/TestXMLDocument.cpp)
 add_test(test_xml TestXMLDocument)
 
 target_link_libraries(TestXMLDocument IASLib)
+
+add_executable(TestSip TestSip/TestSip.cpp)
+target_link_libraries(TestSip IASLib)
+add_test(test_sip TestSip)

@@ -1,13 +1,15 @@
 /**
  * SIP Response class
  *
- * This class encapsulates a SIP based response.
+ * This class encapsulates a SIP based response. Content-Length is always
+ * written, as RFC 3261 requires for stream transports.
  *
  * Author: Jeffrey R. Naujok
- * Created: May 20, 2019
+ * Created: July 21, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
+
 #ifndef IASLIB_SIPRESPONSE_H__
 #define IASLIB_SIPRESPONSE_H__
 
@@ -22,12 +24,16 @@ namespace IASLib
         public:
             DEFINE_OBJECT( CSipResponse );
 
+            CSipResponse( void );
             CSipResponse( CStream &responseStream );
 
             virtual ~CSipResponse( void );
 
-            virtual void toStream( CStream *pStream );
+                // Sets the status code with its standard reason phrase.
+            virtual void setStatus( int nCode );
+            virtual void setStatus( int nCode, const char *desc ) { CGenericResponse::setStatus( nCode, desc ); }
 
+            virtual void toStream( CStream *pStream );
             virtual CString toString( void );
     };
 } // namespace IASLib

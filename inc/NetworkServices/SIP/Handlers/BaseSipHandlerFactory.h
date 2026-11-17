@@ -1,16 +1,14 @@
 /**
- * SIP Base Handler Factory class
+ * Base SIP Handler Factory class
  *
- * This class provides a default SIP Handler Factory that is normally
- * the baseline handler for an SIP Server. 
- * 
- * Typically this class is added to the CSipServer by the constructor
- * and is the baseline for an SIP Server. By default, all the basic 
- * handlers simply return error codes in proper formats.
- * 
+ * The default handlers: INVITE, ACK, BYE, CANCEL, OPTIONS and REGISTER.
+ * They describe a user agent that exists but has no users and no calls;
+ * see each handler for its response. Applications replace these by adding
+ * their own factory in front of this one, or by registering their own
+ * handler for the same method here.
  *
  * Author: Jeffrey R. Naujok
- * Created: December 29, 2019
+ * Created: December 22, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
@@ -26,11 +24,12 @@ namespace IASLib
     {
         public:
             CBaseSipHandlerFactory( void );
+            virtual ~CBaseSipHandlerFactory( void );
 
-            DECLARE_OBJECT( CBaseSipHandlerFactory, CSipHandlerFactory );
+            DEFINE_OBJECT( CBaseSipHandlerFactory );
     };
-
 } // namespace IASLib
 
 #endif // IASLIB_BASESIPHANDLERFACTORY_H__
+
 #endif // IASLIB_NETWORKING__

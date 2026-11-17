@@ -1,8 +1,10 @@
 /**
  * SIP Listener class
  *
- * This class handles incoming SIP calls into the server, based
- * on a threaded task model.
+ * A thread task that hands one received SIP message to a server. A server
+ * creates one per received datagram (or framed stream message) and runs it
+ * on a worker thread, so that slow handlers do not hold up the receiving
+ * thread.
  *
  * Author: Jeffrey R. Naujok
  * Created: May 13, 2019
@@ -13,29 +15,32 @@
 #ifndef SIPLISTENER_H__
 #define SIPLISTENER_H__
 
-#include "NetworkServices/GenericListener.h"
+#include "Threading/ThreadTask.h"
+#include "Sockets/InternetAddress.h"
+#include "NetworkServices/SIP/SipTransport.h"
 
 namespace IASLib
 {
-    // Forward definition for wiring parent server
     class CSipServer;
 
-    class CSipListener : public CGenericListener
+    class CSipListener : public CThreadTask
     {
         protected:
-            CSipServer *m_pParentServer; 
+            CSipServer         *m_pParentServer;
+            CSipTransport      *m_pTransport;
+            CInternetAddress    m_internetAddress;
+            CString             m_strMessage;
+
         public:
             DEFINE_OBJECT( CSipListener );
 
-            CSipListener( CSipServer *server, CClientSocket *pSocket );
-            CSipListener( CSipServer *server, CUDPSocket *pUdpSocket, CInternetAddress &internetAddress, CString incomingData );
+                // The transport must outlive the task.
+            CSipListener( CSipServer *server, CSipTransport *pTransport, const CInternetAddress &source, const CString &message );
 
             virtual ~CSipListener( void );
 
+                // Passes the message to the server. Returns NULL.
             virtual CObject *Run( void );
-
-            // Override of pure virtual
-            virtual void addResponseHeaders( CGenericResponse *response );
     };
 } // namespace IASLib
 

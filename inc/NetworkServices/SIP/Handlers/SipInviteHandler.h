@@ -1,7 +1,8 @@
 /**
  * SIP Invite Handler class
  *
- * This class handles Invite requests for the SIP server.
+ * The default answer to an INVITE is 404 Not Found: this user agent has
+ * no users. Applications replace this handler to accept or reject calls.
  *
  * Author: Jeffrey R. Naujok
  * Created: May 23, 2019
@@ -13,7 +14,6 @@
 #define IASLIB_SIPINVITEHANDLER_H__
 
 #include "NetworkServices/SIP/Handlers/SipHandler.h"
-#include "BaseTypes/String_.h"
 
 namespace IASLib
 {
@@ -28,12 +28,9 @@ namespace IASLib
             virtual ~CSipInviteHandler( void );
 
             virtual bool process( CSipRequest *request, CSipResponse *response );
-        private:
-            CString extractPhoneNumber( const char *uriString );
     };
 } // namespace IASLib
 
 #endif // IASLIB_SIPINVITEHANDLER_H__
 
 #endif // IASLIB_NETWORKING__
-

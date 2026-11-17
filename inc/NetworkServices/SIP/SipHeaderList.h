@@ -28,8 +28,15 @@ namespace IASLib
 
                                 DEFINE_OBJECT( CSipHeaderList );
 
-            virtual CIterator  *Enumerate( void );
+                // Expands compact header forms (RFC 3261 section 7.3.3 and the
+                // IANA registry), so that "v:" is stored and found as "Via".
+            virtual CString     canonicalName( const CString &name );
 
+                // Expands a compact form on its own; returns the name unchanged
+                // if it is not a compact form.
+            static CString      expandCompactForm( const CString &name );
+
+        protected:
             virtual CHeader    *newHeader( const CString &name );
     }; // Class CSipHeaderList
 }  // Namespace IASLib

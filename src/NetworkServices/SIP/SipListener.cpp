@@ -1,8 +1,7 @@
 /**
  * SIP Listener class
  *
- * This class handles incoming SIP calls into the server, based
- * on a threaded task model.
+ * A thread task that hands one received SIP message to a server.
  *
  * Author: Jeffrey R. Naujok
  * Created: May 13, 2019
@@ -11,25 +10,17 @@
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/SIP/SipListener.h"
-#include "Logging/LogSink.h"
-#include "BaseTypes/Uuid.h"
-
 #include "NetworkServices/SIP/SipServer.h"
-#include "NetworkServices/SIP/SipRequest.h"
-#include "NetworkServices/SIP/SipResponse.h"
 
 namespace IASLib
 {
-    IMPLEMENT_OBJECT( CSipListener, CGenericListener );
+    IMPLEMENT_OBJECT( CSipListener, CThreadTask );
 
-    CSipListener::CSipListener( CSipServer *server, CClientSocket *pSocket ) : CGenericListener( "SipListener", pSocket )
+    CSipListener::CSipListener( CSipServer *server, CSipTransport *pTransport, const CInternetAddress &source, const CString &message ) :
+        CThreadTask( "SipListener" ), m_internetAddress( source ), m_strMessage( message )
     {
         m_pParentServer = server;
-    }
-
-    CSipListener::CSipListener( CSipServer *server, CUDPSocket *pSocket, CInternetAddress &internetAddress, CString incomingData ) : CGenericListener( "SipUDPListener", pSocket, internetAddress, incomingData )
-    {
-        m_pParentServer = server;
+        m_pTransport = pTransport;
     }
 
     CSipListener::~CSipListener( void )
@@ -38,49 +29,12 @@ namespace IASLib
 
     IASLib::CObject *CSipListener::Run( void )
     {
-        CUUID erid;
-        CSipRequest *sipRequest = new CSipRequest( m_internetAddress );
-        sipRequest->parse( *m_pInStream );
-        CSipResponse *sipResponse = new CSipResponse( *m_pOutStream );
-
-        addResponseHeaders( sipResponse );
-
-        CSipHandler *sipHandler = m_pParentServer->GetHandler( sipRequest, erid );
-        if ( sipHandler )
+        if ( m_pParentServer && m_pTransport )
         {
-            CDate start;
-            sipHandler->process( sipRequest, sipResponse  );
-            CDate end;
-            int elapsed = end.Elapsed( start );
-            INFO_LOG( "f=%s cip=%s erid=%s uri=%s from=\"%s\" to=\"%s\" rtt=%d sc=%d", 
-                (const char *)sipHandler->getMethod(), 
-                (const char *)sipRequest->getInternetAddress().toStringWithPort(), 
-                (const char *)(erid.toString() ), 
-                (const char *)sipRequest->getUri(), 
-                (const char *)sipRequest->getHeaderValue("From"), 
-                (const char *)sipRequest->getHeaderValue( "To" ), 
-                elapsed,
-                sipResponse->getStatusCode() );
+            m_pParentServer->handleMessage( m_strMessage, m_pTransport, m_internetAddress );
         }
-        else
-        {
-            sipResponse->setStatus( 400, "Bad Request" );
-        }
-        
-        sipResponse->toStream( m_pOutStream );
-
-        delete sipRequest;
-        delete sipHandler;
-
-        return sipResponse;
+        return NULL;
     }
-
-    void CSipListener::addResponseHeaders( CGenericResponse *response )
-    {
-        response->addHeader( "x-powered-by", "IASLib Core SIP Library 1.0" );
-    }
-
-
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__

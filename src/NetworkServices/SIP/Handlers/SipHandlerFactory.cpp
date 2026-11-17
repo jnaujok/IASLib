@@ -1,68 +1,105 @@
 /**
  * SIP Handler Factory class
  *
- * This class provides a factory for generating SIP Handlers. 
- * 
- * Factories have handlers registered to them, and then they are added
- * to the SIP Server. Once added to the server, they override any
- * factories previously added, allowing a chain of handlers to deal 
- * with any particular request.
- *
  * Author: Jeffrey R. Naujok
- * Created: December 29, 2019
+ * Created: December 22, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/SIP/Handlers/SipHandlerFactory.h"
-#include "Logging/LogSink.h"
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CSipHandlerFactory, CObject );
 
-    CSipHandlerFactory::CSipHandlerFactory( ) : m_handlerMap( CHash::SMALL )
+    CSipHandlerFactory::CSipHandlerFactory( ) : m_aHandlers()
     {
-
     }
 
     CSipHandlerFactory::~CSipHandlerFactory( void )
     {
-        m_handlerMap.DeleteAll();
+        m_aHandlers.DeleteAll();
     }
 
     CSipHandler *CSipHandlerFactory::getHandler( CSipRequest *request, CUUID erid )
     {
-        CSipHandler *pRetVal = NULL;
+        CString method = request->getRequestType();
 
-        DEBUG_LOG( "Getting Handler request=[%s] URL=[%s] ip=[%s] erid=[%s]", 
-                (const char *)request->getRequestType(), 
-                (const char *)request->getUri(), 
-                (const char *)request->getInternetAddress().toStringWithPort(),
-                (const char *)erid.toString() );
-
-        if ( m_handlerMap.HasKey( request->getRequestType() ) )
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
         {
-            CSipHandler *temp = (CSipHandler *)m_handlerMap.Get( request->getRequestType() );
-            pRetVal = temp->generateHandler( request->getUri(), request->getVersion() );
+            CSipHandler *prototype = (CSipHandler *)m_aHandlers.Get( nX );
+            if ( prototype->getMethod() == method )
+            {
+                CSipHandler *pRetVal = prototype->generateHandler( request->getUri(), request->getVersion() );
+                if ( pRetVal )
+                {
+                    pRetVal->setErid( erid );
+                }
+                return pRetVal;
+            }
         }
-
-        return pRetVal;
+        return NULL;
     }
 
-    void CSipHandlerFactory::registerHandler( CSipHandler *handlerFactory )
+    void CSipHandlerFactory::registerHandler( CSipHandler *handlerPrototype )
     {
-        m_handlerMap.Push( handlerFactory->getMethod(), handlerFactory );
+        if ( handlerPrototype == NULL )
+        {
+            return;
+        }
+
+        CString method = handlerPrototype->getMethod();
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
+        {
+            CSipHandler *existing = (CSipHandler *)m_aHandlers.Get( nX );
+            if ( existing->getMethod() == method )
+            {
+                m_aHandlers.Set( nX, handlerPrototype );
+                delete existing;
+                return;
+            }
+        }
+        m_aHandlers.Append( handlerPrototype );
     }
 
     bool CSipHandlerFactory::isValidHandler( const char *method )
     {
-        CString strMethod(method);
-        strMethod.ToUpperCase();
-        return m_handlerMap.HasKey( strMethod );
+        CString strMethod( method );
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
+        {
+            if ( ((CSipHandler *)m_aHandlers.Get( nX ))->getMethod() == strMethod )
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
+    CStringArray CSipHandlerFactory::getMethods( void )
+    {
+        CStringArray retVal;
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
+        {
+            retVal.Append( ((CSipHandler *)m_aHandlers.Get( nX ))->getMethod() );
+        }
+        return retVal;
+    }
+
+    CString CSipHandlerFactory::getAllowedList( void )
+    {
+        CStringArray methods = getMethods();
+        CString retVal;
+        for ( size_t nX = 0; nX < methods.Count(); nX++ )
+        {
+            if ( nX > 0 )
+            {
+                retVal += ", ";
+            }
+            retVal += methods[ nX ];
+        }
+        return retVal;
+    }
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__
-
