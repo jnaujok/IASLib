@@ -840,6 +840,69 @@ static void testUnknownZoneDefault( void )
     setZone( "UTC" );
 }
 
+static void testDefaultTimezone( void )
+{
+    printf( "SetDefaultTimezone\n" );
+    const double ms = 1.0 / 86400000.0;
+    setZone( "America/Denver" );
+    CHECK( CDate::IsDefaultTimezoneSystem() && CDate::GetDefaultTimezoneOffset() == 0 );
+
+        // A fixed offset applies to dates without a zone.
+    CHECK( CDate::SetDefaultTimezone( 19800 ) );                       // UTC+5:30
+    CHECK( ! CDate::IsDefaultTimezoneSystem() && CDate::GetDefaultTimezoneOffset() == 19800 );
+    CDate india( 1, 0, 2000, 17, 30, 0 );
+    CHECK( ! india.HasTimeZone() && india.GetUTCOffset() == 19800 );
+    CHECK( near( india.GetJulianDate(), 2451545.0, ms ) );
+    CHECK_EQ_STR( "india utc", iso( india.ToUTC(), false ), "2000-01-01T12:00:00Z" );
+    CHECK( india == CDate::Parse( "2000-01-01T12:00:00Z" ) );
+        // Stored zones are not affected.
+    CHECK( CDate::Parse( "2000-01-01T12:00:00-05:00" ).GetUTCOffset() == -18000 );
+
+        // "Today" and parser defaults follow the default zone.
+    CDate expected = CDate().ToTimeZone( 19800 );
+    CDate today = CDate::Parse( "Today" );
+    CHECK( today.GetEpochDay() == expected.GetEpochDay() && today.GetSOD() == 0 && today.GetUTCOffset() == 19800 );
+    CHECK( CDate::Parse( "10:05" ).GetEpochDay() == expected.GetEpochDay() );
+
+        // Negative and half-hour offsets.
+    CHECK( CDate::SetDefaultTimezone( -12600 ) );                      // Newfoundland standard time
+    CHECK( CDate( 1, 0, 2000, 8, 30, 0 ).ToUTC().GetHour() == 12 );
+
+        // Zone text.
+    struct { const char *text; int offset; } texts[] = {
+        { "UTC", 0 }, { "Z", 0 }, { "GMT", 0 }, { "+05:30", 19800 }, { "-07:00", -25200 }, { "+0100", 3600 },
+        { "-0330", -12600 }, { "EST", -18000 }, { "pdt", -25200 }, { "CEST", 7200 }, { "GMT-1", -3600 }, { "UTC+9", 32400 },
+    };
+    for ( size_t n = 0; n < sizeof( texts ) / sizeof( texts[0] ); n++ )
+    {
+        bool bSet = CDate::SetDefaultTimezone( texts[ n ].text );
+        CHECK_EQ_STR( texts[ n ].text, ( bSet && ! CDate::IsDefaultTimezoneSystem() ) ? std::to_string( CDate::GetDefaultTimezoneOffset() ) : "not set",
+                      std::to_string( texts[ n ].offset ) );
+    }
+
+        // Bad input leaves the default as it was.
+    CHECK( CDate::SetDefaultTimezone( "+02:00" ) );
+    const char *bad[] = { "", "Mars/Olympus_Mons", "+25:00", "12:00", "am" };
+    for ( size_t n = 0; n < sizeof( bad ) / sizeof( bad[0] ); n++ )
+    {
+        CHECK_EQ_STR( bad[ n ], CDate::SetDefaultTimezone( bad[ n ] ) ? "accepted" : "rejected", "rejected" );
+    }
+    CHECK( ! CDate::SetDefaultTimezone( 86400 ) && ! CDate::SetDefaultTimezone( -90000 ) );
+    CHECK( CDate::GetDefaultTimezoneOffset() == 7200 );
+
+        // Back to the system zone (America/Denver here), in each way.
+    CHECK( CDate::SetDefaultTimezone( "system" ) && CDate::IsDefaultTimezoneSystem() );
+    CHECK( CDate( 2, 5, 2001, 12, 0, 0 ).GetUTCOffset() == -21600 );
+    CHECK( CDate::SetDefaultTimezone( "UTC" ) && CDate( 2, 5, 2001, 12, 0, 0 ).GetUTCOffset() == 0 );
+    CHECK( CDate::SetDefaultTimezone( "local" ) && CDate::IsDefaultTimezoneSystem() );
+    CDate::SetUnknownTimeZoneLocal( false );
+    CHECK( ! CDate::IsDefaultTimezoneSystem() && CDate::GetDefaultTimezoneOffset() == 0 );
+    CDate::SetDefaultTimezoneToSystem();
+    CHECK( CDate::IsDefaultTimezoneSystem() && CDate::GetUnknownTimeZoneLocal() );
+
+    setZone( "UTC" );
+}
+
 int main( int argc, char *argv[] )
 {
         // Dates without a zone take the system zone, so run in UTC unless a
@@ -864,6 +927,7 @@ int main( int argc, char *argv[] )
     testJulianDay();
     testTimeZones();
     testUnknownZoneDefault();
+    testDefaultTimezone();
 
     setZone( savedTestZone.empty() ? NULL : savedTestZone.c_str() );
 

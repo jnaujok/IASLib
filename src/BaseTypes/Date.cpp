@@ -26,6 +26,7 @@
 #include "Date.h"
 #include "StringTokenizer.h"
 #include <cctype>
+#include <atomic>
 #include <cmath>
 #include <ctime>
 #include <cstdlib>
@@ -57,9 +58,11 @@ namespace IASLib
     static bool bHerschelCorrection = false;
 #endif
 
-        // Whether a date with no time zone is taken to be in the system's local
-        // time zone (true) or in UTC (false) when an instant is needed.
-    static bool bUnknownZoneIsLocal = true;
+        // The zone assumed for dates with no time zone: the system's local time
+        // zone (the default), or a fixed offset in seconds east of UTC. Set by
+        // SetDefaultTimezone(); read from any thread.
+    static std::atomic<bool> bDefaultIsSystem( true );
+    static std::atomic<int> nDefaultOffset( 0 );
 
         // Plain arrays rather than CString globals, which would be constructed
         // before the CObject statics they depend on (initialisation order).
@@ -1041,11 +1044,11 @@ namespace IASLib
     }
 
         // The current time as the parser and "Today" see it: local time in the
-        // system's zone, unless dates without a zone are being treated as UTC.
+        // default zone (see SetDefaultTimezone).
     static CDate localNow( void )
     {
         CDate dttNow;
-        return bUnknownZoneIsLocal ? dttNow.ToLocalTime() : dttNow;
+        return bDefaultIsSystem ? dttNow.ToLocalTime() : dttNow.ToTimeZone( nDefaultOffset );
     }
 
     /***********************************************************************************
@@ -1320,7 +1323,7 @@ namespace IASLib
     ***********************************************************************************/
     CDate CDate::GetTodayDate( const char *strValue )
     {
-            // Today's date in the system's zone (or UTC; see localNow).
+            // Today's date in the default zone (see localNow).
         CDate dttNow = localNow();
 
             // Cut off the "Today" at the start of the value.
@@ -1355,10 +1358,10 @@ namespace IASLib
                 dttNow.m_lEpochDay -= nOffset;
         }
 
-            // Midnight. A local date keeps no stored zone, so midnight gets the
-            // offset in force then (which can differ from now's on the day the
-            // clocks change).
-        if ( bUnknownZoneIsLocal )
+            // Midnight. In the system zone the date keeps no stored zone, so
+            // midnight gets the offset in force then (which can differ from now's
+            // on the day the clocks change); a fixed default zone is stored.
+        if ( bDefaultIsSystem )
         {
             return CDate( dttNow.m_lEpochDay, 0L );
         }
@@ -1873,24 +1876,79 @@ namespace IASLib
     static bool systemOffsetAt( long long llUtcSeconds, int &nOffset );
     static bool systemOffsetForLocal( long long llLocalMs, int &nOffset, bool &bGap );
 
+    bool CDate::SetDefaultTimezone( int nOffsetSeconds )
+    {
+        if ( nOffsetSeconds <= -86400 || nOffsetSeconds >= 86400 )
+            return false;
+        nDefaultOffset = nOffsetSeconds;
+        bDefaultIsSystem = false;
+        return true;
+    }
+
+    bool CDate::SetDefaultTimezone( const char *pszZone )
+    {
+        CString strZone( pszZone ? pszZone : "" );
+        strZone.Trim();
+        strZone.ToLowerCase();
+
+        if ( strZone == "system" || strZone == "local" )
+        {
+            SetDefaultTimezoneToSystem();
+            return true;
+        }
+        if ( strZone == "z" )
+        {
+            return SetDefaultTimezone( 0 );
+        }
+
+            // The same zones the parser reads ("utc", "est", "+0530", "gmt+5:40",
+            // "+05:30"); ScanGMTOffset expects minus signs as slashes.
+        strZone.Replace( '-', '/' );
+        long lOffset = 0;
+        if ( strZone.GetLength() == 0 || ! ScanGMTOffset( strZone, lOffset ) )
+            return false;
+        return SetDefaultTimezone( (int)lOffset );
+    }
+
+    void CDate::SetDefaultTimezoneToSystem( void )
+    {
+        bDefaultIsSystem = true;
+        nDefaultOffset = 0;
+    }
+
+    bool CDate::IsDefaultTimezoneSystem( void )
+    {
+        return bDefaultIsSystem;
+    }
+
+    int CDate::GetDefaultTimezoneOffset( void )
+    {
+        return bDefaultIsSystem ? 0 : (int)nDefaultOffset;
+    }
+
     void CDate::SetUnknownTimeZoneLocal( bool bLocal )
     {
-        bUnknownZoneIsLocal = bLocal;
+        if ( bLocal )
+            SetDefaultTimezoneToSystem();
+        else
+            SetDefaultTimezone( 0 );
     }
 
     bool CDate::GetUnknownTimeZoneLocal( void )
     {
-        return bUnknownZoneIsLocal;
+        return bDefaultIsSystem;
     }
 
         // The offset used to find the instant: the date's own, or for a date with
-        // no zone the system's offset at that local time (UTC if the system has
-        // none, or if SetUnknownTimeZoneLocal( false ) was called).
+        // no zone the default zone's offset at that local time (UTC if the system
+        // zone has no offset for it).
     int CDate::GetUTCOffset( void ) const
     {
         if ( m_bHasZone )
             return m_nUTCOffset;
-        if ( ! bUnknownZoneIsLocal || ! IsValid() )
+        if ( ! bDefaultIsSystem )
+            return nDefaultOffset;
+        if ( ! IsValid() )
             return 0;
         int nOffset = 0;
         bool bGap = false;

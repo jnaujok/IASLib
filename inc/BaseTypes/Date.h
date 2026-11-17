@@ -190,10 +190,10 @@ namespace IASLib
                 // offset automatically: comparisons, Elapsed(), ToUTC(), the Julian
                 // Day methods and the formats that say "GMT". A date without a
                 // zone (from numbers, or text without a zone) is taken to be in
-                // the system's local time zone for those, using the offset in
+                // the default time zone for those: the system's local time zone
+                // unless SetDefaultTimezone() chose another, using the offset in
                 // force at that local time (UTC if the system has none). Use
-                // SetTimeZone() when it is in some other zone, or
-                // SetUnknownTimeZoneLocal( false ) to treat such dates as UTC.
+                // SetTimeZone() for a date in some other zone.
                 //
                 // The current time, Unix times and Julian Days are UTC. Parsed text
                 // keeps its zone ("12:14 EST" is 12:14 at -05:00).
@@ -201,8 +201,22 @@ namespace IASLib
                 // The offset in seconds east of UTC used for conversions: the
                 // date's own, or for a date without a zone the default above.
             int                 GetUTCOffset( void ) const;
-                // Whether dates without a zone are taken as system local time (the
-                // default) or as UTC. Applies to every date; set it at startup.
+                // The default time zone: the zone assumed for dates without one,
+                // and the zone of "Today" and of dates the parser fills in. It is
+                // the system's local time zone (with its daylight saving rules)
+                // unless set to a fixed offset, in seconds east of UTC, or to zone
+                // text the parser reads: "UTC", "Z", "+05:30", "-0700", "EST",
+                // "GMT-1". "system" or "local" goes back to the system zone. Returns
+                // false, leaving the default unchanged, for text it cannot read or
+                // an offset of a day or more. It applies to every date (including
+                // existing ones without a zone), so set it at startup.
+            static bool         SetDefaultTimezone( int nOffsetSeconds );
+            static bool         SetDefaultTimezone( const char *pszZone );
+            static void         SetDefaultTimezoneToSystem( void );
+            static bool         IsDefaultTimezoneSystem( void );
+                // The fixed default offset (0 when the default is the system zone).
+            static int          GetDefaultTimezoneOffset( void );
+                // Shorthand: true for the system zone, false for UTC.
             static void         SetUnknownTimeZoneLocal( bool bLocal );
             static bool         GetUnknownTimeZoneLocal( void );
                 // True if the date is known to be UTC.
@@ -266,7 +280,7 @@ namespace IASLib
                 // is .5); GetJulianDayNumber() is the whole number for the day,
                 // the JD at noon, of the UT date. A date with a time zone is
                 // converted to UT first; one without uses the default zone (see
-                // SetUnknownTimeZoneLocal). A double gives about a
+                // SetDefaultTimezone). A double gives about a
                 // microsecond of resolution for current dates.
             double              GetJulianDate( void ) const;
             long                GetJulianDayNumber( void ) const;
