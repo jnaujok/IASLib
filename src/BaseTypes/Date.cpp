@@ -25,6 +25,7 @@
 
 #include "Date.h"
 #include "StringTokenizer.h"
+#include "TimeZone.h"
 #include <cctype>
 #include <atomic>
 #include <cmath>
@@ -32,6 +33,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 #ifndef IASLIB_WIN32__
@@ -59,10 +62,46 @@ namespace IASLib
 #endif
 
         // The zone assumed for dates with no time zone: the system's local time
-        // zone (the default), or a fixed offset in seconds east of UTC. Set by
-        // SetDefaultTimezone(); read from any thread.
-    static std::atomic<bool> bDefaultIsSystem( true );
-    static std::atomic<int> nDefaultOffset( 0 );
+        // zone (the default), a fixed offset in seconds east of UTC, or a named
+        // zone. Set by SetDefaultTimezone(); read from any thread.
+    namespace
+    {
+        enum ZoneKind { ZONE_SYSTEM, ZONE_FIXED, ZONE_NAMED };
+
+        struct ZoneSpec
+        {
+            ZoneKind                            kind;
+            int                                 offset;     // ZONE_FIXED
+            std::shared_ptr<const CTimeZone>    zone;       // ZONE_NAMED
+
+            ZoneSpec( void ) : kind( ZONE_SYSTEM ), offset( 0 ) {}
+        };
+
+            // Function statics, so they exist before any static date uses them.
+        std::mutex &defaultZoneMutex( void )
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        ZoneSpec &defaultZoneStore( void )
+        {
+            static ZoneSpec spec;
+            return spec;
+        }
+
+        ZoneSpec defaultZone( void )
+        {
+            std::lock_guard<std::mutex> lock( defaultZoneMutex() );
+            return defaultZoneStore();
+        }
+
+        void setDefaultZone( const ZoneSpec &spec )
+        {
+            std::lock_guard<std::mutex> lock( defaultZoneMutex() );
+            defaultZoneStore() = spec;
+        }
+    }
 
         // Plain arrays rather than CString globals, which would be constructed
         // before the CObject statics they depend on (initialisation order).
@@ -1048,7 +1087,16 @@ namespace IASLib
     static CDate localNow( void )
     {
         CDate dttNow;
-        return bDefaultIsSystem ? dttNow.ToLocalTime() : dttNow.ToTimeZone( nDefaultOffset );
+        ZoneSpec spec = defaultZone();
+        switch ( spec.kind )
+        {
+            case ZONE_FIXED:
+                return dttNow.ToTimeZone( spec.offset );
+            case ZONE_NAMED:
+                return dttNow.ToTimeZone( spec.zone->GetName().c_str() );
+            default:
+                return dttNow.ToLocalTime();
+        }
     }
 
     /***********************************************************************************
@@ -1358,10 +1406,11 @@ namespace IASLib
                 dttNow.m_lEpochDay -= nOffset;
         }
 
-            // Midnight. In the system zone the date keeps no stored zone, so
-            // midnight gets the offset in force then (which can differ from now's
-            // on the day the clocks change); a fixed default zone is stored.
-        if ( bDefaultIsSystem )
+            // Midnight. In the system or a named zone the date keeps no stored
+            // zone, so midnight gets the offset in force then (which can differ
+            // from now's on the day the clocks change); a fixed default zone is
+            // stored.
+        if ( defaultZone().kind != ZONE_FIXED )
         {
             return CDate( dttNow.m_lEpochDay, 0L );
         }
@@ -1874,56 +1923,126 @@ namespace IASLib
     ***********************************************************************************/
 
     static bool systemOffsetAt( long long llUtcSeconds, int &nOffset );
-    static bool systemOffsetForLocal( long long llLocalMs, int &nOffset, bool &bGap );
+
+        // Milliseconds on the CDate day numbering to Unix seconds (rounded down).
+    static long long toUnixSeconds( long long llMs )
+    {
+        long long llSeconds = llMs / 1000;
+        if ( llMs % 1000 < 0 )
+            llSeconds--;
+        return llSeconds - (long long)UNIX_EPOCH_DAY * 86400LL;
+    }
+
+        // The offset (seconds east) at an instant in Unix seconds, from a named
+        // zone or, for NULL, the system's zone. False if there is none.
+    static bool zoneOffsetAt( const CTimeZone *pZone, long long llUtcSeconds, int &nOffset )
+    {
+        if ( pZone != NULL )
+        {
+            nOffset = pZone->OffsetAt( llUtcSeconds );
+            return true;
+        }
+        return systemOffsetAt( llUtcSeconds, nOffset );
+    }
+
+        // The offset in force at a local time (milliseconds on the CDate day
+        // numbering) in a named zone or, for NULL, the system's zone. See
+        // CTimeZone::ResolveLocal for repeated and skipped times.
+    static bool zoneOffsetForLocal( const CTimeZone *pZone, long long llLocalMs, int &nOffset, bool &bGap )
+    {
+        return CTimeZone::ResolveLocal( toUnixSeconds( llLocalMs ),
+                                        [pZone]( long long llUtc, int &nOff ) { return zoneOffsetAt( pZone, llUtc, nOff ); },
+                                        nOffset, bGap );
+    }
+
+        // Reads zone text: "system" or "local", the zones the parser reads ("UTC",
+        // "Z", "EST", "+05:30", "GMT-1"), or an IANA zone name
+        // ("America/New_York"). Abbreviations and offsets are tried first, so
+        // "EST" and "CET" keep their fixed meaning; names are case-sensitive.
+    bool CDate::ReadZone( const char *pszZone, int &nKind, int &nOffset, std::shared_ptr<const CTimeZone> &pZone )
+    {
+        CString strZone( pszZone ? pszZone : "" );
+        strZone.Trim();
+        std::string strName( (const char *)strZone );
+        strZone.ToLowerCase();
+
+        nKind = ZONE_SYSTEM;
+        nOffset = 0;
+        pZone.reset();
+        if ( strZone.GetLength() == 0 )
+            return false;
+        if ( strZone == "system" || strZone == "local" )
+            return true;
+
+        long lOffset = 0;
+        bool bOffset = ( strZone == "z" );
+        if ( ! bOffset )
+        {
+                // ScanGMTOffset expects minus signs as slashes.
+            CString strOffset( strZone );
+            strOffset.Replace( '-', '/' );
+            bOffset = ScanGMTOffset( strOffset, lOffset );
+        }
+        if ( bOffset )
+        {
+            if ( lOffset <= -86400 || lOffset >= 86400 )
+                return false;
+            nKind = ZONE_FIXED;
+            nOffset = (int)lOffset;
+            return true;
+        }
+
+        pZone = CTimeZone::Find( strName.c_str() );
+        if ( ! pZone )
+            return false;
+        nKind = ZONE_NAMED;
+        return true;
+    }
 
     bool CDate::SetDefaultTimezone( int nOffsetSeconds )
     {
         if ( nOffsetSeconds <= -86400 || nOffsetSeconds >= 86400 )
             return false;
-        nDefaultOffset = nOffsetSeconds;
-        bDefaultIsSystem = false;
+        ZoneSpec spec;
+        spec.kind = ZONE_FIXED;
+        spec.offset = nOffsetSeconds;
+        setDefaultZone( spec );
         return true;
     }
 
     bool CDate::SetDefaultTimezone( const char *pszZone )
     {
-        CString strZone( pszZone ? pszZone : "" );
-        strZone.Trim();
-        strZone.ToLowerCase();
-
-        if ( strZone == "system" || strZone == "local" )
-        {
-            SetDefaultTimezoneToSystem();
-            return true;
-        }
-        if ( strZone == "z" )
-        {
-            return SetDefaultTimezone( 0 );
-        }
-
-            // The same zones the parser reads ("utc", "est", "+0530", "gmt+5:40",
-            // "+05:30"); ScanGMTOffset expects minus signs as slashes.
-        strZone.Replace( '-', '/' );
-        long lOffset = 0;
-        if ( strZone.GetLength() == 0 || ! ScanGMTOffset( strZone, lOffset ) )
+        int nKind = ZONE_SYSTEM;
+        ZoneSpec spec;
+        if ( ! ReadZone( pszZone, nKind, spec.offset, spec.zone ) )
             return false;
-        return SetDefaultTimezone( (int)lOffset );
+        spec.kind = (ZoneKind)nKind;
+        setDefaultZone( spec );
+        return true;
     }
 
     void CDate::SetDefaultTimezoneToSystem( void )
     {
-        bDefaultIsSystem = true;
-        nDefaultOffset = 0;
+        setDefaultZone( ZoneSpec() );
     }
 
     bool CDate::IsDefaultTimezoneSystem( void )
     {
-        return bDefaultIsSystem;
+        return defaultZone().kind == ZONE_SYSTEM;
     }
 
     int CDate::GetDefaultTimezoneOffset( void )
     {
-        return bDefaultIsSystem ? 0 : (int)nDefaultOffset;
+        ZoneSpec spec = defaultZone();
+        return ( spec.kind == ZONE_FIXED ) ? spec.offset : 0;
+    }
+
+    CString CDate::GetDefaultTimezoneName( void )
+    {
+        ZoneSpec spec = defaultZone();
+        if ( spec.kind == ZONE_NAMED )
+            return CString( spec.zone->GetName().c_str() );
+        return CString( "" );
     }
 
     void CDate::SetUnknownTimeZoneLocal( bool bLocal )
@@ -1936,7 +2055,7 @@ namespace IASLib
 
     bool CDate::GetUnknownTimeZoneLocal( void )
     {
-        return bDefaultIsSystem;
+        return IsDefaultTimezoneSystem();
     }
 
         // The offset used to find the instant: the date's own, or for a date with
@@ -1946,13 +2065,14 @@ namespace IASLib
     {
         if ( m_bHasZone )
             return m_nUTCOffset;
-        if ( ! bDefaultIsSystem )
-            return nDefaultOffset;
+        ZoneSpec spec = defaultZone();
+        if ( spec.kind == ZONE_FIXED )
+            return spec.offset;
         if ( ! IsValid() )
             return 0;
         int nOffset = 0;
         bool bGap = false;
-        if ( ! systemOffsetForLocal( (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds, nOffset, bGap ) )
+        if ( ! zoneOffsetForLocal( spec.zone.get(), (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds, nOffset, bGap ) )
             return 0;
         return nOffset;
     }
@@ -2001,6 +2121,28 @@ namespace IASLib
         return FromUtcMilliseconds( UtcMilliseconds(), nOffsetSeconds );
     }
 
+    CDate CDate::ToTimeZone( const char *pszZone ) const
+    {
+        int nKind = ZONE_SYSTEM;
+        int nOffset = 0;
+        std::shared_ptr<const CTimeZone> pZone;
+        if ( ! ReadZone( pszZone, nKind, nOffset, pZone ) )
+        {
+            CDate dttInvalid;
+            dttInvalid.SetInvalid();
+            return dttInvalid;
+        }
+        if ( ! IsValid() )
+            return *this;
+        if ( nKind == ZONE_FIXED )
+            return ToTimeZone( nOffset );
+        if ( nKind == ZONE_SYSTEM )
+            return ToLocalTime();
+
+        long long llUtc = UtcMilliseconds();
+        return FromUtcMilliseconds( llUtc, pZone->OffsetAt( toUnixSeconds( llUtc ) ) );
+    }
+
     CDate CDate::ToUTC( void ) const
     {
         return ToTimeZone( 0 );
@@ -2033,67 +2175,13 @@ namespace IASLib
             return *this;
         long long llUtc = UtcMilliseconds();
         int nOffset = 0;
-        long long llSeconds = llUtc / 1000;
-        if ( llUtc % 1000 < 0 )
-            llSeconds--;
-        llSeconds -= (long long)UNIX_EPOCH_DAY * 86400LL;      // to Unix seconds
-        if ( ! systemOffsetAt( llSeconds, nOffset ) )
+        if ( ! systemOffsetAt( toUnixSeconds( llUtc ), nOffset ) )
             return *this;
         return FromUtcMilliseconds( llUtc, nOffset );
     }
 
-        // The system's offset in force at a local time (milliseconds on the CDate
-        // day numbering). Candidates come from the offset at the same reading of
-        // UTC, corrected twice. An offset is consistent if the instant it gives
-        // has that offset. Two consistent offsets mean the local time happened
-        // twice (clocks went back): take the earlier instant, the larger offset.
-        // None means it never happened (clocks went forward): take the offset in
-        // force before the change, the smaller one, and set bGap.
-    static bool systemOffsetForLocal( long long llLocalMs, int &nOffset, bool &bGap )
-    {
-        bGap = false;
-        long long llLocalSeconds = llLocalMs / 1000;
-        if ( llLocalMs % 1000 < 0 )
-            llLocalSeconds--;
-        llLocalSeconds -= (long long)UNIX_EPOCH_DAY * 86400LL;      // to Unix seconds
-
-        int nCandidates[ 3 ];
-        int nCount = 0;
-        int nFirst = 0;
-        if ( ! systemOffsetAt( llLocalSeconds, nFirst ) )
-            return false;
-        nCandidates[ nCount++ ] = nFirst;
-        for ( int nPass = 0; nPass < 2; nPass++ )
-        {
-            int nNext = 0;
-            if ( ! systemOffsetAt( llLocalSeconds - nCandidates[ nCount - 1 ], nNext ) )
-                return false;
-            nCandidates[ nCount++ ] = nNext;
-        }
-
-        bool bFound = false;
-        int nSmallest = nCandidates[0];
-        for ( int nX = 0; nX < nCount; nX++ )
-        {
-            int nCheck = 0;
-            if ( nCandidates[ nX ] < nSmallest )
-                nSmallest = nCandidates[ nX ];
-            if ( systemOffsetAt( llLocalSeconds - nCandidates[ nX ], nCheck ) && nCheck == nCandidates[ nX ] )
-            {
-                if ( ! bFound || nCandidates[ nX ] > nOffset )
-                    nOffset = nCandidates[ nX ];
-                bFound = true;
-            }
-        }
-        if ( ! bFound )
-        {
-            nOffset = nSmallest;
-            bGap = true;
-        }
-        return true;
-    }
-
-    bool CDate::AssumeLocalTimeZone( void )
+        // Takes the local time to be in a named zone or (NULL) the system's zone.
+    bool CDate::AssumeZone( const CTimeZone *pZone )
     {
         if ( ! IsValid() )
             return false;
@@ -2101,18 +2189,15 @@ namespace IASLib
         long long llLocal = (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds;
         int nOffset = 0;
         bool bGap = false;
-        if ( ! systemOffsetForLocal( llLocal, nOffset, bGap ) )
+        if ( ! zoneOffsetForLocal( pZone, llLocal, nOffset, bGap ) )
             return false;
 
         if ( bGap )
         {
                 // Keep the instant, so the local time moves forward by the gap.
             long long llUtc = llLocal - (long long)nOffset * 1000LL;
-            long long llUtcSeconds = llUtc / 1000;
-            if ( llUtc % 1000 < 0 )
-                llUtcSeconds--;
             int nAfter = nOffset;
-            if ( systemOffsetAt( llUtcSeconds - (long long)UNIX_EPOCH_DAY * 86400LL, nAfter ) )
+            if ( zoneOffsetAt( pZone, toUnixSeconds( llUtc ), nAfter ) )
             {
                 *this = FromUtcMilliseconds( llUtc, nAfter );
                 return true;
@@ -2122,6 +2207,23 @@ namespace IASLib
         m_bHasZone = true;
         m_nUTCOffset = nOffset;
         return true;
+    }
+
+    bool CDate::AssumeLocalTimeZone( void )
+    {
+        return AssumeZone( NULL );
+    }
+
+    bool CDate::AssumeTimeZone( const char *pszZone )
+    {
+        int nKind = ZONE_SYSTEM;
+        int nOffset = 0;
+        std::shared_ptr<const CTimeZone> pZone;
+        if ( ! ReadZone( pszZone, nKind, nOffset, pZone ) || ! IsValid() )
+            return false;
+        if ( nKind == ZONE_FIXED )
+            return SetTimeZone( nOffset );
+        return AssumeZone( pZone.get() );
     }
 
     int CDate::FixAMPM( int nHour, int nAMPM )

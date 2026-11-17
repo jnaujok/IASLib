@@ -68,6 +68,7 @@
 
     // Date and Time
 #include "BaseTypes/Date.h"
+#include "BaseTypes/TimeZone.h"
 
     // Data Blocks
 #include "BaseTypes/DataBlock.h"

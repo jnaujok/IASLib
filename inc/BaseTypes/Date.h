@@ -24,9 +24,12 @@
 #endif
 
 #include <ctime>
+#include <memory>
 
 namespace IASLib
 {
+    class CTimeZone;
+
     typedef struct My_tm
     {
         int     tm_msec;
@@ -206,7 +209,11 @@ namespace IASLib
                 // the system's local time zone (with its daylight saving rules)
                 // unless set to a fixed offset, in seconds east of UTC, or to zone
                 // text the parser reads: "UTC", "Z", "+05:30", "-0700", "EST",
-                // "GMT-1". "system" or "local" goes back to the system zone. Returns
+                // "GMT-1", or to a named IANA zone such as "America/New_York",
+                // which follows that zone's daylight saving rules (read from the
+                // system's zone database). Abbreviations and offsets are tried
+                // before names, so "EST" is always UTC-5; names are case-sensitive.
+                // "system" or "local" goes back to the system zone. Returns
                 // false, leaving the default unchanged, for text it cannot read or
                 // an offset of a day or more. It applies to every date (including
                 // existing ones without a zone), so set it at startup.
@@ -216,6 +223,9 @@ namespace IASLib
             static bool         IsDefaultTimezoneSystem( void );
                 // The fixed default offset (0 when the default is the system zone).
             static int          GetDefaultTimezoneOffset( void );
+                // The named default zone ("America/New_York"), or "" if the
+                // default is the system zone or a fixed offset.
+            static CString      GetDefaultTimezoneName( void );
                 // Shorthand: true for the system zone, false for UTC.
             static void         SetUnknownTimeZoneLocal( bool bLocal );
             static bool         GetUnknownTimeZoneLocal( void );
@@ -227,6 +237,10 @@ namespace IASLib
             void                ClearTimeZone( void );
                 // The same instant as local time in another zone.
             CDate               ToTimeZone( int nOffsetSeconds ) const;
+                // The same, for zone text as SetDefaultTimezone() reads it,
+                // including named zones ("Asia/Kolkata"). An invalid date if the
+                // zone is unknown.
+            CDate               ToTimeZone( const char *pszZone ) const;
             CDate               ToUTC( void ) const;
                 // The same instant as local time in the system's time zone (with
                 // its daylight saving rules for that date).
@@ -237,6 +251,11 @@ namespace IASLib
                 // (clocks going forward) moves forward by the gap. Returns false if
                 // the system has no offset for the date.
             bool                AssumeLocalTimeZone( void );
+                // The same for zone text as SetDefaultTimezone() reads it: a
+                // named zone ("Europe/Paris") resolves its daylight saving as
+                // above; a fixed offset or abbreviation is simply recorded. False
+                // for an unknown zone or an invalid date.
+            bool                AssumeTimeZone( const char *pszZone );
 
             void                SetInvalid( void ) { m_lMilliseconds = -1; m_lEpochDay = 0; }
             void                SetDate( int nDay, int nMonth, int nYear, int nHour = 0, int nMinute = 0, int nSecond = 0, int nMillisecond = 0 );
@@ -344,6 +363,8 @@ namespace IASLib
             long long           UtcMilliseconds( void ) const;
             static CDate        FromUtcMilliseconds( long long llUtc, int nOffsetSeconds );
             static bool         ScanGMTOffset( const char *pszOffset, long &lValue );
+            static bool         ReadZone( const char *pszZone, int &nKind, int &nOffset, std::shared_ptr<const CTimeZone> &pZone );
+            bool                AssumeZone( const CTimeZone *pZone );
             static bool         ScanMonths( const char *pszMonth, long &lValue );
             static bool         ScanWday( const char *pszWday, long &lValue );
             static bool         ScanAMPM( const char *pszAMPM, long  &lValue );

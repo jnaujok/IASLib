@@ -15,7 +15,9 @@
 #include <cstring>
 #include <ctime>
 #include <random>
+#include <memory>
 #include <string>
+#include <vector>
 
 using namespace IASLib;
 
@@ -903,6 +905,175 @@ static void testDefaultTimezone( void )
     setZone( "UTC" );
 }
 
+    // The system's offset at a Unix time, for checking CTimeZone against it.
+static bool systemOffset( long long t, int &offset )
+{
+    time_t tt = (time_t)t;
+    struct tm local;
+    if ( localtime_r( &tt, &local ) == NULL )
+        return false;
+    offset = (int)( (long long)timegm( &local ) - t );
+    return true;
+}
+
+static void testNamedZones( void )
+{
+    printf( "Named time zones\n" );
+    if ( ! CTimeZone::Find( "America/New_York" ) )
+    {
+        printf( "  (no zone database; skipped)\n" );
+        return;
+    }
+    setZone( "UTC" );
+
+        // Offsets at instants, from transitions and (after the last one) the rule.
+    std::shared_ptr<const CTimeZone> ny = CTimeZone::Find( "America/New_York" );
+    CHECK( ny->GetName() == "America/New_York" );
+    CHECK( ny == CTimeZone::Find( "America/New_York" ) );              // loaded once
+    CHECK( ny->OffsetAt( 979560000LL ) == -18000 );                     // 2001-01-15 12:00Z
+    CHECK( ny->OffsetAt( 995198400LL ) == -14400 );                     // 2001-07-15 12:00Z
+    CHECK( ny->OffsetAt( 986108399LL ) == -18000 );                     // 2001-04-01 06:59:59Z
+    CHECK( ny->OffsetAt( 986108400LL ) == -14400 );                     // 2001-04-01 07:00Z, clocks forward
+    CHECK( ny->OffsetAt( 1004248799LL ) == -14400 );                    // 2001-10-28 05:59:59Z
+    CHECK( ny->OffsetAt( 1004248800LL ) == -18000 );                    // 2001-10-28 06:00Z, clocks back
+    CHECK( ny->OffsetAt( -5364662400LL ) == -17762 );                   // 1800: local mean time
+    CHECK( ny->OffsetAt( 4118400000LL ) == -14400 );                    // 2100-07-04: the rule
+    CHECK( ny->OffsetAt( 4105166400LL ) == -18000 );                    // 2100-01-31
+    std::shared_ptr<const CTimeZone> sydney = CTimeZone::Find( "Australia/Sydney" );
+    CHECK( sydney && sydney->OffsetAt( 4103179200LL ) == 39600 );      // 2100-01-08, summer
+    CHECK( sydney && sydney->OffsetAt( 4118400000LL ) == 36000 );      // 2100-07-04, winter
+    std::shared_ptr<const CTimeZone> kolkata = CTimeZone::Find( "Asia/Kolkata" );
+    CHECK( kolkata && kolkata->OffsetAt( 946728000LL ) == 19800 );
+
+        // Local times: repeated and skipped hours.
+    int offset = 0;
+    bool gap = false;
+    ny->OffsetForLocal( 986092200LL, offset, gap );                     // 2001-04-01 02:30 never happened
+    CHECK( offset == -18000 && gap );
+    ny->OffsetForLocal( 1004232600LL, offset, gap );                    // 2001-10-28 01:30 happened twice
+    CHECK( offset == -14400 && ! gap );
+    ny->OffsetForLocal( 1004236200LL, offset, gap );                    // 02:30 after the change
+    CHECK( offset == -18000 && ! gap );
+
+        // Against the system's own reading of the same zone files, over many
+        // instants from 1900 to 2100 and every hour of 2045 (rule years).
+    const char *zones[] = { "America/New_York", "Europe/London", "Australia/Sydney", "Asia/Kolkata",
+                            "America/Sao_Paulo", "Pacific/Chatham", "Africa/Casablanca", "Europe/Dublin",
+                            "America/St_Johns", "Pacific/Apia", "America/Nuuk", "Asia/Jerusalem",
+                            "Antarctica/Troll", "Australia/Lord_Howe", "America/Santiago", "Asia/Tehran" };
+    std::mt19937_64 random( 20261117 );
+    std::uniform_int_distribution<long long> instants( -2208988800LL, 4102444800LL );
+    for ( size_t z = 0; z < sizeof( zones ) / sizeof( zones[0] ); z++ )
+    {
+        std::shared_ptr<const CTimeZone> zone = CTimeZone::Find( zones[ z ] );
+        if ( ! zone )
+        {
+            printf( "  (%s not installed)\n", zones[ z ] );
+            continue;
+        }
+        setZone( zones[ z ] );
+        int mismatches = 0;
+        long long first = 0;
+        std::vector<long long> times;
+        for ( int n = 0; n < 4000; n++ )
+            times.push_back( instants( random ) );
+        for ( long long t = 2366755200LL; t < 2398291200LL; t += 3600 )  // 2045
+            times.push_back( t );
+        for ( size_t n = 0; n < times.size(); n++ )
+        {
+            int expected = 0;
+            if ( systemOffset( times[ n ], expected ) && expected != zone->OffsetAt( times[ n ] ) )
+            {
+                if ( mismatches++ == 0 )
+                    first = times[ n ];
+            }
+        }
+        if ( mismatches )
+            printf( "  %s: %d differ from the system, first at %lld\n", zones[ z ], mismatches, first );
+        CHECK( mismatches == 0 );
+
+            // Local-time resolution agrees with AssumeLocalTimeZone in that zone.
+        int differ = 0;
+        for ( int n = 0; n < 300; n++ )
+        {
+            CDate local( (long)( instants( random ) / 86400 ) + 719164L, (long)( instants( random ) % 86400000LL + 86400000LL ) % 86400000L );
+            CDate viaSystem = local;
+            CDate viaZone = local;
+            if ( viaSystem.AssumeLocalTimeZone() && ( ! viaZone.AssumeTimeZone( zones[ z ] ) ||
+                 iso( viaSystem ) != iso( viaZone ) ) )
+                differ++;
+        }
+        CHECK( differ == 0 );
+    }
+    setZone( "UTC" );
+
+        // A named default zone follows daylight saving, whatever TZ says.
+    CHECK( CDate::SetDefaultTimezone( "America/New_York" ) );
+    CHECK( ! CDate::IsDefaultTimezoneSystem() && CDate::GetDefaultTimezoneOffset() == 0 );
+    CHECK_EQ_STR( "name", (const char *)CDate::GetDefaultTimezoneName(), "America/New_York" );
+    CHECK( CDate( 15, 0, 2001, 12, 0, 0 ).GetUTCOffset() == -18000 );
+    CHECK( CDate( 15, 6, 2001, 12, 0, 0 ).GetUTCOffset() == -14400 );
+    CHECK( CDate( 1, 3, 2001, 2, 30, 0 ).GetUTCOffset() == -18000 );   // skipped: pre-change offset
+    CHECK( CDate( 28, 9, 2001, 1, 30, 0 ).GetUTCOffset() == -14400 );  // repeated: the earlier one
+    CHECK_EQ_STR( "ny utc", iso( CDate( 15, 6, 2001, 12, 0, 0 ).ToUTC(), false ), "2001-07-15T16:00:00Z" );
+    CHECK( CDate( 15, 6, 2001, 12, 0, 0 ) == CDate::Parse( "2001-07-15T16:00:00Z" ) );
+    CHECK( CDate::Parse( "2001-07-15T12:00:00" ).GetUTCOffset() == -14400 );
+    CDate expected = CDate().ToTimeZone( "America/New_York" );
+    CDate today = CDate::Parse( "Today" );
+    CHECK( today.GetEpochDay() == expected.GetEpochDay() && today.GetSOD() == 0 && ! today.HasTimeZone() );
+
+        // Abbreviations and offsets keep their fixed meaning; names are exact.
+    CHECK( CDate::SetDefaultTimezone( "EST" ) && CDate::GetDefaultTimezoneOffset() == -18000 );
+    CHECK_EQ_STR( "est name", (const char *)CDate::GetDefaultTimezoneName(), "" );
+    CHECK( CDate( 15, 6, 2001, 12, 0, 0 ).GetUTCOffset() == -18000 );
+    CHECK( CDate::SetDefaultTimezone( "CET" ) && CDate( 15, 6, 2001, 12, 0, 0 ).GetUTCOffset() == 3600 );
+    CHECK( CDate::SetDefaultTimezone( "  Europe/Paris  " ) && CDate( 15, 6, 2001, 12, 0, 0 ).GetUTCOffset() == 7200 );
+    const char *bad[] = { "america/new_york", "Mars/Base", "../etc/passwd", "/etc/passwd", "America//New_York",
+                          "America/../Europe/Paris", "America/New York", "America", "America/New_York/" };
+    for ( size_t n = 0; n < sizeof( bad ) / sizeof( bad[0] ); n++ )
+    {
+        CHECK_EQ_STR( bad[ n ], CDate::SetDefaultTimezone( bad[ n ] ) ? "accepted" : "rejected", "rejected" );
+    }
+    CHECK_EQ_STR( "unchanged", (const char *)CDate::GetDefaultTimezoneName(), "Europe/Paris" );
+    CDate::SetDefaultTimezoneToSystem();
+    CHECK( CDate::IsDefaultTimezoneSystem() && CDate::GetDefaultTimezoneName() == "" );
+
+        // Converting to, and assuming, a named zone.
+    CDate noon = CDate::Parse( "2000-01-01T12:00:00Z" );
+    CDate india = noon.ToTimeZone( "Asia/Kolkata" );
+    CHECK_EQ_STR( "kolkata", iso( india, false ), "2000-01-01T17:30:00+05:30" );
+    CHECK( india == noon );
+    CHECK_EQ_STR( "paris winter", iso( noon.ToTimeZone( "Europe/Paris" ), false ), "2000-01-01T13:00:00+01:00" );
+    CHECK_EQ_STR( "paris summer", iso( CDate::Parse( "2000-07-01T12:00:00Z" ).ToTimeZone( "Europe/Paris" ), false ), "2000-07-01T14:00:00+02:00" );
+    CHECK_EQ_STR( "fixed text", iso( noon.ToTimeZone( "+02:00" ), false ), "2000-01-01T14:00:00+02:00" );
+    CHECK( ! noon.ToTimeZone( "Mars/Base" ).IsValid() );
+
+    CDate paris( 1, 6, 2021, 12, 0, 0 );
+    CHECK( paris.AssumeTimeZone( "Europe/Paris" ) && paris.GetUTCOffset() == 7200 && paris.GetHour() == 12 );
+    CDate skipped( 28, 2, 2021, 2, 30, 0 );                             // Paris skipped 02:00-03:00
+    CHECK( skipped.AssumeTimeZone( "Europe/Paris" ) );
+    CHECK_EQ_STR( "paris gap", iso( skipped, false ), "2021-03-28T03:30:00+02:00" );
+    CDate repeated( 31, 9, 2021, 2, 30, 0 );                            // and repeated 02:00-03:00
+    CHECK( repeated.AssumeTimeZone( "Europe/Paris" ) );
+    CHECK_EQ_STR( "paris overlap", iso( repeated, false ), "2021-10-31T02:30:00+02:00" );
+        // The system zone resolves the repeated hour the same way (east of UTC,
+        // where the summer offset is not found from the plain UTC reading).
+    setZone( "Europe/Paris" );
+    CDate systemRepeated( 31, 9, 2021, 2, 30, 0 );
+    CHECK( systemRepeated.GetUTCOffset() == 7200 );
+    CHECK( systemRepeated.AssumeLocalTimeZone() && systemRepeated.GetUTCOffset() == 7200 );
+    setZone( "UTC" );
+
+    CDate fixed( 1, 6, 2021, 12, 0, 0 );
+    CHECK( fixed.AssumeTimeZone( "EST" ) && fixed.GetUTCOffset() == -18000 );
+    CDate unknown( 1, 6, 2021, 12, 0, 0 );
+    CHECK( ! unknown.AssumeTimeZone( "Mars/Base" ) && ! unknown.HasTimeZone() );
+
+        // Julian Day of a local time in a named zone.
+    CDate nyNoon( 1, 0, 2000, 7, 0, 0 );
+    CHECK( nyNoon.AssumeTimeZone( "America/New_York" ) && near( nyNoon.GetJulianDate(), 2451545.0, 1.0 / 86400000.0 ) );
+}
+
 int main( int argc, char *argv[] )
 {
         // Dates without a zone take the system zone, so run in UTC unless a
@@ -928,6 +1099,7 @@ int main( int argc, char *argv[] )
     testTimeZones();
     testUnknownZoneDefault();
     testDefaultTimezone();
+    testNamedZones();
 
     setZone( savedTestZone.empty() ? NULL : savedTestZone.c_str() );
 
