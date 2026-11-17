@@ -22,17 +22,15 @@ namespace IASLib
     enum JsonNodeType
     {
         ARRAY,
-        BINARY,
+        BINARY,         // bytes, written as a base64 string
         BOOLEAN,
-        MISSING,
+        MISSING,        // what path() and at() give for a value that is not there
         NULLVAL,
         NUMBER,
         OBJECT,
-        POJO,
         STRING
     };
 }
 
 #endif // IASLIB_JSON_SUPPORT__
 #endif // IASLIB_JSONNODETYPE_H__
-

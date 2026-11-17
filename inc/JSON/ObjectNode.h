@@ -1,9 +1,10 @@
 /**
  * Object Node Class
  *
- *  This Class implements a JSON Object node which contains named Json nodes
- * in a non-order-dependent manner. This is equivalent to a map-type
- * representation.
+ *  A JSON object: named fields, kept in the order they were added. Adding a
+ * field that already exists replaces its value in place. The object owns its
+ * values; set() takes ownership of the node it is given, which must not
+ * belong to any other tree.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 4/15/2019
@@ -19,107 +20,84 @@
 
 #ifdef IASLIB_JSON_SUPPORT__
 
-#include "JsonNode.h"
-#include "../Collections/Hash.h"
+#include "CollectiveNode.h"
+
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace IASLib
 {
-    class CObjectNode : public CJsonNode
+    class CObjectNode : public CCollectiveNode
     {
-        private:
-            CHash objectNodes;
         public:
-            /**
-             * Calling "asText" on an ObjectNode will return the JSON representation of the entire
-             * object node -- in short, the JSON text.
-             */
-            virtual CString	asText();
+            DEFINE_OBJECT( CObjectNode )
 
+                                    CObjectNode( void );
+            virtual                ~CObjectNode( void );
 
-            /**
-             * Method that can be called to get a node that is guaranteed not to allow changing of
-             * this node through mutators on this node or any of its children.
-             */
-            virtual CJsonNode *clone();
+            virtual JsonNodeType    getNodeType( void ) const { return OBJECT; }
+            virtual int             size( void ) const { return (int)m_aFields.size(); }
 
-            /**
-             * Method for accessing all value nodes of this Node, iff this node is a JSON Array or Object node.
-             */
-            virtual CIterator *elements();
+                // Fields by position, in order.
+            CString                 fieldName( int nIndex ) const;
+            const std::string      &fieldNameString( int nIndex ) const;
+            CJsonNode              *fieldValue( int nIndex ) const;
+            CStringArray            fieldNames( void ) const;
 
-            // Equality for node objects is defined as full (deep) value equality.
-            virtual bool equals(CJsonNode *o);
+                // Sets a field, taking ownership of the value (NULL means a JSON
+                // null). Returns this object, so calls can be chained.
+            CObjectNode            *set( const CJsonKey &key, CJsonNode *pValue );
 
-            virtual CIterator *fieldNames();
-            virtual CIterator	*fields();
+            CObjectNode            *put( const CJsonKey &key, const char *pszValue );
+            CObjectNode            *put( const CJsonKey &key, const std::string &strValue );
+            CObjectNode            *put( const CJsonKey &key, bool bValue );
+            CObjectNode            *put( const CJsonKey &key, int nValue );
+            CObjectNode            *put( const CJsonKey &key, unsigned int nValue );
+            CObjectNode            *put( const CJsonKey &key, long lValue );
+            CObjectNode            *put( const CJsonKey &key, unsigned long lValue );
+            CObjectNode            *put( const CJsonKey &key, long long llValue );
+            CObjectNode            *put( const CJsonKey &key, unsigned long long llValue );
+            CObjectNode            *put( const CJsonKey &key, double dValue );
+            CObjectNode            *putNull( const CJsonKey &key );
+                // Bytes, written as base64.
+            CObjectNode            *putBinary( const CJsonKey &key, const std::vector<unsigned char> &aData );
+                // Sets a new, empty object or array and returns it.
+            CObjectNode            *putObject( const CJsonKey &key );
+            CArrayNode             *putArray( const CJsonKey &key );
 
-            // Method for finding a JSON Object that contains specified field, within this node or its descendants.
-            virtual CJsonNode *findParent(CString fieldName);
+                // The object or array in a field, created if the field is not
+                // there; NULL if the field holds something else.
+            CObjectNode            *with( const CJsonKey &key );
+            CArrayNode             *withArray( const CJsonKey &key );
 
-            // Method for finding a JSON Object that contains specified field, within this node or its descendants.
-            virtual CArray *FindParents(CString fieldName);
-            virtual CArray *FindParents(CString fieldName, CArray *foundSoFar);
+                // Deletes a field's value (remove), or hands it to the caller
+                // (release). False or NULL if there is no such field.
+            bool                    remove( const CJsonKey &key );
+            CJsonNode              *release( const CJsonKey &key );
+            virtual void            removeAll( void );
 
-            //Method similar to findValue(java.lang.String), but that will return a "missing node" instead of null if no field is found.
-            virtual CJsonNode *findPath(CString fieldName);
-            // Method for finding a JSON Object field with specified name in this node or its child nodes, and returning value it has.
-            virtual CJsonNode *findValue(CString fieldName);
+            virtual CString         asText( void ) const { return CString( "" ); }
+            virtual bool            equals( const CJsonNode *pOther ) const;
+            virtual CJsonNode      *clone( void ) const;
+            virtual void            writeJson( std::string &strOut, int nIndent, int nLevel, bool bAsciiOnly ) const;
 
-            // Method for finding JSON Object fields with specified name, and returning found ones as a List.
-            virtual CArray *FindValues(CString fieldName);
-            virtual CArray *FindValues(CString fieldName, CArray *foundSoFar);
+        protected:
+            virtual CJsonNode      *field( const std::string &strField );
+            virtual bool            collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const;
 
-            // Similar to findValues(java.lang.String), but will additionally convert values into Strings, calling asText().
-            virtual CArray *FindValuesAsText(CString fieldName);
+        private:
+            std::vector< std::pair<std::string, CJsonNode *> >  m_aFields;
+            std::map<std::string, size_t>                       m_mapIndex;     // name to position
 
-            virtual CArray *FindValuesAsText(CString fieldName, CArray *foundSoFar);
+            int                     find( const std::string &strField ) const;
+            void                    reindex( void );
 
-            // Method for accessing value of the specified element of an array node.
-            virtual CJsonNode *get(int index);
-
-            // Method for accessing value of the specified field of an object node.
-            virtual CJsonNode *get(CString fieldName);
-
-            // Return the type of this node
-            virtual JsonNodeType	getNodeType() { return JsonNodeType::OBJECT; }
-
-            // Method that allows checking whether this node is JSON Array node and contains a value for specified index If this is the case (including case of specified indexing having null as value), returns true; otherwise returns false.
-            virtual bool has(int index);
-
-            // Method that allows checking whether this node is JSON Object node and contains value for specified property.
-            virtual bool has(CString fieldName);
-
-            // Method that is similar to has(int), but that will return false for explicitly added nulls.
-            virtual bool hasNonNull(int index);
-            // Method that is similar to has(String), but that will return false for explicitly added nulls.
-            virtual bool hasNonNull(CString fieldName);
-
-            virtual bool	isContainerNode();
-            virtual bool	isNull();
-            virtual bool	isObject() { return true; }
-            virtual bool	isPojo();
-
-            virtual CIterator *iterator();
-
-            // This method is similar to get(int), except that instead of returning null if no such element exists (due to index being out of range, or this node not being an array), a "missing node" (node that returns true for isMissingNode()) will be returned.
-            virtual CJsonNode	*path(int index);
-
-            // This method is similar to get(String), except that instead of returning null if no such value exists (due to this node not being an object, or object not having value for the specified field), a "missing node" (node that returns true for isMissingNode()) will be returned.
-            virtual CJsonNode *path(CString fieldName);
-
-            virtual int	size();
-
-            // Note: marked as abstract to ensure all implementation classes define it properly.
-            virtual CString	toString();
-
-            // Method that can be called on Object nodes, to access a property that has Object value; or if no such property exists, to create, add and return such Object node.
-            virtual CJsonNode   *with(CString propertyName);
-
-            // Method that can be called on Object nodes, to access a property that has Array value; or if no such property exists, to create, add and return such Array node.
-            virtual CJsonNode *withArray(CString propertyName);
+                                    CObjectNode( const CObjectNode & );
+            CObjectNode            &operator =( const CObjectNode & );
     };
-}
+} // namespace IASLib
 
 #endif // IASLIB_JSON_SUPPORT__
 #endif // IASLIB_OBJECTNODE_H__
-

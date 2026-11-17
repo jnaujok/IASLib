@@ -1,11 +1,13 @@
 /**
  * Missing Node Class
  *
- *  This class defines a Node that is missing -- not null, not empty, but
- * a node that doesn't exist at all.
+ *  What path(), at() and findPath() give where there is no value. It
+ * answers every question with nothing (and its own path() is itself), so a
+ * chain of calls through a document never fails. getInstance() is the shared
+ * one those methods return; it must not be deleted.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 5/06/2019
+ *	Created: 4/16/2019
  *	Log:
  *	  $LOG$
  *
@@ -24,68 +26,20 @@ namespace IASLib
 {
     class CMissingNode : public CJsonNode
     {
-        private:
-            static CMissingNode *instance;
-
         public:
-            DEFINE_OBJECT( CMissingNode );
-            
-            static CMissingNode *getInstance( void );
+            DEFINE_OBJECT( CMissingNode )
 
-            /**
-             * MissingNode only has one singleton instance (there's no need for any more
-             * that this.) Cloning, therefore, only returns the "this" pointer because
-             * there's no reason to return anything else. All missing nodes are the same
-             * singleton.
-             */
-            virtual CJsonNode *clone() { return this; }
+            static CMissingNode    &getInstance( void );
 
-            /**
-             * A missing node is only equal to another missing node, which would be the
-             * same object, so this comparison is easy.
-             */
-            virtual bool equals(CJsonNode *o) { if ( o == this ) return true; return false; }
+                                    CMissingNode( void ) {}
 
-            //Method similar to findValue(java.lang.String), but that will return a "missing node" instead of null if no field is found.
-            virtual CJsonNode *findPath(CString fieldName)  { return NULL; }
-            // Method for finding a JSON Object field with specified name in this node or its child nodes, and returning value it has.
-            virtual CJsonNode *findValue(CString fieldName)  { return NULL; }
-
-            // Method for accessing value of the specified element of an array node.
-            virtual CJsonNode *get(int index)   { return NULL; }
-
-            // Method for accessing value of the specified field of an object node.
-            virtual CJsonNode *get(CString fieldName)   { return NULL; }
-
-            // Return the type of this node
-            virtual JsonNodeType getNodeType()
-            {
-                return MISSING;
-            }
-
-            virtual bool	isMissingNode()   { return true; }
-
-            virtual CIterator *iterator()   { return NULL; }
-
-            // This method is similar to get(int), except that instead of returning null if no such element exists (due to index being out of range, or this node not being an array), a "missing node" (node that returns true for isMissingNode()) will be returned.
-            virtual CJsonNode	*path(int index)   { return NULL; }
-
-            // This method is similar to get(String), except that instead of returning null if no such value exists (due to this node not being an object, or object not having value for the specified field), a "missing node" (node that returns true for isMissingNode()) will be returned.
-            virtual CJsonNode *path(CString fieldName)   { return NULL; }
-
-            // Note: marked as abstract to ensure all implementation classes define it properly.
-            virtual CString	toString()   { return CString( "" ); }
-
-            virtual CString asText() { return CString(""); }
-
-            virtual int getType() {}
-        private:
-            // Private constructors
-            CMissingNode( void ) {}
-            CMissingNode( CMissingNode &oSource ) { oSource.isMissingNode(); }
+            virtual JsonNodeType    getNodeType( void ) const { return MISSING; }
+            virtual bool            equals( const CJsonNode *pOther ) const { return pOther != NULL && pOther->isMissingNode(); }
+                // A new missing node, owned by the caller like any clone.
+            virtual CJsonNode      *clone( void ) const { return new CMissingNode(); }
+            virtual void            writeJson( std::string &strOut, int nIndent, int nLevel, bool bAsciiOnly ) const;
     };
-}
+} // namespace IASLib
 
 #endif // IASLIB_JSON_SUPPORT__
 #endif // IASLIB_MISSINGNODE_H__
-

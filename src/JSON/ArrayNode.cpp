@@ -1,10 +1,10 @@
 /**
  * Array Node Class
  *
- *  This concrete class defines a node in JSON that stores an array of nodes.
+ *  A JSON array. See ArrayNode.h.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 5/02/2019
+ *	Created: 4/15/2019
  *	Log:
  *	  $LOG$
  *
@@ -15,219 +15,170 @@
 #ifdef IASLIB_JSON_SUPPORT__
 
 #include "ArrayNode.h"
-#include "MissingNode.h"
+#include "ObjectNode.h"
+#include "BinaryNode.h"
+#include "BooleanNode.h"
+#include "NullNode.h"
+#include "NumberNode.h"
+#include "TextNode.h"
 
 namespace IASLib
 {
-    IMPLEMENT_OBJECT( CArrayNode, CJsonNode );
+    IMPLEMENT_OBJECT( CArrayNode, CCollectiveNode );
 
-    CArrayNode::CArrayNode( void ) : m_aElements()
+    CArrayNode::CArrayNode( void )
     {
-
     }
 
-    CArrayNode::~CArrayNode()
+    CArrayNode::~CArrayNode( void )
     {
-        m_aElements.DeleteAll();
+        removeAll();
     }
 
-    /**
-     * Method that will return a valid String representation of the container value, if the
-     * node is a value node (method isValueNode() returns true), otherwise empty String.
-     */
-    CString	CArrayNode::asText()
+    CJsonNode *CArrayNode::element( int nIndex )
     {
-
+        if ( nIndex < 0 || nIndex >= size() )
+            return NULL;
+        return m_aElements[ nIndex ];
     }
 
-    /**
-     * Method that can be called to get a node that is guaranteed not to allow changing of
-     * this node through mutators on this node or any of its children.
-     */
-    CJsonNode *CArrayNode::clone()
+    CArrayNode *CArrayNode::add( CJsonNode *pValue )
     {
-        CArrayNode *retVal = new CArrayNode();
+        m_aElements.push_back( pValue ? pValue : new CNullNode() );
+        return this;
+    }
 
-        for ( int nX = 0; nX < m_aElements.Length(); nX++ )
+    CArrayNode *CArrayNode::add( const char *pszValue )
+    {
+        return add( pszValue ? (CJsonNode *)new CTextNode( pszValue ) : (CJsonNode *)new CNullNode() );
+    }
+
+    CArrayNode *CArrayNode::add( const std::string &strValue ) { return add( new CTextNode( strValue ) ); }
+    CArrayNode *CArrayNode::add( bool bValue ) { return add( new CBooleanNode( bValue ) ); }
+    CArrayNode *CArrayNode::add( int nValue ) { return add( new CNumberNode( nValue ) ); }
+    CArrayNode *CArrayNode::add( unsigned int nValue ) { return add( new CNumberNode( (long long)nValue ) ); }
+    CArrayNode *CArrayNode::add( long lValue ) { return add( new CNumberNode( (long long)lValue ) ); }
+    CArrayNode *CArrayNode::add( unsigned long lValue ) { return add( new CNumberNode( (unsigned long long)lValue ) ); }
+    CArrayNode *CArrayNode::add( long long llValue ) { return add( new CNumberNode( llValue ) ); }
+    CArrayNode *CArrayNode::add( unsigned long long llValue ) { return add( new CNumberNode( llValue ) ); }
+    CArrayNode *CArrayNode::add( double dValue ) { return add( new CNumberNode( dValue ) ); }
+    CArrayNode *CArrayNode::addNull( void ) { return add( new CNullNode() ); }
+    CArrayNode *CArrayNode::addBinary( const std::vector<unsigned char> &aData ) { return add( new CBinaryNode( aData ) ); }
+
+    CObjectNode *CArrayNode::addObject( void )
+    {
+        CObjectNode *pObject = new CObjectNode();
+        add( pObject );
+        return pObject;
+    }
+
+    CArrayNode *CArrayNode::addArray( void )
+    {
+        CArrayNode *pArray = new CArrayNode();
+        add( pArray );
+        return pArray;
+    }
+
+    bool CArrayNode::insert( int nIndex, CJsonNode *pValue )
+    {
+        if ( nIndex < 0 || nIndex > size() )
         {
-            retVal->m_aElements.AddLast( ((CJsonNode *)m_aElements.GetAt(nX))->clone() );
+            delete pValue;
+            return false;
         }
-
-        return retVal;
+        m_aElements.insert( m_aElements.begin() + nIndex, pValue ? pValue : new CNullNode() );
+        return true;
     }
 
-    /**
-     * Method for accessing all value nodes of this Node, iff this node is a JSON Array or Object node.
-     */
-    CIterator *CArrayNode::elements()
+    bool CArrayNode::set( int nIndex, CJsonNode *pValue )
     {
-        return m_aElements.Enumerate();
-    }
-
-    // Equality for node objects is defined as full (deep) value equality.
-    bool CArrayNode::equals(CJsonNode *o)
-    {
-        if ( o->getNodeType() == JsonNodeType::ARRAY )
+        if ( nIndex < 0 || nIndex >= size() )
         {
-
+            delete pValue;
+            return false;
         }
-        return false;
+        if ( pValue == NULL )
+            pValue = new CNullNode();
+        if ( m_aElements[ nIndex ] != pValue )
+            delete m_aElements[ nIndex ];
+        m_aElements[ nIndex ] = pValue;
+        return true;
     }
 
-    CIterator *CArrayNode::fieldNames()
+    bool CArrayNode::remove( int nIndex )
     {
-        return NULL;
+        CJsonNode *pNode = release( nIndex );
+        delete pNode;
+        return pNode != NULL;
     }
 
-    /**
-     * This function returns named fields -- by definition, the fields in an array are not named.
-     */
-    CIterator *CArrayNode::fields()
+    CJsonNode *CArrayNode::release( int nIndex )
     {
-        return NULL;
+        if ( nIndex < 0 || nIndex >= size() )
+            return NULL;
+        CJsonNode *pNode = m_aElements[ nIndex ];
+        m_aElements.erase( m_aElements.begin() + nIndex );
+        return pNode;
     }
 
-    // Method for finding a JSON Object that contains specified field, within this node or its descendants.
-    CJsonNode *CArrayNode::findParent(CString fieldName)
+    void CArrayNode::removeAll( void )
     {
-        CJsonNode *retVal = NULL;
-
-        for ( int nX = 0; nX < this->m_aElements.Length(); nX++ )
-        {
-            retVal = ((CJsonNode *)m_aElements.GetAt(nX))->findParent(fieldName );
-            if ( retVal != NULL )
-            {
-                break;
-            }
-        }
-        return retVal;
+        for ( size_t n = 0; n < m_aElements.size(); n++ )
+            delete m_aElements[ n ];
+        m_aElements.clear();
     }
 
-    // Method for finding a JSON Object that contains specified field, within this node or its descendants.
-    CArray *CArrayNode::findParents(CString fieldName)
+    bool CArrayNode::equals( const CJsonNode *pOther ) const
     {
-
-    }
-
-    //Method similar to findValue(java.lang.String), but that will return a "missing node" instead of null if no field is found.
-    CJsonNode *CArrayNode::findPath(CString fieldName)
-    {
-
-    }
-
-    // Method for finding a JSON Object field with specified name in this node or its child nodes, and returning value it has.
-    CJsonNode *CArrayNode::findValue(CString fieldName)
-    {
-
-    }
-
-    // Method for finding JSON Object fields with specified name, and returning found ones as a List.
-    CArray *CArrayNode::findValues(CString fieldName)
-    {
-
-    }
-
-    CStringArray *CArrayNode::findValuesAsText(CString fieldName)
-    {
-
-    }
-
-    // Method for accessing value of the specified element of an array node.
-    CJsonNode *CArrayNode::get(int index)
-    {
-        return (CJsonNode *)m_aElements.GetAt(index);
-    }
-
-    // Method for accessing value of the specified field of an object node.
-    CJsonNode *CArrayNode::get(CString fieldName)
-    {
-        // Fields in arrays are not accessable by name.
-        return NULL;
-    }
-
-    // Method that allows checking whether this node is JSON Array node and contains a value for specified index If this is the case (including case of specified indexing having null as value), returns true; otherwise returns false.
-    bool CArrayNode::has(int index)
-    {
-        if ( index >= 0 && index < m_aElements.Length() )
-        {
+        if ( pOther == this )
             return true;
-        }
-        return false;
-    }
-
-    // Method that allows checking whether this node is JSON Object node and contains value for specified property.
-    bool CArrayNode::has(CString fieldName)
-    {
-        return false;
-    }
-
-    // Method that is similar to has(int), but that will return false for explicitly added nulls.
-    bool CArrayNode::hasNonNull(int index)
-    {
-        if ( has( index ) )
+        if ( pOther == NULL || ! pOther->isArray() || pOther->size() != size() )
+            return false;
+        const CArrayNode *pArray = static_cast<const CArrayNode *>( pOther );
+        for ( size_t n = 0; n < m_aElements.size(); n++ )
         {
-            if ( ! ((CJsonNode *)m_aElements.GetAt(index))->isNull() )
+            if ( ! m_aElements[ n ]->equals( pArray->m_aElements[ n ] ) )
+                return false;
+        }
+        return true;
+    }
+
+    CJsonNode *CArrayNode::clone( void ) const
+    {
+        CArrayNode *pCopy = new CArrayNode();
+        pCopy->m_aElements.reserve( m_aElements.size() );
+        for ( size_t n = 0; n < m_aElements.size(); n++ )
+            pCopy->m_aElements.push_back( m_aElements[ n ]->clone() );
+        return pCopy;
+    }
+
+    void CArrayNode::writeJson( std::string &strOut, int nIndent, int nLevel, bool bAsciiOnly ) const
+    {
+        if ( m_aElements.empty() )
+        {
+            strOut += "[]";
+            return;
+        }
+        strOut += '[';
+        for ( size_t n = 0; n < m_aElements.size(); n++ )
+        {
+            if ( n > 0 )
+                strOut += ',';
+            newLine( strOut, nIndent, nLevel + 1 );
+            m_aElements[ n ]->writeJson( strOut, nIndent, nLevel + 1, bAsciiOnly );
+        }
+        newLine( strOut, nIndent, nLevel );
+        strOut += ']';
+    }
+
+    bool CArrayNode::collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const
+    {
+        for ( size_t n = 0; n < m_aElements.size(); n++ )
+        {
+            if ( m_aElements[ n ]->collect( strField, bParents, bFirst, aFound ) && bFirst )
                 return true;
         }
         return false;
-    }
-
-    // Method that is similar to has(String), but that will return false for explicitly added nulls.
-    bool CArrayNode::hasNonNull(CString fieldName)
-    {
-        return false;
-    }
-
-    CIterator *CArrayNode::iterator()
-    {
-        return m_aElements.Enumerate();
-    }
-
-    /**
-     *  This method is similar to get(int), except that instead of returning null
-     * if no such element exists (due to index being out of range, or this node
-     * not being an array), a "missing node" (node that returns true for
-     * isMissingNode()) will be returned.
-     */
-    CJsonNode *CArrayNode::path(int index)
-    {
-        CJsonNode *retVal = this->get( index );
-
-        if ( retVal == NULL )
-        {
-            retVal = CMissingNode::getInstance();
-        }
-
-        return retVal;
-    }
-
-    // This method is similar to get(String), except that instead of returning null if no such value exists (due to this node not being an object, or object not having value for the specified field), a "missing node" (node that returns true for isMissingNode()) will be returned.
-    CJsonNode *CArrayNode::path(CString fieldName)
-    {
-        return NULL;
-    }
-
-    int CArrayNode::size()
-    {
-        return m_aElements.Length();
-    }
-
-    // Note: marked as abstract to ensure all implementation classes define it properly.
-    CString CArrayNode::toString()
-    {
-        return asText();
-    }
-
-    // Method that can be called on Object nodes, to access a property that has Object value; or if no such property exists, to create, add and return such Object node.
-    CJsonNode   *CArrayNode::with(CString propertyName)
-    {
-        return NULL;
-    }
-
-            // Method that can be called on Object nodes, to access a property that has Array value; or if no such property exists, to create, add and return such Array node.
-    CJsonNode *CArrayNode::withArray(CString propertyName)
-    {
-        return NULL;
     }
 } // namespace IASLib
 

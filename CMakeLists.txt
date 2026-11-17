@@ -18,9 +18,7 @@ option(USE_RTTI "Use Run-Time Type Information." ON )
 option(USE_DEBUG "Use debugging features of the library." ON)
 option(USE_MEMORY_MANAGER "Use extended memory manager." OFF)
 option(USE_MEMORY_DEBUGGING "Use memory debugging features." ON)
-# JSON support is still a work in progress and does not compile yet; enable it
-# explicitly (-DUSE_JSON=ON) when working on it.
-option(USE_JSON "Enable JSON support." OFF)
+option(USE_JSON "Enable JSON support." ON)
 option(USE_HERSCHEL_CORRECTION "CDate treats years divisible by 4000 as common years by default." OFF)
 # Windows always uses ICU (icu.dll) for named time zones; this turns it on
 # elsewhere, where zone files are normally used, mainly for testing.

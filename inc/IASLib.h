@@ -218,6 +218,26 @@
 #include "Files/RWFile.h"
 #include "Files/MemMappedFile.h"
 
+//********
+//  JSON
+//********
+
+#ifdef IASLIB_JSON_SUPPORT__
+#include "JSON/JsonNodeType.h"
+#include "JSON/JsonNode.h"
+#include "JSON/CollectiveNode.h"
+#include "JSON/ObjectNode.h"
+#include "JSON/ArrayNode.h"
+#include "JSON/ValueNode.h"
+#include "JSON/TextNode.h"
+#include "JSON/NumberNode.h"
+#include "JSON/BooleanNode.h"
+#include "JSON/NullNode.h"
+#include "JSON/BinaryNode.h"
+#include "JSON/MissingNode.h"
+#include "JSON/JsonParser.h"
+#endif
+
 //***********
 //  LOGGING
 //***********

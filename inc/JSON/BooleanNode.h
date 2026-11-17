@@ -1,3 +1,17 @@
+/**
+ * Boolean Node Class
+ *
+ *  A JSON true or false.
+ *
+ *	Author: Jeffrey R. Naujok
+ *	Created: 4/16/2019
+ *	Log:
+ *	  $LOG$
+ *
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
+ */
+
 #ifndef IASLIB_BOOLEANNODE_H__
 #define IASLIB_BOOLEANNODE_H__
 
@@ -5,34 +19,31 @@
 
 #include "ValueNode.h"
 
-namespace IASLib {
-    class CBooleanNode : public CValueNode {
-    private:
-        bool bValue;
-        bool bIsNull;
-    public:
-        DEFINE_OBJECT(CBooleanNode)
+namespace IASLib
+{
+    class CBooleanNode : public CValueNode
+    {
+        public:
+            DEFINE_OBJECT( CBooleanNode )
 
-        CBooleanNode( CJsonNode *parent, CString name, CString value );
+                                    CBooleanNode( bool bValue ) : m_bValue( bValue ) {}
 
-        void setValue( bool value );
-        void setNull()
-        {
-            bIsNull = true;
-        }
+            virtual JsonNodeType    getNodeType( void ) const { return BOOLEAN; }
+            virtual bool            booleanValue( void ) const { return m_bValue; }
+            virtual CString         asText( void ) const { return CString( m_bValue ? "true" : "false" ); }
+            virtual bool            asBoolean( bool bDefault = false ) const { (void)bDefault; return m_bValue; }
+            virtual int             asInt( int nDefault = 0 ) const { (void)nDefault; return m_bValue ? 1 : 0; }
+            virtual long long       asLong( long long llDefault = 0 ) const { (void)llDefault; return m_bValue ? 1 : 0; }
+            virtual double          asDouble( double dDefault = 0.0 ) const { (void)dDefault; return m_bValue ? 1.0 : 0.0; }
 
-        /**
-         * Method that will try to convert value of this node to a boolean value.
-         */
-        virtual bool asBoolean();
-        virtual bool asBoolean(bool defaultValue);
+            virtual bool            equals( const CJsonNode *pOther ) const;
+            virtual CJsonNode      *clone( void ) const { return new CBooleanNode( m_bValue ); }
+            virtual void            writeJson( std::string &strOut, int nIndent, int nLevel, bool bAsciiOnly ) const;
 
-        virtual CString	asText();
-
-        virtual bool equals(CJsonNode *o);
+        private:
+            bool                    m_bValue;
     };
-}
+} // namespace IASLib
 
 #endif // IASLIB_JSON_SUPPORT__
-
 #endif // IASLIB_BOOLEANNODE_H__
