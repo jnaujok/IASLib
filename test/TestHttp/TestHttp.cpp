@@ -13,11 +13,7 @@
 #include "NetworkServices/Entities/TextPlainEntity.h"
 #include "Logging/LogSink.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "../TestSockets.h"
 
 #include <atomic>
 #include <chrono>
@@ -361,7 +357,7 @@ static int connectTo( int port )
     addr.sin_addr.s_addr = htonl( INADDR_LOOPBACK );
     if ( connect( fd, (struct sockaddr *)&addr, sizeof( addr ) ) != 0 )
     {
-        close( fd );
+        closeSocket( fd );
         return -1;
     }
     return fd;
@@ -467,7 +463,7 @@ static void testBasicServer( void )
     CHECK( data.find( "HTTP/1.1 404 Not Found" ) != std::string::npos );
     CHECK( ! bClosed );
     CHECK( waitForClose( fd, 3000 ) );       // keep-alive timeout
-    close( fd );
+    closeSocket( fd );
 
         // Expect: 100-continue with a chunked body sent afterwards.
     fd = connectTo( port );
@@ -483,14 +479,14 @@ static void testBasicServer( void )
     data = readResponses( fd, 1, 2000, bClosed );
     CHECK( statusOf( data ) == 200 && headerOf( data, "Connection" ) == "close" );
     CHECK( waitForClose( fd, 2000 ) );
-    close( fd );
+    closeSocket( fd );
 
         // A request that never completes gets 408.
     fd = connectTo( port );
     sendAll( fd, "GET /hello HTTP/1.1\r\nHost: a\r\n" );
     data = readResponses( fd, 1, 3000, bClosed );
     CHECK( statusOf( data ) == 408 );
-    close( fd );
+    closeSocket( fd );
 
         // A smuggling attempt gets 400 and the connection is closed.
     fd = connectTo( port );
@@ -498,7 +494,7 @@ static void testBasicServer( void )
     data = readResponses( fd, 1, 2000, bClosed );
     CHECK( statusOf( data ) == 400 );
     CHECK( waitForClose( fd, 2000 ) );
-    close( fd );
+    closeSocket( fd );
 
         // Over the connection limit (2): the third connection gets 503.
     int a = connectTo( port );
@@ -507,7 +503,7 @@ static void testBasicServer( void )
     int c = connectTo( port );
     data = readResponses( c, 1, 2000, bClosed );
     CHECK( statusOf( data ) == 503 );
-    close( c );
+    closeSocket( c );
 
         // Stopping with idle connections open returns promptly.
     auto start = std::chrono::steady_clock::now();
@@ -516,8 +512,8 @@ static void testBasicServer( void )
     long elapsed = (long)std::chrono::duration_cast<std::chrono::milliseconds>( std::chrono::steady_clock::now() - start ).count();
     CHECK( elapsed < 2000 );
     CHECK( waitForClose( a, 1000 ) );
-    close( a );
-    close( b );
+    closeSocket( a );
+    closeSocket( b );
 
         // A port in use is reported.
     CBasicHttpServer first( 0 );

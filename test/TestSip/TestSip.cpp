@@ -18,11 +18,7 @@
 #include "Logging/LogSink.h"
 #include "Streams/StringStream.h"
 
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "../TestSockets.h"
 
 #include <atomic>
 #include <chrono>
@@ -817,7 +813,7 @@ static std::string udpExchange( int port, const std::string &message, int timeou
         all += "\n#####\n";
         received++;
     }
-    close( fd );
+    closeSocket( fd );
     return all;
 }
 
@@ -907,7 +903,7 @@ static void testBasicServer( void )
         CHECK( headerOf( responses[0], "Via" ).find( "received" ) == std::string::npos );
     }
     CHECK( received == "\r\n" );                                    // the keep-alive pong
-    close( fd );
+    closeSocket( fd );
 
         // A client that disconnects while the server writes must not kill the
         // process (SIGPIPE).
@@ -917,7 +913,7 @@ static void testBasicServer( void )
     dropped.callId = "tcp-call-2";
     std::string again = buildRequest( dropped );
     send( fd, again.data(), again.size(), MSG_NOSIGNAL );
-    close( fd );
+    closeSocket( fd );
     std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
 
     server.Stop();

@@ -685,13 +685,58 @@ static void testJulianDay( void )
  * Time zones
  ***********************************************************************/
 
-static void setZone( const char *tz )
+    // Sets the process's time zone. POSIX systems take IANA names; the
+    // Windows C library only takes rules like "UTC0", so there only UTC (and
+    // clearing TZ) work, and the checks that need a particular system zone are
+    // skipped. Returns false if the zone cannot be set.
+static bool setZone( const char *tz )
 {
+#ifdef IASLIB_WIN32__
+    if ( tz != NULL && strcmp( tz, "UTC" ) != 0 )
+        return false;
+    _putenv_s( "TZ", tz ? "UTC0" : "" );
+    _tzset();
+#else
     if ( tz )
         setenv( "TZ", tz, 1 );
     else
         unsetenv( "TZ" );
     tzset();
+#endif
+    return true;
+}
+
+static void skipSystemZone( void )
+{
+    printf( "  (skipped: this system's C library cannot use IANA zone names)\n" );
+}
+
+    // localtime_r, gmtime_r and timegm, which Windows spells differently.
+static bool localTime( time_t t, struct tm &out )
+{
+#ifdef IASLIB_WIN32__
+    return localtime_s( &out, &t ) == 0;
+#else
+    return localtime_r( &t, &out ) != NULL;
+#endif
+}
+
+static bool utcTime( time_t t, struct tm &out )
+{
+#ifdef IASLIB_WIN32__
+    return gmtime_s( &out, &t ) == 0;
+#else
+    return gmtime_r( &t, &out ) != NULL;
+#endif
+}
+
+static long long utcSeconds( struct tm &value )
+{
+#ifdef IASLIB_WIN32__
+    return (long long)_mkgmtime( &value );
+#else
+    return (long long)timegm( &value );
+#endif
 }
 
 static void testTimeZones( void )
@@ -747,7 +792,11 @@ static void testTimeZones( void )
     CHECK( gmt.IsGMT() && gmt.GetHour() == 17 );
 
     printf( "System time zone (America/Denver, Europe/London)\n" );
-    setZone( "America/Denver" );
+    if ( ! setZone( "America/Denver" ) )
+    {
+        skipSystemZone();
+        return;
+    }
 
     CDate summer( 2, 5, 2001, 12, 0, 0 );
     CHECK( summer.AssumeLocalTimeZone() && summer.GetUTCOffset() == -21600 && summer.GetHour() == 12 );
@@ -784,7 +833,11 @@ static void testUnknownZoneDefault( void )
     printf( "Unknown zones default to the system zone (America/Denver)\n" );
     const double ms = 1.0 / 86400000.0;
     CHECK( CDate::GetUnknownTimeZoneLocal() );
-    setZone( "America/Denver" );
+    if ( ! setZone( "America/Denver" ) )
+    {
+        skipSystemZone();
+        return;
+    }
 
     CDate noon( 1, 0, 2000, 12, 0, 0 );                 // 12:00 MST = 19:00 UT
     CHECK( ! noon.HasTimeZone() && noon.GetUTCOffset() == -25200 && noon.GetHour() == 12 );
@@ -824,8 +877,8 @@ static void testUnknownZoneDefault( void )
         setZone( zones[ z ] );
         time_t t = time( NULL );
         struct tm local, utc;
-        localtime_r( &t, &local );
-        gmtime_r( &t, &utc );
+        localTime( t, local );
+        utcTime( t, utc );
         CDate localDate( local.tm_mday, local.tm_mon, local.tm_year + 1900 );
         CDate utcDate( utc.tm_mday, utc.tm_mon, utc.tm_year + 1900 );
         if ( localDate.GetEpochDay() != utcDate.GetEpochDay() )
@@ -858,7 +911,11 @@ static void testDefaultTimezone( void )
 {
     printf( "SetDefaultTimezone\n" );
     const double ms = 1.0 / 86400000.0;
-    setZone( "America/Denver" );
+    if ( ! setZone( "America/Denver" ) )
+    {
+        skipSystemZone();
+        return;
+    }
     CHECK( CDate::IsDefaultTimezoneSystem() && CDate::GetDefaultTimezoneOffset() == 0 );
 
         // A fixed offset applies to dates without a zone.
@@ -922,9 +979,9 @@ static bool systemOffset( long long t, int &offset )
 {
     time_t tt = (time_t)t;
     struct tm local;
-    if ( localtime_r( &tt, &local ) == NULL )
+    if ( ! localTime( tt, local ) )
         return false;
-    offset = (int)( (long long)timegm( &local ) - t );
+    offset = (int)( utcSeconds( local ) - t );
     return true;
 }
 
@@ -983,7 +1040,12 @@ static void testNamedZones( void )
             printf( "  (%s not installed)\n", zones[ z ] );
             continue;
         }
-        setZone( zones[ z ] );
+        if ( ! setZone( zones[ z ] ) )
+        {
+            if ( z == 0 )
+                skipSystemZone();
+            continue;
+        }
         int mismatches = 0;
         long long first = 0;
         std::vector<long long> times;
@@ -1070,11 +1132,13 @@ static void testNamedZones( void )
     CHECK_EQ_STR( "paris overlap", iso( repeated, false ), "2021-10-31T02:30:00+02:00" );
         // The system zone resolves the repeated hour the same way (east of UTC,
         // where the summer offset is not found from the plain UTC reading).
-    setZone( "Europe/Paris" );
-    CDate systemRepeated( 31, 9, 2021, 2, 30, 0 );
-    CHECK( systemRepeated.GetUTCOffset() == 7200 );
-    CHECK( systemRepeated.AssumeLocalTimeZone() && systemRepeated.GetUTCOffset() == 7200 );
-    setZone( "UTC" );
+    if ( setZone( "Europe/Paris" ) )
+    {
+        CDate systemRepeated( 31, 9, 2021, 2, 30, 0 );
+        CHECK( systemRepeated.GetUTCOffset() == 7200 );
+        CHECK( systemRepeated.AssumeLocalTimeZone() && systemRepeated.GetUTCOffset() == 7200 );
+        setZone( "UTC" );
+    }
 
     CDate fixed( 1, 6, 2021, 12, 0, 0 );
     CHECK( fixed.AssumeTimeZone( "EST" ) && fixed.GetUTCOffset() == -18000 );
