@@ -1,84 +1,155 @@
 /**
  * HTTP Listener class
  *
- * This class handles incoming HTTP calls into the server, based
- * on a threaded task model.
+ * A thread task that serves one HTTP connection.
  *
  * Author: Jeffrey R. Naujok
- * Created: May 13, 2019
+ * Created: September 24, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/HTTP/HttpListener.h"
-#include "Logging/LogSink.h"
-#include "BaseTypes/Uuid.h"
-
 #include "NetworkServices/HTTP/HttpServer.h"
-#include "NetworkServices/HTTP/HttpRequest.h"
-#include "NetworkServices/HTTP/HttpResponse.h"
+#include "NetworkServices/HTTP/HttpUtils.h"
+#include "Logging/LogSink.h"
+
+#include <chrono>
+#include <string>
+#include <vector>
 
 namespace IASLib
 {
-    IMPLEMENT_OBJECT( CHttpListener, CGenericListener );
-
-    CHttpListener::CHttpListener( CHttpServer *server, CClientSocket *pSocket ) : CGenericListener( "HttpListener", pSocket )
+    namespace
     {
+        const int POLL_INTERVAL_MS = 200;
+
+        unsigned long long nowMs( void )
+        {
+            return (unsigned long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch() ).count();
+        }
     }
 
-    CHttpListener::CHttpListener( CHttpServer *server, CUDPSocket *pSocket, CInternetAddress &internetAddress, CString incomingData ) : CGenericListener( "HttpUDPListener", pSocket, internetAddress, incomingData )
+    IMPLEMENT_OBJECT( CHttpListener, CThreadTask );
+
+    CHttpListener::CHttpListener( CHttpServer *server, CSocket *pSocket ) :
+        CThreadTask( "HttpListener" ), m_internetAddress( pSocket->getInternetAddress() )
     {
+        m_pParentServer = server;
+        m_pSocket = pSocket;
     }
 
     CHttpListener::~CHttpListener( void )
     {
+        if ( m_pSocket )
+        {
+            m_pSocket->Close();
+            delete m_pSocket;
+            m_pSocket = NULL;
+        }
+    }
+
+    bool CHttpListener::sendData( const CString &data )
+    {
+        try
+        {
+            m_pSocket->Send( (const char *)data, (int)data.GetLength() );
+        }
+        catch ( ... )
+        {
+            return false;
+        }
+        return true;
     }
 
     IASLib::CObject *CHttpListener::Run( void )
     {
-        CUUID erid;
-        CHttpRequest *httpRequest = new CHttpRequest( m_internetAddress );
-        httpRequest->parse( *m_pInStream );
-        CHttpResponse *httpResponse = new CHttpResponse( *m_pOutStream, m_internetAddress );
-
-        addResponseHeaders( httpResponse );
-
-        CHttpHandler *httpHandler = m_pParentServer->GetHandler( httpRequest, erid );
-        if ( httpHandler )
+        if ( m_pParentServer == NULL || m_pSocket == NULL )
         {
-            CDate start;
-            httpHandler->process( httpRequest, httpResponse  );
-            CDate end;
-            int elapsed = end.Elapsed( start );
-            INFO_LOG( "f=%s cip=%s erid=%s uri=%s from=\"%s\" to=\"%s\" rtt=%d sc=%d", 
-                (const char *)httpHandler->getMethod(), 
-                (const char *)httpRequest->getInternetAddress().toStringWithPort(), 
-                (const char *)(erid.toString() ), 
-                (const char *)httpRequest->getUri(), 
-                (const char *)httpRequest->getHeaderValue("From"), 
-                (const char *)httpRequest->getHeaderValue( "To" ), 
-                elapsed,
-                httpResponse->getStatusCode() );
+            return NULL;
         }
-        else
+
+        std::string buffer;
+        std::vector<char> chunk( 16384 );
+        bool bSentContinue = false;
+        unsigned long long nIdleSince = nowMs();
+        unsigned long long nRequestStarted = 0;
+
+        while ( ! m_pParentServer->IsShutdown() )
         {
-            httpResponse->setStatus( 400, "Bad Request" );
+            CHttpFrame frame = CHttpUtils::frameRequest( buffer.data(), buffer.size(),
+                                                         m_pParentServer->getMaxHeaderSize(),
+                                                         m_pParentServer->getMaxBodySize() );
+
+            if ( frame.status == CHttpFrame::FAILED )
+            {
+                sendData( m_pParentServer->errorResponse( frame.errorStatus ) );
+                break;
+            }
+
+            if ( frame.status == CHttpFrame::COMPLETE )
+            {
+                buffer.erase( 0, frame.consumed );
+                bSentContinue = false;
+                nRequestStarted = 0;
+
+                bool bKeepAlive = false;
+                CString response = m_pParentServer->handleRequest( CString( frame.message.data(), frame.message.size() ),
+                                                                   m_internetAddress, bKeepAlive );
+                if ( ! sendData( response ) || ! bKeepAlive )
+                {
+                    break;
+                }
+                nIdleSince = nowMs();
+                continue;   // There may be another (pipelined) request buffered.
+            }
+
+                // More data is needed.
+            if ( frame.expectContinue && ! bSentContinue )
+            {
+                    // RFC 9110 10.1.1: let the client send the body.
+                bSentContinue = true;
+                if ( ! sendData( CString( "HTTP/1.1 100 Continue\r\n\r\n" ) ) )
+                {
+                    break;
+                }
+            }
+
+            if ( ! buffer.empty() && nRequestStarted == 0 )
+            {
+                nRequestStarted = nowMs();
+            }
+
+            int nRead = m_pSocket->ReadWithTimeout( chunk.data(), (int)chunk.size(), POLL_INTERVAL_MS );
+            if ( nRead == CSocket::READ_TIMEOUT )
+            {
+                unsigned long long nNow = nowMs();
+                if ( buffer.empty() )
+                {
+                    if ( (long long)( nNow - nIdleSince ) >= m_pParentServer->getKeepAliveTimeout() )
+                    {
+                        break;      // Idle connection: close quietly.
+                    }
+                }
+                else if ( (long long)( nNow - nRequestStarted ) >= m_pParentServer->getRequestTimeout() )
+                {
+                    sendData( m_pParentServer->errorResponse( 408 ) );
+                    break;
+                }
+                continue;
+            }
+            if ( nRead <= 0 )
+            {
+                break;      // Closed by the client, or an error.
+            }
+
+            buffer.append( chunk.data(), (size_t)nRead );
         }
-        
-        httpResponse->toStream( m_pOutStream );
 
-        delete httpRequest;
-        delete httpHandler;
-
-        return httpResponse;
+            // The destructor closes the socket.
+        return NULL;
     }
-
-    void CHttpListener::addResponseHeaders( CGenericResponse *response )
-    {
-        response->addHeader( "x-powered-by", "IASLib Core HTTP Library 1.0" );
-    }
-
-
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__

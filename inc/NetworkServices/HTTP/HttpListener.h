@@ -1,11 +1,16 @@
 /**
  * HTTP Listener class
  *
- * This class handles incoming HTTP calls into the server, based
- * on a threaded task model.
+ * A thread task that serves one HTTP connection: it reads requests,
+ * frames them (Content-Length or chunked, with the server's size limits),
+ * sends "100 Continue" when a client asks for it, passes each request to
+ * the server, writes the responses in order, and keeps the connection open
+ * between requests until the client or server closes it, it is idle for
+ * the keep-alive timeout, or the server stops. A request that is not
+ * complete within the request timeout gets 408.
  *
  * Author: Jeffrey R. Naujok
- * Created: December 29, 2019
+ * Created: September 24, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
@@ -13,29 +18,34 @@
 #ifndef HTTPLISTENER_H__
 #define HTTPLISTENER_H__
 
-#include "NetworkServices/GenericListener.h"
+#include "Threading/ThreadTask.h"
+#include "Sockets/Socket.h"
+#include "Sockets/InternetAddress.h"
 
 namespace IASLib
 {
-    // Forward definition for wiring parent server
     class CHttpServer;
 
-    class CHttpListener : public CGenericListener
+    class CHttpListener : public CThreadTask
     {
         protected:
-            CHttpServer *m_pParentServer; 
+            CHttpServer        *m_pParentServer;
+            CSocket            *m_pSocket;
+            CInternetAddress    m_internetAddress;
+
         public:
             DEFINE_OBJECT( CHttpListener );
 
-            CHttpListener( CHttpServer *server, CClientSocket *pSocket );
-            CHttpListener( CHttpServer *server, CUDPSocket *pUdpSocket, CInternetAddress &internetAddress, CString incomingData );
+                // Takes ownership of the connected socket.
+            CHttpListener( CHttpServer *server, CSocket *pSocket );
 
             virtual ~CHttpListener( void );
 
+                // Serves the connection until it closes. Returns NULL.
             virtual CObject *Run( void );
 
-            // Override of pure virtual
-            virtual void addResponseHeaders( CGenericResponse *response );
+        protected:
+            virtual bool sendData( const CString &data );
     };
 } // namespace IASLib
 

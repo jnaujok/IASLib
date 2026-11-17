@@ -1,17 +1,17 @@
 /**
- * HTTP Option Handler class
+ * HTTP Options Handler class
  *
- * This class handles OPTION requests for the HTTP server.
+ * Answers OPTIONS with 200 OK and an Allow header listing the methods of
+ * all of the server's handlers (RFC 9110 9.3.7).
  *
  * Author: Jeffrey R. Naujok
- * Created: October 2, 2019
+ * Created: October 4, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
 
-#include "NetworkServices/Entities/NullEntity.h"
 #include "NetworkServices/HTTP/Handlers/HttpOptionsHandler.h"
-#include "Logging/LogSink.h"
+#include "NetworkServices/HTTP/HttpServer.h"
 
 namespace IASLib
 {
@@ -19,33 +19,21 @@ namespace IASLib
 
     CHttpOptionsHandler::CHttpOptionsHandler( CString uri, CString version ) : CHttpHandler( uri, version )
     {
-
     }
 
     CHttpOptionsHandler::~CHttpOptionsHandler( void )
     {
-
     }
 
     bool CHttpOptionsHandler::process( CHttpRequest *request, CHttpResponse *response )
     {
-        INFO_LOG( (const char *)request->toString() );
-        CDate now;
-
-        response->addHeader( "Date", now.FormatDate( CDate::DF_RFC7231 ) );
-        response->addHeader( "X-Powered-By", "IASLib HTTP Core 1.0" );
-
-        // Default is to mark all URIs as Not Found
-        response->setStatus( 404, "NOT FOUND" );
-
-        CEntity *entity = new CNullEntity();
-
-        // Set entity
-        response->SetEntity( entity );
-
+        response->setStatus( 200 );
+        if ( m_pServer )
+        {
+            response->addHeader( "Allow", m_pServer->getAllowedList() );
+        }
         return true;
     }
-    
 }
 
 #endif // IASLIB_NETWORKING__

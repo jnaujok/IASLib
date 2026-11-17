@@ -1,9 +1,10 @@
 /**
  *  HTTP Response Class
  *
- *      This class provides an interface for retrieving the data from
- * an HTTP request. The response is used by the HTTP Client to return
- * data from the response to the calling program.
+ *      An HTTP/1.1 response: status, headers and body. When serialized,
+ * Content-Length is set from the body, except for 1xx, 204 and 304
+ * responses (which have no body), and a response to HEAD keeps its
+ * Content-Length but omits the body (RFC 9110 9.3.2).
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 9/07/2006
@@ -29,6 +30,8 @@ namespace IASLib
     {
         protected:
             CInternetAddress    m_remoteAddress;
+            bool                m_bHeadResponse;
+
         public:
                                 DEFINE_OBJECT( CHttpResponse );
 
@@ -36,6 +39,15 @@ namespace IASLib
                                 CHttpResponse( CStream &oStream, CInternetAddress &internetAddress );
 
             virtual            ~CHttpResponse( void );
+
+                // Sets the status with its standard reason phrase.
+            virtual void        setStatus( int nCode );
+            virtual void        setStatus( int nCode, const char *desc ) { CGenericResponse::setStatus( nCode, desc ); }
+
+                // Marks this as the response to a HEAD request: the body is not
+                // sent, but Content-Length still describes it.
+            virtual void        setHeadResponse( bool bHead ) { m_bHeadResponse = bHead; }
+            virtual bool        isHeadResponse( void ) { return m_bHeadResponse; }
 
             virtual CString     toString( void );
             virtual void        toStream( CStream *oStream );

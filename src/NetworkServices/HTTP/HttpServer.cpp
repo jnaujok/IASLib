@@ -1,27 +1,22 @@
 /**
  *  HTTP Server Class
  *
- *      This class provides an interface for hosting an HTTP
- * server. It implements all the basic functionality, but 
- * allows any of the basic commands to be overridden by a 
- * derived class.
- *      This class works by creating a thread pool for doing the
- * actual work of the class. When in practical use, the standard
- * HTTP Handler Factory can be overridden, and unique handlers
- * assigned for any function or URI. 
+ *      The protocol core of an HTTP/1.1 server. See HttpServer.h.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 1/16/2007
- *	Log:
- *	  $LOG$
+ *	Created: September 24, 2019
  *
- * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
 #ifdef IASLIB_NETWORKING__
 
 #include "HttpServer.h"
+#include "NetworkServices/HTTP/HttpUtils.h"
+#include "Logging/LogSink.h"
+
+#include <cctype>
 
 namespace IASLib
 {
@@ -29,17 +24,30 @@ namespace IASLib
 
     CHttpServer::CHttpServer( int nHttpPort, bool bSecure ) : CGenericServer(), m_aHandlerFactories()
     {
-        m_bUseHTTP11 = true;
-        m_bUseKeepalive = true;
+        init();
+        m_nPort = nHttpPort;
         m_bSecure = bSecure;
     }
 
-        // Bind to a port on a specific interface
     CHttpServer::CHttpServer( const char *boundInterface, int nHttpPort, bool bSecure ) : CGenericServer(), m_aHandlerFactories()
+    {
+        init();
+        m_nPort = nHttpPort;
+        m_bSecure = bSecure;
+        m_strBindAddress = boundInterface ? boundInterface : "";
+    }
+
+    void CHttpServer::init( void )
     {
         m_bUseHTTP11 = true;
         m_bUseKeepalive = true;
-        m_bSecure = bSecure;
+        m_bSecure = false;
+        m_nPort = 80;
+        m_strServerName = "IASLib/2.0";
+        m_nMaxHeaderSize = 64 * 1024;
+        m_nMaxBodySize = 10 * 1024 * 1024;
+        m_nKeepAliveTimeoutMs = 30000;
+        m_nRequestTimeoutMs = 30000;
     }
 
     CHttpServer::~CHttpServer( void )
@@ -49,31 +57,36 @@ namespace IASLib
 
     void *CHttpServer::Run( void )
     {
-
+            // Intentionally empty: concrete servers accept the connections.
+        return NULL;
     }
 
     CHttpHandler *CHttpServer::GetHandler( CHttpRequest *request, CUUID erid )
     {
-        CHttpHandlerFactory *pFactory = NULL;
-        CHttpHandler *pRetVal = NULL;
+        return GetHandler( request->getRequestType(), request, erid );
+    }
 
+    CHttpHandler *CHttpServer::GetHandler( const CString &method, CHttpRequest *request, CUUID erid )
+    {
         for ( size_t nX = 0; nX < m_aHandlerFactories.GetCount(); nX++ )
         {
-            pFactory = (CHttpHandlerFactory *)m_aHandlerFactories[ nX ];
-            pRetVal = pFactory->getHandler( request, erid );
-
+            CHttpHandlerFactory *pFactory = (CHttpHandlerFactory *)m_aHandlerFactories[ nX ];
+            CHttpHandler *pRetVal = pFactory->getHandler( method, request, erid );
             if ( pRetVal )
             {
-                break;
+                pRetVal->setServer( this );
+                return pRetVal;
             }
         }
-
-        return pRetVal;
+        return NULL;
     }
 
     void CHttpServer::AddHandlerFactory( CHttpHandlerFactory *pFactory )
     {
-        m_aHandlerFactories.Prepend( pFactory );
+        if ( pFactory )
+        {
+            m_aHandlerFactories.Prepend( pFactory );
+        }
     }
 
     void CHttpServer::RemoveHandlerFactory( CHttpHandlerFactory *pFactory )
@@ -88,6 +101,240 @@ namespace IASLib
         }
     }
 
+    CString CHttpServer::getAllowedList( void )
+    {
+        CStringArray all;
+        bool bHasGet = false;
+        bool bHasHead = false;
+
+        for ( size_t nX = 0; nX < m_aHandlerFactories.GetCount(); nX++ )
+        {
+            CStringArray methods = ((CHttpHandlerFactory *)m_aHandlerFactories[ nX ])->getMethods();
+            for ( size_t nY = 0; nY < methods.Count(); nY++ )
+            {
+                bool bFound = false;
+                for ( size_t nZ = 0; nZ < all.Count(); nZ++ )
+                {
+                    if ( all[ nZ ] == methods[ nY ] )
+                    {
+                        bFound = true;
+                        break;
+                    }
+                }
+                if ( ! bFound )
+                {
+                    all.Append( methods[ nY ] );
+                    if ( methods[ nY ] == "GET" ) bHasGet = true;
+                    if ( methods[ nY ] == "HEAD" ) bHasHead = true;
+                }
+            }
+        }
+
+            // HEAD is always available where GET is.
+        if ( bHasGet && ! bHasHead )
+        {
+            all.Append( "HEAD" );
+        }
+
+        CString retVal;
+        for ( size_t nX = 0; nX < all.Count(); nX++ )
+        {
+            if ( nX > 0 )
+                retVal += ", ";
+            retVal += all[ nX ];
+        }
+        return retVal;
+    }
+
+    void CHttpServer::addStandardHeaders( CHttpResponse *response, bool keepAlive, bool http10 )
+    {
+            // RFC 9110 6.6.1: an origin server with a clock must send Date.
+        response->addHeader( "Date", CHttpUtils::httpDate() );
+        if ( m_strServerName.GetLength() > 0 && ! response->hasHeader( "Server" ) )
+        {
+            response->addHeader( "Server", m_strServerName );
+        }
+        if ( ! keepAlive )
+        {
+            response->addHeader( "Connection", "close" );
+        }
+        else if ( http10 )
+        {
+            response->addHeader( "Connection", "keep-alive" );
+        }
+    }
+
+    CString CHttpServer::errorResponse( int nStatus )
+    {
+        CHttpResponse response;
+        response.setStatus( nStatus );
+        addStandardHeaders( &response, false, false );
+        return response.toString();
+    }
+
+    CString CHttpServer::handleRequest( const CString &message, const CInternetAddress &source, bool &keepAlive )
+    {
+        keepAlive = false;
+
+        CHttpRequest request( source );
+        CHttpResponse response;
+        bool bParsed = false;
+
+        try
+        {
+            bParsed = request.parse( message );
+            processRequest( &request, bParsed, &response, keepAlive );
+        }
+        catch ( ... )
+        {
+            ERROR_LOG( "Unexpected exception while processing an HTTP request." );
+            keepAlive = false;
+            return errorResponse( 500 );
+        }
+
+        return response.toString();
+    }
+
+    void CHttpServer::processRequest( CHttpRequest *request, bool parseOk, CHttpResponse *response, bool &keepAlive )
+    {
+        keepAlive = false;
+        bool bHttp10 = false;
+
+        if ( ! parseOk )
+        {
+            response->setStatus( 400 );
+            addStandardHeaders( response, false, false );
+            return;
+        }
+
+            // HTTP-version = "HTTP/" DIGIT "." DIGIT (RFC 9112 2.3)
+        CString version = request->getVersion();
+        if ( version.GetLength() != 8 || version.Substring( 0, 5 ) != "HTTP/" || ! isdigit( (unsigned char)version[5] ) ||
+             version[6] != '.' || ! isdigit( (unsigned char)version[7] ) )
+        {
+            response->setStatus( 400 );
+            addStandardHeaders( response, false, false );
+            return;
+        }
+        if ( version[5] != '1' )
+        {
+            response->setStatus( 505 );
+            addStandardHeaders( response, false, false );
+            return;
+        }
+        bHttp10 = ( version[7] == '0' );
+
+            // Connection persistence (RFC 9112 9.3).
+        CString connection;
+        CStringArray connectionValues = request->getHeaderValues( "Connection" );
+        for ( size_t nX = 0; nX < connectionValues.Count(); nX++ )
+        {
+            connection += ",";
+            connection += connectionValues[ nX ];
+        }
+        connection.ToLowerCase();
+        connection.Remove( ' ' );
+        connection.Remove( '\t' );
+        connection += ",";
+        bool bClose = ( connection.IndexOf( ",close," ) != NOT_FOUND );
+        bool bKeepAliveToken = ( connection.IndexOf( ",keep-alive," ) != NOT_FOUND );
+        keepAlive = m_bUseKeepalive && ! bClose && ( ! bHttp10 || bKeepAliveToken );
+
+            // RFC 9112 3.2: HTTP/1.1 requests need exactly one Host.
+        CStringArray hosts = request->getHeaderValues( "Host" );
+        if ( ( ! bHttp10 && hosts.Count() != 1 ) || hosts.Count() > 1 )
+        {
+            response->setStatus( 400 );
+            keepAlive = false;
+            addStandardHeaders( response, false, bHttp10 );
+            return;
+        }
+
+        CString expect = request->getHeaderValue( "Expect" );
+        expect.Trim();
+        expect.ToLowerCase();
+        if ( expect.GetLength() > 0 && expect != "100-continue" )
+        {
+            response->setStatus( 417 );
+            addStandardHeaders( response, keepAlive, bHttp10 );
+            return;
+        }
+
+        CString method = request->getRequestType();
+        bool bHead = ( method == "HEAD" );
+        response->setHeadResponse( bHead );
+
+        CUUID erid;
+
+            // "OPTIONS *" asks about the server itself.
+        if ( method == "OPTIONS" && request->getUri() == "*" )
+        {
+            response->setStatus( 200 );
+            response->addHeader( "Allow", getAllowedList() );
+            addStandardHeaders( response, keepAlive, bHttp10 );
+            return;
+        }
+
+        CHttpHandler *handler = GetHandler( method, request, erid );
+        if ( handler == NULL && bHead )
+        {
+            handler = GetHandler( CString( "GET" ), request, erid );
+        }
+
+        if ( handler == NULL )
+        {
+            if ( CHttpUtils::isKnownMethod( method ) )
+            {
+                response->setStatus( 405 );
+                response->addHeader( "Allow", getAllowedList() );
+            }
+            else
+            {
+                response->setStatus( 501 );
+            }
+        }
+        else
+        {
+            response->setStatus( 500 );
+            bool bProcessed = false;
+            try
+            {
+                bProcessed = handler->process( request, response );
+            }
+            catch ( ... )
+            {
+                ERROR_LOG( "Exception thrown by the %.32s handler.", (const char *)method );
+                bProcessed = false;
+            }
+            int nStatus = response->getStatusCode();
+            if ( ! bProcessed || nStatus < 100 || nStatus > 599 )
+            {
+                response->setStatus( 500 );
+            }
+            delete handler;
+        }
+
+            // A handler may ask for the connection to be closed.
+        CString responseConnection = response->getHeaderValue( "Connection" );
+        responseConnection.ToLowerCase();
+        if ( responseConnection.IndexOf( "close" ) != NOT_FOUND )
+        {
+            keepAlive = false;
+        }
+        response->removeHeader( "Connection" );
+
+        addStandardHeaders( response, keepAlive, bHttp10 );
+
+        {
+            CInternetAddress from( request->getInternetAddress() );
+            INFO_LOG( "f=%.16s cip=%s erid=%s uri=\"%.256s\" sc=%d",
+                      (const char *)method,
+                      (const char *)from.toStringWithPort(),
+                      (const char *)erid.toString(),
+                      (const char *)request->getUri(),
+                      response->getStatusCode() );
+        }
+    }
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__

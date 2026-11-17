@@ -1,15 +1,11 @@
 /**
  * HTTP Handler Factory class
  *
- * This class provides a factory for generating HTTP Handlers. 
- * 
- * Factories have handlers registered to them, and then they are added
- * to the HTTP Server. Once added to the server, they override any
- * factories previously added, allowing a chain of handlers to deal 
- * with any particular request.
+ * Holds handler prototypes by method and creates a handler for each
+ * request. A server consults its factories in turn, newest first.
  *
  * Author: Jeffrey R. Naujok
- * Created: December 29, 2019
+ * Created: October 4, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
@@ -20,6 +16,8 @@
 #include "NetworkServices/HTTP/Handlers/HttpHandler.h"
 #include "NetworkServices/HTTP/HttpRequest.h"
 #include "NetworkServices/HTTP/HttpResponse.h"
+#include "Collections/Array.h"
+#include "Collections/StringArray.h"
 #include "BaseTypes/Uuid.h"
 
 namespace IASLib
@@ -27,7 +25,7 @@ namespace IASLib
     class CHttpHandlerFactory : public CObject
     {
         protected:
-            CHash           m_handlerMap;
+            CArray          m_aHandlers;    // Prototypes, owned, in registration order.
 
         public:
             DEFINE_OBJECT( CHttpHandlerFactory );
@@ -36,16 +34,25 @@ namespace IASLib
 
             virtual ~CHttpHandlerFactory( void );
 
+                // Creates a handler for the request's method, or NULL. The caller
+                // owns the result.
             virtual CHttpHandler *getHandler( CHttpRequest *request, CUUID erid );
-            virtual void registerHandler( CHttpHandler *handlerFactory );
-            virtual bool isValidHandler( const char *method ); 
+                // Creates a handler for the given method instead of the
+                // request's (used to answer HEAD with the GET handler).
+            virtual CHttpHandler *getHandler( const CString &method, CHttpRequest *request, CUUID erid );
 
-            static CString getAllowedList( void );
+                // Takes ownership of the prototype. A later registration for the
+                // same method replaces the earlier one.
+            virtual void registerHandler( CHttpHandler *handlerPrototype );
+
+                // HTTP methods are case-sensitive (RFC 9110 9.1).
+            virtual bool isValidHandler( const char *method );
+
+            virtual CStringArray getMethods( void );
+            virtual CString getAllowedList( void );
     };
-
 } // namespace IASLib
 
 #endif // IASLIB_HTTPHANDLERFACTORY_H__
 
 #endif // IASLIB_NETWORKING__
-

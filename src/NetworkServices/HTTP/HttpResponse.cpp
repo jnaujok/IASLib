@@ -1,14 +1,17 @@
 /**
- * HTTP Response class
+ *  HTTP Response Class
  *
- * This class encapsulates an HTTP based response.
+ *	Author: Jeffrey R. Naujok
+ *	Created: 9/07/2006
  *
- * Author: Jeffrey R. Naujok
- * Created: December 28, 2019
- *
+ * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
  */
 
+#ifdef IASLIB_NETWORKING__
+
 #include "NetworkServices/HTTP/HttpResponse.h"
+#include "NetworkServices/HTTP/HttpUtils.h"
 
 namespace IASLib
 {
@@ -16,49 +19,64 @@ namespace IASLib
 
     CHttpResponse::CHttpResponse( void ) : CGenericResponse(), m_remoteAddress()
     {
-
+        m_bHeadResponse = false;
     }
 
-    CHttpResponse::CHttpResponse( CStream &responseStream, CInternetAddress &internetAddress ) : CGenericResponse( responseStream )
+    CHttpResponse::CHttpResponse( CStream &responseStream, CInternetAddress &internetAddress ) : CGenericResponse( responseStream ), m_remoteAddress( internetAddress )
     {
+        m_bHeadResponse = false;
     }
 
     CHttpResponse::~CHttpResponse( void )
     {
-        if ( m_body )
-            delete m_body;
-        m_body = NULL;
+        // The base class deletes the body.
     }
 
- 
+    void CHttpResponse::setStatus( int nCode )
+    {
+        CGenericResponse::setStatus( nCode, CHttpUtils::reasonPhrase( nCode ) );
+    }
+
     void CHttpResponse::toStream( CStream *pStream )
     {
-        CString statusLine;
-        statusLine.Format( "HTTP/1.1 %d %s\r\n", (int)m_nStatusCode, (const char *)m_strStatusDescription );
-        pStream->PutLine( statusLine );
-
-        pStream->PutLine( this->m_headers.toString() );
-        pStream->PutLine( "\r\n" );
-        if ( m_body )
-        {
-            pStream->PutLine( this->m_body->toString() );
-        }
+        CString message = toString();
+        pStream->PutBuffer( (const char *)message, (int)message.GetLength() );
     }
 
     CString CHttpResponse::toString( void )
     {
-        CString strRetVal;
-        CString statusLine;
-        statusLine.Format( "HTTP/1.1 %d %s\n", (int)m_nStatusCode, (const char *)m_strStatusDescription );
-        strRetVal += statusLine;
+        CString statusLine = "HTTP/1.1 ";
+        statusLine += CString::FormatString( "%d", (int)m_nStatusCode );
+        statusLine += " ";
+        statusLine += m_strStatusDescription;
+        statusLine += "\r\n";
 
-        strRetVal += this->m_headers.toString();
-        strRetVal += "\n";
-        if ( m_body )
+            // RFC 9110 6.4.1 / 8.6: 1xx and 204 responses have no body and no
+            // Content-Length; a 304 has no body.
+        if ( ( m_nStatusCode >= 100 && m_nStatusCode < 200 ) || m_nStatusCode == 204 || m_nStatusCode == 304 )
         {
-            strRetVal += this->m_body->toString();
+            if ( m_nStatusCode != 304 )
+            {
+                m_headers.removeHeader( "Content-Length" );
+            }
+            CString retVal = statusLine;
+            retVal += m_headers.toString();
+            retVal += "\r\n";
+            return retVal;
         }
-        
-        return strRetVal;
+
+        CString message = serialize( statusLine );
+
+        if ( m_bHeadResponse )
+        {
+            size_t nEnd = message.IndexOf( "\r\n\r\n" );
+            if ( nEnd != NOT_FOUND )
+            {
+                message = message.Substring( 0, (int)( nEnd + 4 ) );
+            }
+        }
+        return message;
     }
 } // namespace IASLib
+
+#endif // IASLIB_NETWORKING__

@@ -33,31 +33,34 @@ namespace IASLib
             static const char *METHOD_TRACE;
             static const char *METHOD_DELETE;
 
-        protected:
-            CString         m_strRemoteHost;
-            int             m_nPort;
-            bool            m_bSecure;
-
         public:
-                            CHttpRequest( CInternetAddress &internetAddress );
+                                // An incoming request; fill it with parse().
+                            CHttpRequest( const CInternetAddress &internetAddress );
+                                // An outgoing request.
 	                        CHttpRequest( const char *method, const char *uri );
 	        virtual        ~CHttpRequest( void );
 
                             DEFINE_OBJECT( CHttpRequest )
 
-                    // GET, PUT, HEAD, POST, OPTIONS, TRACE, DELETE
-            virtual void    setRequestType( const char *requestType );
-            virtual CString getRequestType( void );
+            CString         getTransferProtocol( void ) { return getVersion(); }
 
-            CString         getTransferProtocol( void ) { return CString("HTTP/1.1"); }
+                // The path of the request target, without the query string. For
+                // an absolute-form target ("http://host/path") the scheme and
+                // authority are removed.
+            virtual CString getPath( void );
+                // The query string (after '?'), or "".
+            virtual CString getQuery( void );
 
             virtual CString toString( void );
             virtual void    toStream( CStream *pStream );
 
             virtual CHeaderList *getHeaderList( CStream &requestStream ) { return new CHttpHeaderList( requestStream ); }
+
+        protected:
+            virtual CHeaderList *newHeaderList( void ) { return new CHttpHeaderList(); }
     };
 } // namespace IASLib
 
-#endif // IASLIB_HTTPCLIENT_H__
+#endif // IASLIB_HTTPREQUEST_H__
 
 #endif // IASLIB_NETWORKING__

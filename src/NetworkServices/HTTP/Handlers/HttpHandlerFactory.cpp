@@ -1,68 +1,108 @@
 /**
  * HTTP Handler Factory class
  *
- * This class provides a factory for generating HTTP Handlers. 
- * 
- * Factories have handlers registered to them, and then they are added
- * to the HTTP Server. Once added to the server, they override any
- * factories previously added, allowing a chain of handlers to deal 
- * with any particular request.
- *
  * Author: Jeffrey R. Naujok
- * Created: December 29, 2019
+ * Created: October 4, 2019
  */
 
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/HTTP/Handlers/HttpHandlerFactory.h"
-#include "Logging/LogSink.h"
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CHttpHandlerFactory, CObject );
 
-    CHttpHandlerFactory::CHttpHandlerFactory( ) : m_handlerMap( CHash::SMALL )
+    CHttpHandlerFactory::CHttpHandlerFactory( ) : m_aHandlers()
     {
-
     }
 
     CHttpHandlerFactory::~CHttpHandlerFactory( void )
     {
-        m_handlerMap.DeleteAll();
+        m_aHandlers.DeleteAll();
     }
 
     CHttpHandler *CHttpHandlerFactory::getHandler( CHttpRequest *request, CUUID erid )
     {
-        CHttpHandler *pRetVal = NULL;
-
-        DEBUG_LOG( "Getting Handler request=[%s] URL=[%s] ip=[%s] erid=[%s]", 
-                (const char *)request->getRequestType(), 
-                (const char *)request->getUri(), 
-                (const char *)request->getInternetAddress().toStringWithPort(),
-                (const char *)erid.toString() );
-
-        if ( m_handlerMap.HasKey( request->getRequestType() ) )
-        {
-            CHttpHandler *temp = (CHttpHandler *)m_handlerMap.Get( request->getRequestType() );
-            pRetVal = temp->generateHandler( request->getUri(), request->getVersion() );
-        }
-
-        return pRetVal;
+        return getHandler( request->getRequestType(), request, erid );
     }
 
-    void CHttpHandlerFactory::registerHandler( CHttpHandler *handlerFactory )
+    CHttpHandler *CHttpHandlerFactory::getHandler( const CString &method, CHttpRequest *request, CUUID erid )
     {
-        m_handlerMap.Push( handlerFactory->getMethod(), handlerFactory );
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
+        {
+            CHttpHandler *prototype = (CHttpHandler *)m_aHandlers.Get( nX );
+            if ( prototype->getMethod() == method )
+            {
+                CHttpHandler *pRetVal = prototype->generateHandler( request->getUri(), request->getVersion() );
+                if ( pRetVal )
+                {
+                    pRetVal->setErid( erid );
+                }
+                return pRetVal;
+            }
+        }
+        return NULL;
+    }
+
+    void CHttpHandlerFactory::registerHandler( CHttpHandler *handlerPrototype )
+    {
+        if ( handlerPrototype == NULL )
+        {
+            return;
+        }
+
+        CString method = handlerPrototype->getMethod();
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
+        {
+            CHttpHandler *existing = (CHttpHandler *)m_aHandlers.Get( nX );
+            if ( existing->getMethod() == method )
+            {
+                m_aHandlers.Set( nX, handlerPrototype );
+                delete existing;
+                return;
+            }
+        }
+        m_aHandlers.Append( handlerPrototype );
     }
 
     bool CHttpHandlerFactory::isValidHandler( const char *method )
     {
-        CString strMethod(method);
-        strMethod.ToUpperCase();
-        return m_handlerMap.HasKey( strMethod );
+        CString strMethod( method );
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
+        {
+            if ( ((CHttpHandler *)m_aHandlers.Get( nX ))->getMethod() == strMethod )
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
+    CStringArray CHttpHandlerFactory::getMethods( void )
+    {
+        CStringArray retVal;
+        for ( size_t nX = 0; nX < m_aHandlers.Count(); nX++ )
+        {
+            retVal.Append( ((CHttpHandler *)m_aHandlers.Get( nX ))->getMethod() );
+        }
+        return retVal;
+    }
+
+    CString CHttpHandlerFactory::getAllowedList( void )
+    {
+        CStringArray methods = getMethods();
+        CString retVal;
+        for ( size_t nX = 0; nX < methods.Count(); nX++ )
+        {
+            if ( nX > 0 )
+            {
+                retVal += ", ";
+            }
+            retVal += methods[ nX ];
+        }
+        return retVal;
+    }
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__
-
