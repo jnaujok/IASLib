@@ -39,6 +39,17 @@
 
 #include "../BaseTypes/String_.h"
 #include "SocketConfig.h"
+
+    // Rebinding a listening address. On POSIX systems SO_REUSEADDR only lets
+    // a restarted server bind while old connections linger in TIME_WAIT; on
+    // Windows it would let another socket take over a port in use, so the
+    // exclusive option is used there instead (a second server then fails to
+    // bind, as on POSIX).
+#ifdef IASLIB_WIN32__
+    #define IASLIB_REUSE_ADDRESS SO_EXCLUSIVEADDRUSE
+#else
+    #define IASLIB_REUSE_ADDRESS SO_REUSEADDR
+#endif
 namespace IASLib
 {
     // Forward definition

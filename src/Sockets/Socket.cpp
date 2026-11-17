@@ -191,9 +191,11 @@ namespace IASLib
             temp = config.isLinger() ? 1:0;
             setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, (const char *)&temp, sizeof(int));
             temp = config.isReuseSocket() ? 1:0;
-    #ifdef SO_REUSEPORT
+            // Sharing the port; not offered on Windows, where it would let
+            // other sockets take it over.
+    #if defined( SO_REUSEPORT )
             setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEPORT, (const char *)&temp, sizeof(int));
-    #else
+    #elif ! defined( IASLIB_WIN32__ )
             setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&temp, sizeof(int));
     #endif
         }
@@ -240,9 +242,9 @@ namespace IASLib
                 // We have to set the re-use address so that we can re-start the server without waiting
                 // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
     #ifndef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
     #else
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (const char *)&nOption , sizeof( nOption )  );
     #endif
 
             int temp = config.getSendBufferSize();
@@ -285,9 +287,9 @@ namespace IASLib
                     // go off on a quest to use all of the CPU. So, we un-do the option here.
                 nOption = 0;
     #ifdef IASLIB_WIN32__
-                setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&nOption , sizeof( nOption )  );
+                setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (char *)&nOption , sizeof( nOption )  );
     #else
-                setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+                setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
     #endif
             }
             struct in_addr addrConvert;
@@ -430,9 +432,9 @@ namespace IASLib
                 // We have to set the re-use address so that we can re-start the server without waiting
                 // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
     #ifndef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
     #else
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (const char *)&nOption , sizeof( nOption )  );
     #endif
 
             listen_addr.sin_family = AF_INET;           // Listen for Internet (TCP/IP) connections
@@ -467,9 +469,9 @@ namespace IASLib
                     // go off on a quest to use all of the CPU. So, we un-do the option here.
                 nOption = 0;
     #ifdef IASLIB_WIN32__
-                setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&nOption , sizeof( nOption )  );
+                setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (char *)&nOption , sizeof( nOption )  );
     #else
-                setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+                setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
     #endif
             }
             struct in_addr addrConvert;

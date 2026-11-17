@@ -55,9 +55,9 @@ namespace IASLib
                 // We have to set the re-use address so that we can re-start the server without waiting
                 // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
     #ifndef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
     #else
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (const char *)&nOption , sizeof( nOption )  );
     #endif
 
             listen_addr.sin_family = AF_INET;           // Listen for Internet (TCP/IP) connections
@@ -90,9 +90,9 @@ namespace IASLib
                 // go off on a quest to use all of the CPU. So, we un-do the option here.
             nOption = 0;
     #ifdef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (char *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (char *)&nOption , sizeof( nOption )  );
     #else
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
     #endif
             m_strAddress = m_addrIPAddress->toStringWithPort();
         }
@@ -124,9 +124,9 @@ namespace IASLib
                 // We have to set the re-use address so that we can re-start the server without waiting
                 // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
     #ifndef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (void *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
     #else
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&nOption , sizeof( nOption )  );
+            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (const char *)&nOption , sizeof( nOption )  );
     #endif
             if ( getsockname( m_hSocket, (sockaddr *)&listen_addr, &addrLen ) != 0)
             {

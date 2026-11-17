@@ -113,10 +113,16 @@ static std::string hist( const CDate &d )
     // Every day from 1000 BC to AD 9999 in the historical calendar: consecutive
     // day numbers, round trips, weekdays and the ISO (proleptic Gregorian) label.
     // localtime_r, gmtime_r and timegm, which Windows spells differently.
+    // The Windows C runtime ends the program when its secure time functions
+    // get a time outside 1970 to 3000, so those are refused here.
+#ifdef IASLIB_WIN32__
+static bool windowsTimeInRange( time_t t ) { return (long long)t >= 0 && (long long)t <= 32535215999LL; }
+#endif
+
 static bool localTime( time_t t, struct tm &out )
 {
 #ifdef IASLIB_WIN32__
-    return localtime_s( &out, &t ) == 0;
+    return windowsTimeInRange( t ) && localtime_s( &out, &t ) == 0;
 #else
     return localtime_r( &t, &out ) != NULL;
 #endif
@@ -125,7 +131,7 @@ static bool localTime( time_t t, struct tm &out )
 static bool utcTime( time_t t, struct tm &out )
 {
 #ifdef IASLIB_WIN32__
-    return gmtime_s( &out, &t ) == 0;
+    return windowsTimeInRange( t ) && gmtime_s( &out, &t ) == 0;
 #else
     return gmtime_r( &t, &out ) != NULL;
 #endif
@@ -1271,6 +1277,9 @@ static void testICUZones( void )
 
 int main( int argc, char *argv[] )
 {
+        // Unbuffered, so a crash still shows how far the tests got.
+    setvbuf( stdout, NULL, _IONBF, 0 );
+
         // Dates without a zone take the system zone, so run in UTC unless a
         // test sets another zone.
     const char *pszTestZone = getenv( "TZ" );

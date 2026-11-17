@@ -2176,6 +2176,10 @@ namespace IASLib
             return false;
         struct tm local;
 #ifdef IASLIB_WIN32__
+            // The secure C runtime functions end the program (by default) when
+            // given a time outside 1970 to 3000, so those are not asked.
+        if ( llUtcSeconds < 0 || llUtcSeconds > 32535215999LL )
+            return false;
         if ( _localtime64_s( &local, &t ) != 0 )
             return false;
         long long llLocal = (long long)_mkgmtime64( &local );
