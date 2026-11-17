@@ -710,7 +710,7 @@ static void testTimeZones( void )
     CHECK( kiritimati.GetJulianDayNumber() == 2451545 );
     CHECK( near( kiritimati.GetJulianDate(), 2451544.9375, ms ) );
     CHECK( near( CDate::Parse( "Sat, 01 Jan 2000 07:00:00 EST" ).GetJulianDate(), 2451545.0, ms ) );
-    CHECK( near( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );     // no zone: taken as UT
+    CHECK( near( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );     // no zone: system zone, UTC here
 
         // Zone edits.
     CDate plain( 2, 5, 2001, 12, 0, 0 );
@@ -733,8 +733,6 @@ static void testTimeZones( void )
     CHECK( gmt.IsGMT() && gmt.GetHour() == 17 );
 
     printf( "System time zone (America/Denver, Europe/London)\n" );
-    const char *saved = getenv( "TZ" );
-    std::string savedZone = saved ? saved : "";
     setZone( "America/Denver" );
 
     CDate summer( 2, 5, 2001, 12, 0, 0 );
@@ -761,13 +759,59 @@ static void testTimeZones( void )
     setZone( "Europe/London" );
     CDate london( 2, 5, 2001, 12, 0, 0 );
     CHECK( london.AssumeLocalTimeZone() && london.GetUTCOffset() == 3600 );
-    CHECK( near( london.GetJulianDate(), CDate( 2, 5, 2001, 11, 0, 0 ).GetJulianDate(), ms ) );
+    CHECK( near( london.GetJulianDate(), CDate::Parse( "2001-06-02T11:00:00Z" ).GetJulianDate(), ms ) );
 
-    setZone( savedZone.empty() ? NULL : savedZone.c_str() );
+    setZone( "UTC" );
+}
+
+    // Dates without a zone use the system's zone when an instant is needed.
+static void testUnknownZoneDefault( void )
+{
+    printf( "Unknown zones default to the system zone (America/Denver)\n" );
+    const double ms = 1.0 / 86400000.0;
+    CHECK( CDate::GetUnknownTimeZoneLocal() );
+    setZone( "America/Denver" );
+
+    CDate noon( 1, 0, 2000, 12, 0, 0 );                 // 12:00 MST = 19:00 UT
+    CHECK( ! noon.HasTimeZone() && noon.GetUTCOffset() == -25200 && noon.GetHour() == 12 );
+    CHECK( near( noon.GetJulianDate(), 2451545.0 + 7.0 / 24.0, ms ) );
+    CHECK( noon.GetJulianDayNumber() == 2451545 );
+    CHECK_EQ_STR( "utc", iso( noon.ToUTC(), false ), "2000-01-01T19:00:00Z" );
+    CHECK_EQ_STR( "rfc1123", std::string( (const char *)noon.FormatDate( CDate::DF_RFC1123 ) ), "Sat, 01 Jan 2000 19:00:00 GMT" );
+    CHECK_EQ_STR( "iso", std::string( (const char *)noon.FormatISO8601() ), "2000-01-01T12:00:00" );     // local time, no designator
+    CHECK( noon == CDate::Parse( "2000-01-01T19:00:00Z" ) );
+    CHECK( CDate::Parse( "2000-01-01 12:00:00" ) == noon );
+
+        // Daylight saving applies: summer is -06:00, and the day the clocks went
+        // forward (1 April 2001) was 23 hours long.
+    CHECK( CDate( 2, 5, 2001, 12, 0, 0 ).GetUTCOffset() == -21600 );
+    CHECK( CDate( 2, 3, 2001 ).Elapsed( CDate( 1, 3, 2001 ) ) == 23LL * 3600000LL );
+    CHECK( CDate( 2, 3, 2001 ).ElapsedDays( CDate( 1, 3, 2001 ) ) == 1 );
+
+        // A stored zone wins over the default.
+    CDate utc( 1, 0, 2000, 12, 0, 0 );
+    utc.SetTimeZone( 0 );
+    CHECK( near( utc.GetJulianDate(), 2451545.0, ms ) );
+
+        // UTC instead of the system zone.
+    CDate::SetUnknownTimeZoneLocal( false );
+    CHECK( ! CDate::GetUnknownTimeZoneLocal() );
+    CHECK( noon.GetUTCOffset() == 0 && near( noon.GetJulianDate(), 2451545.0, ms ) );
+    CDate::SetUnknownTimeZoneLocal( true );
+
+        // With the system zone set to UTC the default changes nothing.
+    setZone( "UTC" );
+    CHECK( noon.GetUTCOffset() == 0 && near( noon.GetJulianDate(), 2451545.0, ms ) );
 }
 
 int main( int argc, char *argv[] )
 {
+        // Dates without a zone take the system zone, so run in UTC unless a
+        // test sets another zone.
+    const char *pszTestZone = getenv( "TZ" );
+    std::string savedTestZone = pszTestZone ? pszTestZone : "";
+    setZone( "UTC" );
+
 #ifdef IASLIB_HERSCHEL_CORRECTION__
     CHECK( CDate::GetHerschelCorrection() );
     CDate::SetHerschelCorrection( false );
@@ -783,6 +827,9 @@ int main( int argc, char *argv[] )
     testUnixAndTimestamps();
     testJulianDay();
     testTimeZones();
+    testUnknownZoneDefault();
+
+    setZone( savedTestZone.empty() ? NULL : savedTestZone.c_str() );
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );
     return ( g_nFailures == 0 ) ? 0 : 1;

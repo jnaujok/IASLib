@@ -189,15 +189,22 @@ namespace IASLib
                 // always the local time. Anything that needs the instant uses the
                 // offset automatically: comparisons, Elapsed(), ToUTC(), the Julian
                 // Day methods and the formats that say "GMT". A date without a
-                // zone (from numbers, or text without a zone) is treated as UTC
-                // for those; give it a zone with SetTimeZone() or
-                // AssumeLocalTimeZone() first if it is not.
+                // zone (from numbers, or text without a zone) is taken to be in
+                // the system's local time zone for those, using the offset in
+                // force at that local time (UTC if the system has none). Use
+                // SetTimeZone() when it is in some other zone, or
+                // SetUnknownTimeZoneLocal( false ) to treat such dates as UTC.
                 //
                 // The current time, Unix times and Julian Days are UTC. Parsed text
                 // keeps its zone ("12:14 EST" is 12:14 at -05:00).
             bool                HasTimeZone( void ) const { return m_bHasZone; }
-                // The offset in seconds east of UTC (0 if there is no zone).
-            int                 GetUTCOffset( void ) const { return m_bHasZone ? m_nUTCOffset : 0; }
+                // The offset in seconds east of UTC used for conversions: the
+                // date's own, or for a date without a zone the default above.
+            int                 GetUTCOffset( void ) const;
+                // Whether dates without a zone are taken as system local time (the
+                // default) or as UTC. Applies to every date; set it at startup.
+            static void         SetUnknownTimeZoneLocal( bool bLocal );
+            static bool         GetUnknownTimeZoneLocal( void );
                 // True if the date is known to be UTC.
             bool                IsGMT( void ) const { return m_bHasZone && m_nUTCOffset == 0; }
                 // Sets the zone the local time is in, without changing the local
@@ -258,7 +265,8 @@ namespace IASLib
                 // the time of day as a fraction (days start at noon, so midnight
                 // is .5); GetJulianDayNumber() is the whole number for the day,
                 // the JD at noon, of the UT date. A date with a time zone is
-                // converted to UT first; one without is taken as UT. A double gives about a
+                // converted to UT first; one without uses the default zone (see
+                // SetUnknownTimeZoneLocal). A double gives about a
                 // microsecond of resolution for current dates.
             double              GetJulianDate( void ) const;
             long                GetJulianDayNumber( void ) const;

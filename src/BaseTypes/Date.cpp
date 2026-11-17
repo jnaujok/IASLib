@@ -57,6 +57,10 @@ namespace IASLib
     static bool bHerschelCorrection = false;
 #endif
 
+        // Whether a date with no time zone is taken to be in the system's local
+        // time zone (true) or in UTC (false) when an instant is needed.
+    static bool bUnknownZoneIsLocal = true;
+
         // Plain arrays rather than CString globals, which would be constructed
         // before the CObject statics they depend on (initialisation order).
     static const char *pszMonthNames = "JanFebMarAprMayJunJulAugSepOctNovDec";
@@ -854,8 +858,8 @@ namespace IASLib
         }
 
             // The formats that say "GMT" must show UTC.
-        if ( m_bHasZone && m_nUTCOffset != 0 &&
-             ( nDateFormat == CDate::DF_RFC850 || nDateFormat == CDate::DF_RFC1123 || nDateFormat == CDate::DF_RFC7231 ) )
+        if ( ( nDateFormat == CDate::DF_RFC850 || nDateFormat == CDate::DF_RFC1123 || nDateFormat == CDate::DF_RFC7231 ) &&
+             IsValid() && GetUTCOffset() != 0 )
         {
             return ToUTC().FormatDate( nDateFormat );
         }
@@ -1852,10 +1856,39 @@ namespace IASLib
     **
     ***********************************************************************************/
 
+    static bool systemOffsetAt( long long llUtcSeconds, int &nOffset );
+    static bool systemOffsetForLocal( long long llLocalMs, int &nOffset, bool &bGap );
+
+    void CDate::SetUnknownTimeZoneLocal( bool bLocal )
+    {
+        bUnknownZoneIsLocal = bLocal;
+    }
+
+    bool CDate::GetUnknownTimeZoneLocal( void )
+    {
+        return bUnknownZoneIsLocal;
+    }
+
+        // The offset used to find the instant: the date's own, or for a date with
+        // no zone the system's offset at that local time (UTC if the system has
+        // none, or if SetUnknownTimeZoneLocal( false ) was called).
+    int CDate::GetUTCOffset( void ) const
+    {
+        if ( m_bHasZone )
+            return m_nUTCOffset;
+        if ( ! bUnknownZoneIsLocal || ! IsValid() )
+            return 0;
+        int nOffset = 0;
+        bool bGap = false;
+        if ( ! systemOffsetForLocal( (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds, nOffset, bGap ) )
+            return 0;
+        return nOffset;
+    }
+
     long long CDate::UtcMilliseconds( void ) const
     {
         long long llLocal = (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds;
-        return m_bHasZone ? llLocal - (long long)m_nUTCOffset * 1000LL : llLocal;
+        return llLocal - (long long)GetUTCOffset() * 1000LL;
     }
 
     CDate CDate::FromUtcMilliseconds( long long llUtc, int nOffsetSeconds )
@@ -1937,25 +1970,27 @@ namespace IASLib
         return FromUtcMilliseconds( llUtc, nOffset );
     }
 
-    bool CDate::AssumeLocalTimeZone( void )
+        // The system's offset in force at a local time (milliseconds on the CDate
+        // day numbering). Candidates come from the offset at the same reading of
+        // UTC, corrected twice. An offset is consistent if the instant it gives
+        // has that offset. Two consistent offsets mean the local time happened
+        // twice (clocks went back): take the earlier instant, the larger offset.
+        // None means it never happened (clocks went forward): take the offset in
+        // force before the change, the smaller one, and set bGap.
+    static bool systemOffsetForLocal( long long llLocalMs, int &nOffset, bool &bGap )
     {
-        if ( ! IsValid() )
-            return false;
-
-            // Find the system's offset in force at this local time. Candidates
-            // come from the offset at the same reading of UTC, corrected twice.
-        long long llLocal = (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds;
-        long long llLocalSeconds = llLocal / 1000;
-        if ( llLocal % 1000 < 0 )
+        bGap = false;
+        long long llLocalSeconds = llLocalMs / 1000;
+        if ( llLocalMs % 1000 < 0 )
             llLocalSeconds--;
         llLocalSeconds -= (long long)UNIX_EPOCH_DAY * 86400LL;      // to Unix seconds
 
         int nCandidates[ 3 ];
         int nCount = 0;
-        int nOffset = 0;
-        if ( ! systemOffsetAt( llLocalSeconds, nOffset ) )
+        int nFirst = 0;
+        if ( ! systemOffsetAt( llLocalSeconds, nFirst ) )
             return false;
-        nCandidates[ nCount++ ] = nOffset;
+        nCandidates[ nCount++ ] = nFirst;
         for ( int nPass = 0; nPass < 2; nPass++ )
         {
             int nNext = 0;
@@ -1964,12 +1999,6 @@ namespace IASLib
             nCandidates[ nCount++ ] = nNext;
         }
 
-            // An offset is consistent if the instant it gives has that offset.
-            // Two consistent offsets mean the local time happens twice (clocks
-            // went back): take the earlier instant, the larger offset. None means
-            // it never happened (clocks went forward): take the offset in force
-            // before the change, the smaller one, which moves the time forward by
-            // the length of the gap.
         bool bFound = false;
         int nSmallest = nCandidates[0];
         for ( int nX = 0; nX < nCount; nX++ )
@@ -1987,12 +2016,30 @@ namespace IASLib
         if ( ! bFound )
         {
             nOffset = nSmallest;
+            bGap = true;
+        }
+        return true;
+    }
+
+    bool CDate::AssumeLocalTimeZone( void )
+    {
+        if ( ! IsValid() )
+            return false;
+
+        long long llLocal = (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds;
+        int nOffset = 0;
+        bool bGap = false;
+        if ( ! systemOffsetForLocal( llLocal, nOffset, bGap ) )
+            return false;
+
+        if ( bGap )
+        {
                 // Keep the instant, so the local time moves forward by the gap.
             long long llUtc = llLocal - (long long)nOffset * 1000LL;
-            int nAfter = nOffset;
             long long llUtcSeconds = llUtc / 1000;
             if ( llUtc % 1000 < 0 )
                 llUtcSeconds--;
+            int nAfter = nOffset;
             if ( systemOffsetAt( llUtcSeconds - (long long)UNIX_EPOCH_DAY * 86400LL, nAfter ) )
             {
                 *this = FromUtcMilliseconds( llUtc, nAfter );
