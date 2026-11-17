@@ -31,6 +31,11 @@
     #ifndef NOMINMAX
         #define NOMINMAX
     #endif
+        // No GDI: the library draws nothing, and wingdi.h defines macros
+        // such as ERROR, OPAQUE and TRANSPARENT that clash with ordinary names.
+    #ifndef NOGDI
+        #define NOGDI
+    #endif
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #include <windows.h>

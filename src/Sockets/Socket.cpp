@@ -179,18 +179,22 @@ namespace IASLib
             addrConvert.s_addr = htonl( m_addrIPAddress );
             m_strLocalAddress.Format( "%s:%d", inet_ntoa( addrConvert ), m_nPort );
             int temp = config.getSendBufferSize();
-            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(int) );
+            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDBUF, (const char *)&temp, sizeof(int) );
             temp = config.getReceiveBufferSize();
-            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVBUF, &temp, sizeof(int) );
+            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVBUF, (const char *)&temp, sizeof(int) );
             temp = config.getTimeout();
-            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVTIMEO, &temp, sizeof(int));
-            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDTIMEO, &temp, sizeof(int));
+            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&temp, sizeof(int));
+            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDTIMEO, (const char *)&temp, sizeof(int));
             temp = config.isTcpNoDelay() ? 1:0;
-            setsockopt( m_hSocket, IPPROTO_TCP, TCP_NODELAY, &temp, sizeof(int));
+            setsockopt( m_hSocket, IPPROTO_TCP, TCP_NODELAY, (const char *)&temp, sizeof(int));
             temp = config.isLinger() ? 1:0;
-            setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, &temp, sizeof(int));
+            setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, (const char *)&temp, sizeof(int));
             temp = config.isReuseSocket() ? 1:0;
-            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEPORT, &temp, sizeof(int));
+    #ifdef SO_REUSEPORT
+            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEPORT, (const char *)&temp, sizeof(int));
+    #else
+            setsockopt( m_hSocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&temp, sizeof(int));
+    #endif
         }
     }
 
@@ -241,13 +245,13 @@ namespace IASLib
     #endif
 
             int temp = config.getSendBufferSize();
-            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDBUF, &temp, sizeof(int) );
+            setsockopt( m_hSocket, SOL_SOCKET, SO_SNDBUF, (const char *)&temp, sizeof(int) );
             temp = config.getReceiveBufferSize();
-            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVBUF, &temp, sizeof(int) );
+            setsockopt( m_hSocket, SOL_SOCKET, SO_RCVBUF, (const char *)&temp, sizeof(int) );
             temp = config.isTcpNoDelay() ? 1:0;
-            setsockopt( m_hSocket, IPPROTO_TCP, TCP_NODELAY, &temp, sizeof(int));
+            setsockopt( m_hSocket, IPPROTO_TCP, TCP_NODELAY, (const char *)&temp, sizeof(int));
             temp = config.isLinger() ? 1:0;
-            setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, &temp, sizeof(int));
+            setsockopt( m_hSocket, SOL_SOCKET, SO_LINGER, (const char *)&temp, sizeof(int));
             temp = config.getBacklogSize();
 
             CInternetAddress localListen( strBoundAddress, nPort, SOCK_STREAM );

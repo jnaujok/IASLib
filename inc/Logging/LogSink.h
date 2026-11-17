@@ -22,6 +22,12 @@
 #include "../BaseTypes/Date.h"
 #include "LogContext.h"
 
+    // wingdi.h defines ERROR as a macro; Platform.h keeps it out, but a
+    // program may include <windows.h> itself first.
+#ifdef ERROR
+    #undef ERROR
+#endif
+
 namespace IASLib
 {
     class CLogSink : public CObject

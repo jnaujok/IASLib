@@ -33,6 +33,8 @@
     #include <arpa/inet.h>
 #endif
 
+#include <stdint.h>
+#include <stdlib.h>
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/String_.h"
 #include "SafeAddressInfo.h"

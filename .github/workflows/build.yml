@@ -61,6 +61,4 @@ jobs:
       - name: Error summary
         if: failure()
         shell: bash
-        run: |
-          echo "Distinct compiler and linker errors:"
-          grep -E "(error|fatal error)( [A-Z]+[0-9]+)?:" build.log | sed -E 's/ \[[^]]*\.vcxproj\]//' | sort -u | head -400 || true
+        run: python3 .github/scripts/error_summary.py build.log 4 || python .github/scripts/error_summary.py build.log 4
