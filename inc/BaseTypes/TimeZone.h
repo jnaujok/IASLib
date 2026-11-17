@@ -49,6 +49,16 @@ namespace IASLib
                 // True if this build can use ICU and the library is present.
             static bool         IsICUAvailable( void );
 
+                // The system's zone, as the C library would choose it: the zone
+                // TZ names (an IANA name, a file path, or a POSIX rule such as
+                // "EST5EDT,M3.2.0,M11.1.0"), or /etc/localtime if TZ is not set.
+                // NULL if it cannot be read, as on Windows without TZ, where the
+                // C library's own zone is used. Read again when TZ changes.
+            static std::shared_ptr<const CTimeZone> System( void );
+                // A zone read from a zone file, or from a POSIX TZ rule.
+            static std::shared_ptr<const CTimeZone> FromFile( const char *pszPath, const char *pszName );
+            static std::shared_ptr<const CTimeZone> FromRule( const char *pszRule );
+
                 // The zone's name, for example "America/New_York".
             const std::string  &GetName( void ) const { return m_strName; }
 

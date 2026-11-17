@@ -2161,6 +2161,16 @@ namespace IASLib
         // the system cannot say (the instant is outside what time_t covers).
     static bool systemOffsetAt( long long llUtcSeconds, int &nOffset )
     {
+            // The system's zone read with CTimeZone where possible ($TZ or
+            // /etc/localtime): the same answers on every system, for any date.
+            // C libraries differ (macOS's gives wrong offsets before 1900).
+        std::shared_ptr<const CTimeZone> pSystem = CTimeZone::System();
+        if ( pSystem )
+        {
+            nOffset = pSystem->OffsetAt( llUtcSeconds );
+            return true;
+        }
+
         time_t t = (time_t)llUtcSeconds;
         if ( (long long)t != llUtcSeconds )
             return false;
@@ -2174,7 +2184,12 @@ namespace IASLib
             return false;
         long long llLocal = (long long)timegm( &local );
 #endif
-        nOffset = (int)( llLocal - llUtcSeconds );
+        long long llOffset = llLocal - llUtcSeconds;
+            // An offset of a day or more means the C library could not handle
+            // the date.
+        if ( llOffset <= -86400 || llOffset >= 86400 )
+            return false;
+        nOffset = (int)llOffset;
         return true;
     }
 

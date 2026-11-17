@@ -1047,6 +1047,12 @@ static void testNamedZones( void )
                 skipSystemZone();
             continue;
         }
+#ifdef IASLIB_MAC__
+            // macOS's C library does not apply rules with negative transition
+            // times (RFC 8536), which Nuuk's has ("M3.5.0/-1").
+        if ( strcmp( zones[ z ], "America/Nuuk" ) == 0 )
+            continue;
+#endif
         int mismatches = 0;
         long long first = 0;
         std::vector<long long> times;
@@ -1081,6 +1087,29 @@ static void testNamedZones( void )
         CHECK( differ == 0 );
     }
     setZone( "UTC" );
+
+        // The system zone is read with CTimeZone, from TZ (a name, a path or a
+        // POSIX rule) or /etc/localtime, wherever the C library can be set.
+    if ( setZone( "America/Denver" ) )
+    {
+        std::shared_ptr<const CTimeZone> system = CTimeZone::System();
+        CHECK( system && system->GetName() == "America/Denver" );
+        CHECK( system && system->OffsetAt( -3786825600LL ) == -25196 );     // 1850: local mean time
+        CHECK( system == CTimeZone::System() );                             // cached
+        setZone( ":Europe/London" );
+        CHECK( CTimeZone::System() && CTimeZone::System()->OffsetAt( 995198400LL ) == 3600 );
+        setZone( "EST5EDT,M3.2.0,M11.1.0" );
+        CHECK( CTimeZone::System() && CTimeZone::System()->OffsetAt( 995198400LL ) == -14400 &&
+               CTimeZone::System()->OffsetAt( 979560000LL ) == -18000 );
+        CHECK( CDate( 15, 6, 2001, 12, 0, 0 ).GetUTCOffset() == -14400 );
+        setZone( "" );
+        CHECK( CTimeZone::System() && CTimeZone::System()->OffsetAt( 995198400LL ) == 0 );
+        setZone( "/usr/share/zoneinfo/Asia/Kolkata" );
+        CHECK( ! CTimeZone::Find( "Asia/Kolkata" ) || ( CTimeZone::System() && CTimeZone::System()->OffsetAt( 995198400LL ) == 19800 ) );
+        setZone( "UTC" );
+    }
+    CHECK( CTimeZone::FromRule( "<+0530>-5:30" ) && CTimeZone::FromRule( "<+0530>-5:30" )->OffsetAt( 0 ) == 19800 );
+    CHECK( ! CTimeZone::FromRule( "nonsense" ) && ! CTimeZone::FromFile( "/no/such/file", "x" ) );
 
         // A named default zone follows daylight saving, whatever TZ says.
     CHECK( CDate::SetDefaultTimezone( "America/New_York" ) );

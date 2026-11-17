@@ -27,16 +27,11 @@
 #define IASLIB_TIMEZONE_ICU__
 #endif
 
-#ifdef IASLIB_TIMEZONE_ICU__
 #ifdef IASLIB_WIN32__
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "Platform.h"
 #else
+#include <dirent.h>
+#ifdef IASLIB_TIMEZONE_ICU__
 #include <dlfcn.h>
 #endif
 #endif
@@ -470,6 +465,114 @@ namespace IASLib
         return true;
     }
 
+    namespace
+    {
+            // True if every component of name is spelt exactly as on disk, so
+            // that case-insensitive file systems (macOS, Windows) do not accept
+            // "america/new_york". True if a directory cannot be listed.
+        bool exactCase( const std::string &directory, const std::string &name )
+        {
+#ifdef IASLIB_WIN32__
+            (void)directory; (void)name;
+            return true;
+#else
+            std::string current = directory;
+            size_t start = 0;
+            while ( start < name.size() )
+            {
+                size_t end = name.find( '/', start );
+                if ( end == std::string::npos )
+                    end = name.size();
+                std::string part = name.substr( start, end - start );
+                DIR *dir = opendir( current.c_str() );
+                if ( dir == NULL )
+                    return true;
+                bool found = false;
+                struct dirent *entry;
+                while ( ! found && ( entry = readdir( dir ) ) != NULL )
+                    found = ( part == entry->d_name );
+                closedir( dir );
+                if ( ! found )
+                    return false;
+                current += "/" + part;
+                start = end + 1;
+            }
+            return true;
+#endif
+        }
+    }
+
+    std::shared_ptr<const CTimeZone> CTimeZone::FromFile( const char *pszPath, const char *pszName )
+    {
+        std::vector<unsigned char> data;
+        if ( pszPath == NULL || ! readFile( pszPath, data ) )
+            return std::shared_ptr<const CTimeZone>();
+        std::shared_ptr<CTimeZone> zone( new CTimeZone() );
+        zone->m_strName = pszName ? pszName : pszPath;
+        if ( ! zone->Parse( data ) )
+            return std::shared_ptr<const CTimeZone>();
+        return zone;
+    }
+
+    std::shared_ptr<const CTimeZone> CTimeZone::FromRule( const char *pszRule )
+    {
+        if ( pszRule == NULL )
+            return std::shared_ptr<const CTimeZone>();
+        std::shared_ptr<CRule> rule = ParseRule( pszRule );
+        if ( ! rule )
+            return std::shared_ptr<const CTimeZone>();
+        std::shared_ptr<CTimeZone> zone( new CTimeZone() );
+        zone->m_strName = pszRule;
+        zone->m_pRule = rule;
+        zone->m_nInitialOffset = rule->stdOffset;
+        return zone;
+    }
+
+    std::shared_ptr<const CTimeZone> CTimeZone::System( void )
+    {
+        const char *pszTZ = getenv( "TZ" );
+        bool bSet = ( pszTZ != NULL );
+        std::string key = bSet ? pszTZ : "";
+
+        static std::mutex &systemMutex = *new std::mutex;
+        static std::shared_ptr<const CTimeZone> *pZone = new std::shared_ptr<const CTimeZone>();
+        static std::string *pKey = new std::string();
+        static bool bHaveZone = false;
+        static bool bKeySet = false;
+
+        std::lock_guard<std::mutex> lock( systemMutex );
+        if ( bHaveZone && bKeySet == bSet && *pKey == key )
+            return *pZone;
+
+        std::shared_ptr<const CTimeZone> zone;
+        if ( ! bSet )
+        {
+#ifndef IASLIB_WIN32__
+            zone = FromFile( "/etc/localtime", "localtime" );
+#endif
+        }
+        else
+        {
+            std::string name = key;
+            if ( ! name.empty() && name[0] == ':' )
+                name.erase( 0, 1 );
+            if ( name.empty() )
+                zone = FromRule( "UTC0" );          // POSIX: an empty TZ is UTC
+            else if ( name[0] == '/' )
+                zone = FromFile( name.c_str(), name.c_str() );
+            else
+                zone = Find( name.c_str() );
+            if ( ! zone )
+                zone = FromRule( name.c_str() );
+        }
+
+        *pZone = zone;
+        *pKey = key;
+        bKeySet = bSet;
+        bHaveZone = true;
+        return zone;
+    }
+
     std::shared_ptr<const CTimeZone> CTimeZone::Load( const std::string &name )
     {
         std::vector<std::string> directories;
@@ -484,7 +587,7 @@ namespace IASLib
         for ( size_t n = 0; n < directories.size(); n++ )
         {
             std::vector<unsigned char> data;
-            if ( ! readFile( directories[ n ] + "/" + name, data ) )
+            if ( ! readFile( directories[ n ] + "/" + name, data ) || ! exactCase( directories[ n ], name ) )
                 continue;
             std::shared_ptr<CTimeZone> zone( new CTimeZone() );
             zone->m_strName = name;
