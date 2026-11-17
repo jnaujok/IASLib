@@ -109,6 +109,11 @@ namespace IASLib
                 // up any thread blocked reading from it.
             virtual void            Shutdown( void );
 
+                // Gives up the connection: returns the handle and leaves this
+                // object closed, without closing the connection. Used to hand an
+                // accepted connection to another socket class (CSecureSocket).
+            SOCKET                  ReleaseHandle( void );
+
             static const int        READ_TIMEOUT = -1;
             static const int        READ_ERROR = -2;
 

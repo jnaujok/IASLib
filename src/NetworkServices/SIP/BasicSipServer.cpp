@@ -18,6 +18,9 @@
 #include "Sockets/ServerSocket.h"
 #include "Sockets/UDPSocket.h"
 #include "Logging/LogSink.h"
+#ifdef IASLIB_TLS__
+#include "Sockets/SecureSocket.h"
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -56,6 +59,7 @@ namespace IASLib
         std::atomic<bool>               stopping;
         std::atomic<int>                udpPort;
         std::atomic<int>                tcpPort;
+        std::atomic<int>                tlsPort;
 
         std::mutex                      readyMutex;
         std::condition_variable         readyCondition;
@@ -65,6 +69,10 @@ namespace IASLib
 
         CUDPSocket                     *udpSocket;
         CServerSocket                  *tcpSocket;
+        CServerSocket                  *tlsSocket;
+        std::shared_ptr<CTlsContext>    tlsContext;
+        int                             tlsListenPort;
+        std::atomic<int>                handshakeTimeoutMs;
         CSipUdpTransport               *udpTransport;
 
         std::mutex                      queueMutex;
@@ -75,12 +83,14 @@ namespace IASLib
 
         std::thread                     udpThread;
         std::thread                     tcpThread;
+        std::thread                     tlsThread;
 
         std::mutex                      connectionMutex;
         std::list< std::shared_ptr<CSipConnection> > connections;
 
-        CBasicSipServerState( void ) : stopping( false ), udpPort( 0 ), tcpPort( 0 ), ready( false ), failed( false ),
-                                       udpSocket( NULL ), tcpSocket( NULL ), udpTransport( NULL ), stopWorkers( false )
+        CBasicSipServerState( void ) : stopping( false ), udpPort( 0 ), tcpPort( 0 ), tlsPort( 0 ), ready( false ), failed( false ),
+                                       udpSocket( NULL ), tcpSocket( NULL ), tlsSocket( NULL ), tlsListenPort( 5061 ),
+                                       handshakeTimeoutMs( 10000 ), udpTransport( NULL ), stopWorkers( false )
         {
         }
     };
@@ -134,6 +144,35 @@ namespace IASLib
     int CBasicSipServer::getTcpPort( void )
     {
         return m_pState->tcpPort;
+    }
+
+    int CBasicSipServer::getTlsPort( void )
+    {
+        return m_pState->tlsPort;
+    }
+
+    bool CBasicSipServer::setTlsContext( const std::shared_ptr<CTlsContext> &pContext, int nTlsPort )
+    {
+#ifdef IASLIB_TLS__
+        if ( ! pContext || pContext->getRole() != CTlsContext::SERVER || ! pContext->isReady() )
+        {
+            ERROR_LOG( "SIP over TLS needs a server TLS context with a certificate and its private key." );
+            return false;
+        }
+        m_pState->tlsContext = pContext;
+        m_pState->tlsListenPort = nTlsPort;
+        return true;
+#else
+        (void)pContext;
+        (void)nTlsPort;
+        ERROR_LOG( "SIP over TLS is not available: the library was built without OpenSSL." );
+        return false;
+#endif
+    }
+
+    void CBasicSipServer::setHandshakeTimeout( int nMilliseconds )
+    {
+        m_pState->handshakeTimeoutMs = nMilliseconds;
     }
 
     void CBasicSipServer::queueTask( CThreadTask *pTask )
@@ -201,11 +240,12 @@ namespace IASLib
         }
     }
 
-    void CBasicSipServer::tcpAcceptLoop( void )
+    void CBasicSipServer::acceptLoop( bool bSecure )
     {
+        CServerSocket *pListener = bSecure ? m_pState->tlsSocket : m_pState->tcpSocket;
         while ( ! m_pState->stopping )
         {
-            CSocket *pSocket = m_pState->tcpSocket->Accept( POLL_INTERVAL_MS );
+            CSocket *pSocket = pListener->Accept( POLL_INTERVAL_MS );
             reapConnections( false );
 
             if ( pSocket == NULL )
@@ -213,13 +253,22 @@ namespace IASLib
                 continue;
             }
 
+#ifdef IASLIB_TLS__
+            if ( bSecure )
+            {
+                    // Takes the accepted connection over; the handshake happens
+                    // on the connection's thread.
+                pSocket = new CSecureSocket( pSocket, m_pState->tlsContext );
+            }
+#endif
+
             std::shared_ptr<CSipConnection> connection = std::make_shared<CSipConnection>();
             connection->socket = pSocket;
 
             std::lock_guard<std::mutex> lock( m_pState->connectionMutex );
             m_pState->connections.push_back( connection );
             CSipConnection *pConnection = connection.get();
-            connection->thread = std::thread( [this, pSocket, pConnection] { connectionLoop( pSocket, pConnection ); } );
+            connection->thread = std::thread( [this, pSocket, pConnection, bSecure] { connectionLoop( pSocket, pConnection, bSecure ); } );
         }
     }
 
@@ -253,11 +302,31 @@ namespace IASLib
         }
     }
 
-    void CBasicSipServer::connectionLoop( CSocket *pSocket, void *pConnectionPtr )
+    void CBasicSipServer::connectionLoop( CSocket *pSocket, void *pConnectionPtr, bool bSecure )
     {
         CSipConnection *pConnection = (CSipConnection *)pConnectionPtr;
-        CSipStreamTransport transport( pSocket, false );
         CInternetAddress peer( pSocket->getInternetAddress() );
+
+#ifdef IASLIB_TLS__
+        if ( bSecure )
+        {
+            CSecureSocket *pSecure = static_cast<CSecureSocket *>( pSocket );
+            if ( ! pSecure->Handshake( m_pState->handshakeTimeoutMs ) )
+            {
+                DEBUG_LOG( "TLS handshake with %s failed: %s", (const char *)peer.toStringWithPort(), (const char *)pSecure->GetTlsError() );
+                {
+                    std::lock_guard<std::mutex> lock( m_pState->connectionMutex );
+                    pConnection->socket = NULL;
+                }
+                pSocket->Close();
+                delete pSocket;
+                pConnection->finished = true;
+                return;
+            }
+        }
+#endif
+
+        CSipStreamTransport transport( pSocket, bSecure );
 
         std::string buffer;
         std::vector<char> chunk( 8192 );
@@ -397,9 +466,29 @@ namespace IASLib
             }
         }
 
-        if ( error.GetLength() == 0 && ! m_bUseUdp && ! m_bUseTcp )
+        if ( error.GetLength() == 0 && m_pState->tlsContext )
         {
-            error = "Neither UDP nor TCP is enabled.";
+            try
+            {
+                m_pState->tlsSocket = new CServerSocket( m_pState->tlsListenPort, 64 );
+            }
+            catch ( ... )
+            {
+                m_pState->tlsSocket = NULL;
+            }
+            if ( m_pState->tlsSocket == NULL || ! m_pState->tlsSocket->IsConnected() )
+            {
+                error = CString::FormatString( "Could not open TLS port %d.", m_pState->tlsListenPort );
+            }
+            else
+            {
+                m_pState->tlsPort = m_pState->tlsSocket->GetPort();
+            }
+        }
+
+        if ( error.GetLength() == 0 && ! m_bUseUdp && ! m_bUseTcp && ! m_pState->tlsContext )
+        {
+            error = "Neither UDP, TCP nor TLS is enabled.";
         }
 
         if ( error.GetLength() > 0 )
@@ -425,10 +514,14 @@ namespace IASLib
         }
         if ( m_pState->tcpSocket )
         {
-            m_pState->tcpThread = std::thread( [this] { tcpAcceptLoop(); } );
+            m_pState->tcpThread = std::thread( [this] { acceptLoop( false ); } );
+        }
+        if ( m_pState->tlsSocket )
+        {
+            m_pState->tlsThread = std::thread( [this] { acceptLoop( true ); } );
         }
 
-        INFO_LOG( "SIP server listening on UDP port %d, TCP port %d.", (int)m_pState->udpPort, (int)m_pState->tcpPort );
+        INFO_LOG( "SIP server listening on UDP port %d, TCP port %d, TLS port %d.", (int)m_pState->udpPort, (int)m_pState->tcpPort, (int)m_pState->tlsPort );
 
         {
             std::lock_guard<std::mutex> lock( m_pState->readyMutex );
@@ -448,6 +541,8 @@ namespace IASLib
             m_pState->udpThread.join();
         if ( m_pState->tcpThread.joinable() )
             m_pState->tcpThread.join();
+        if ( m_pState->tlsThread.joinable() )
+            m_pState->tlsThread.join();
 
         {
             std::lock_guard<std::mutex> lock( m_pState->connectionMutex );
@@ -508,8 +603,14 @@ namespace IASLib
             delete m_pState->tcpSocket;
             m_pState->tcpSocket = NULL;
         }
+        if ( m_pState->tlsSocket )
+        {
+            delete m_pState->tlsSocket;
+            m_pState->tlsSocket = NULL;
+        }
         m_pState->udpPort = 0;
         m_pState->tcpPort = 0;
+        m_pState->tlsPort = 0;
     }
 } // namespace IASLib
 

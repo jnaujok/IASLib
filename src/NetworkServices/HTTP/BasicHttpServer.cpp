@@ -16,6 +16,9 @@
 #include "NetworkServices/HTTP/HttpListener.h"
 #include "Sockets/ServerSocket.h"
 #include "Logging/LogSink.h"
+#ifdef IASLIB_TLS__
+#include "Sockets/SecureSocket.h"
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -55,7 +58,10 @@ namespace IASLib
         std::mutex                      connectionMutex;
         std::list< std::shared_ptr<CHttpConnection> > connections;
 
-        CBasicHttpServerState( void ) : stopping( false ), port( 0 ), ready( false ), failed( false ) {}
+        std::shared_ptr<CTlsContext>    tlsContext;         // set for HTTPS
+        std::atomic<int>                handshakeTimeoutMs;
+
+        CBasicHttpServerState( void ) : stopping( false ), port( 0 ), ready( false ), failed( false ), handshakeTimeoutMs( 10000 ) {}
     };
 
     IMPLEMENT_OBJECT( CBasicHttpServer, CHttpServer );
@@ -110,6 +116,33 @@ namespace IASLib
                 nCount++;
         }
         return nCount;
+    }
+
+    bool CBasicHttpServer::setTlsContext( const std::shared_ptr<CTlsContext> &pContext )
+    {
+#ifdef IASLIB_TLS__
+        if ( ! pContext || pContext->getRole() != CTlsContext::SERVER || ! pContext->isReady() )
+        {
+            ERROR_LOG( "HTTPS needs a server TLS context with a certificate and its private key." );
+            return false;
+        }
+        m_pState->tlsContext = pContext;
+        return true;
+#else
+        (void)pContext;
+        ERROR_LOG( "HTTPS is not available: the library was built without OpenSSL." );
+        return false;
+#endif
+    }
+
+    bool CBasicHttpServer::isSecure( void )
+    {
+        return (bool)m_pState->tlsContext;
+    }
+
+    void CBasicHttpServer::setHandshakeTimeout( int nMilliseconds )
+    {
+        m_pState->handshakeTimeoutMs = nMilliseconds;
     }
 
     void CBasicHttpServer::reapConnections( bool bAll )
@@ -178,7 +211,7 @@ namespace IASLib
         }
 
         m_pState->port = pListenSocket->GetPort();
-        INFO_LOG( "HTTP server listening on TCP port %d.", (int)m_pState->port );
+        INFO_LOG( "HTTP%s server listening on TCP port %d.", m_pState->tlsContext ? "S" : "", (int)m_pState->port );
 
         {
             std::lock_guard<std::mutex> lock( m_pState->readyMutex );
@@ -198,19 +231,35 @@ namespace IASLib
 
             if ( getConnectionCount() >= m_nMaxConnections )
             {
-                    // Over the limit: say so and close.
-                CString busy = errorResponse( 503 );
-                try
+                    // Over the limit: say so and close. (Over TLS that would
+                    // need a handshake first, so the connection is just closed.)
+                if ( ! m_pState->tlsContext )
                 {
-                    pSocket->Send( (const char *)busy, (int)busy.GetLength() );
-                }
-                catch ( ... )
-                {
+                    CString busy = errorResponse( 503 );
+                    try
+                    {
+                        pSocket->Send( (const char *)busy, (int)busy.GetLength() );
+                    }
+                    catch ( ... )
+                    {
+                    }
                 }
                 pSocket->Close();
                 delete pSocket;
                 continue;
             }
+
+#ifdef IASLIB_TLS__
+            bool bSecure = (bool)m_pState->tlsContext;
+            if ( bSecure )
+            {
+                    // Takes the accepted connection over; the handshake happens
+                    // on the connection's thread.
+                pSocket = new CSecureSocket( pSocket, m_pState->tlsContext );
+            }
+#else
+            bool bSecure = false;
+#endif
 
             std::shared_ptr<CHttpConnection> connection = std::make_shared<CHttpConnection>();
             connection->socket = pSocket;
@@ -218,8 +267,29 @@ namespace IASLib
 
             std::lock_guard<std::mutex> lock( m_pState->connectionMutex );
             m_pState->connections.push_back( connection );
-            connection->thread = std::thread( [this, pSocket, pConnection]
+            connection->thread = std::thread( [this, pSocket, pConnection, bSecure]
             {
+#ifdef IASLIB_TLS__
+                if ( bSecure )
+                {
+                    CSecureSocket *pSecure = static_cast<CSecureSocket *>( pSocket );
+                    if ( ! pSecure->Handshake( m_pState->handshakeTimeoutMs ) )
+                    {
+                        DEBUG_LOG( "TLS handshake with %s failed: %s", (const char *)pSecure->getInternetAddress().toStringWithPort(),
+                                   (const char *)pSecure->GetTlsError() );
+                        {
+                            std::lock_guard<std::mutex> socketLock( m_pState->connectionMutex );
+                            pConnection->socket = NULL;
+                        }
+                        pSecure->Close();
+                        delete pSecure;
+                        pConnection->finished = true;
+                        return;
+                    }
+                }
+#else
+                (void)bSecure;
+#endif
                 {
                     CHttpListener listener( this, pSocket );
                     try

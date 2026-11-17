@@ -203,6 +203,8 @@ if(USE_NETWORK)
     find_package(OpenSSL)
     if(OPENSSL_FOUND)
         target_link_libraries(IASLib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+        # Secure sockets (CTlsContext, CSecureSocket, HTTPS and SIP over TLS).
+        target_compile_definitions(IASLib PUBLIC IASLIB_TLS__)
     endif()
 endif()
 target_link_libraries(IASLib PUBLIC ${CMAKE_DL_LIBS})

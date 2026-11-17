@@ -18,7 +18,20 @@
  *          server.Wait();
  *
  *      Port 0 asks the system for a free port; getListeningPort() reports
- * the one used. TLS is not supported yet.
+ * the one used.
+ *
+ *      HTTPS: give the server a TLS context (with its certificate and key)
+ * before Start(), and every connection is TLS:
+ *
+ *          std::shared_ptr<CTlsContext> tls = std::make_shared<CTlsContext>( CTlsContext::SERVER );
+ *          tls->setCertificateFile( "server.crt" );
+ *          tls->setPrivateKeyFile( "server.key" );
+ *          CBasicHttpServer server( 443 );
+ *          server.setTlsContext( tls );
+ *
+ *      The handshake runs on the connection's own thread, limited by
+ * setHandshakeTimeout() (10 seconds by default), so slow or silent clients
+ * hold nothing else up. Needs a library built with OpenSSL (IASLIB_TLS__).
  *
  *	Author: Jeffrey R. Naujok
  *	Created: November 17, 2026
@@ -34,9 +47,12 @@
 
 #include "NetworkServices/HTTP/HttpServer.h"
 
+#include <memory>
+
 namespace IASLib
 {
     struct CBasicHttpServerState;
+    class CTlsContext;
 
     class CBasicHttpServer : public CHttpServer
     {
@@ -65,6 +81,14 @@ namespace IASLib
 
                 // The number of connections being served.
             virtual size_t      getConnectionCount( void );
+
+                // Serves HTTPS with this SERVER context (call before Start()).
+                // False if the context has no certificate and key, or the
+                // library was built without TLS.
+            virtual bool        setTlsContext( const std::shared_ptr<CTlsContext> &pContext );
+            virtual bool        isSecure( void );
+                // How long a client has to complete the TLS handshake.
+            virtual void        setHandshakeTimeout( int nMilliseconds );
 
         private:
             void                reapConnections( bool bAll );

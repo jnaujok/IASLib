@@ -877,6 +877,13 @@ namespace IASLib
         return nRet;
     }
 
+    SOCKET CSocket::ReleaseHandle( void )
+    {
+        SOCKET hSocket = m_hSocket;
+        m_hSocket = NULL_SOCKET;
+        return hSocket;
+    }
+
     void CSocket::Shutdown( void )
     {
         if ( m_hSocket != NULL_SOCKET )

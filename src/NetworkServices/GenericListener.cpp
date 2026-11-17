@@ -11,7 +11,6 @@
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/GenericListener.h"
-#include "Sockets/SecureClientSocket.h"
 #include "Streams/SocketStream.h"
 #include "Streams/StringStream.h"
 
@@ -24,13 +23,6 @@ namespace IASLib
 
     CGenericListener::CGenericListener( const char *strName, CClientSocket *pSocket ) : CThreadTask( strName ), m_internetAddress( pSocket->getInternetAddress() )
     {
-        if ( pSocket->IsConnected() )
-        {
-            if ( pSocket->isSecure() )
-            {
-                ((CSecureClientSocket *)pSocket)->doHandshake();
-            }
-        }
         m_pSocket = NULL;
         m_pClientSocket = pSocket;
         m_pInStream = new CSocketStream( pSocket );

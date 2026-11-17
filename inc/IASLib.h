@@ -325,6 +325,7 @@
 //***********
 #include "Sockets/ClientSocket.h"
 #include "Sockets/ServerSocket.h"
+#include "Sockets/TlsContext.h"
 #include "Sockets/SecureSocket.h"
 #include "Sockets/SecureClientSocket.h"
 #include "Sockets/Socket.h"
