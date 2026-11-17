@@ -15,11 +15,22 @@
 
 #include "TlsContext.h"
 
+#ifdef IASLIB_WIN32__
+    // Before OpenSSL, whose headers undo wincrypt.h's clashing macros
+    // (X509_NAME and others).
+#include "Platform.h"
+#include <wincrypt.h>
+#ifdef _MSC_VER
+#pragma comment( lib, "crypt32.lib" )
+#endif
+#endif
+
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include <cctype>
 #include <string>
 
 namespace IASLib
@@ -29,6 +40,56 @@ namespace IASLib
     namespace
     {
             // OpenSSL's queued errors, oldest first, as one line.
+        std::string lowerCase( const char *pszText )
+        {
+            std::string strText( pszText ? pszText : "" );
+            for ( size_t n = 0; n < strText.size(); n++ )
+                strText[ n ] = (char)tolower( (unsigned char)strText[ n ] );
+            return strText;
+        }
+
+            // A host name against a name or "*.domain" pattern (lower case).
+        bool hostMatches( const std::string &strPattern, const std::string &strHost )
+        {
+            if ( strPattern.size() > 2 && strPattern[0] == '*' && strPattern[1] == '.' )
+            {
+                std::string strSuffix = strPattern.substr( 1 );       // ".domain"
+                if ( strHost.size() <= strSuffix.size() ||
+                     strHost.compare( strHost.size() - strSuffix.size(), strSuffix.size(), strSuffix ) != 0 )
+                    return false;
+                std::string strLabel = strHost.substr( 0, strHost.size() - strSuffix.size() );
+                return strLabel.find( '.' ) == std::string::npos;
+            }
+            return strPattern == strHost;
+        }
+
+#ifdef IASLIB_WIN32__
+            // Windows keeps its trusted roots in a certificate store, which
+            // OpenSSL does not read; copy them into the context's store.
+        int loadWindowsRoots( X509_STORE *pStore )
+        {
+            int nAdded = 0;
+            HCERTSTORE hStore = CertOpenSystemStoreW( 0, L"ROOT" );
+            if ( hStore == NULL )
+                return 0;
+            PCCERT_CONTEXT pCertificate = NULL;
+            while ( ( pCertificate = CertEnumCertificatesInStore( hStore, pCertificate ) ) != NULL )
+            {
+                const unsigned char *pData = pCertificate->pbCertEncoded;
+                X509 *pX509 = d2i_X509( NULL, &pData, (long)pCertificate->cbCertEncoded );
+                if ( pX509 )
+                {
+                    if ( X509_STORE_add_cert( pStore, pX509 ) == 1 )
+                        nAdded++;
+                    X509_free( pX509 );
+                }
+            }
+            CertCloseStore( hStore, 0 );
+            ERR_clear_error();      // duplicates are not errors
+            return nAdded;
+        }
+#endif
+
             // True if OpenSSL refused a key because it is not the
             // certificate's.
         bool keyMismatch( void )
@@ -55,7 +116,7 @@ namespace IASLib
 
     CTlsContext::CTlsContext( Role eRole )
         : m_eRole( eRole ), m_pContext( NULL ), m_bHaveCertificate( false ), m_bHaveKey( false ),
-          m_bVerifyPeer( eRole == CLIENT )
+          m_bVerifyPeer( eRole == CLIENT ), m_bRequireKnownHost( false )
     {
         ERR_clear_error();
         m_pContext = SSL_CTX_new( eRole == SERVER ? TLS_server_method() : TLS_client_method() );
@@ -82,7 +143,15 @@ namespace IASLib
         if ( eRole == CLIENT )
         {
             SSL_CTX_set_default_verify_paths( m_pContext );
+#ifdef IASLIB_WIN32__
+            loadWindowsRoots( SSL_CTX_get_cert_store( m_pContext ) );
+#endif
             ERR_clear_error();      // a missing system store is not an error yet
+        }
+        else
+        {
+            SSL_CTX_set_tlsext_servername_callback( m_pContext, serverNameCallback );
+            SSL_CTX_set_tlsext_servername_arg( m_pContext, this );
         }
         setVerifyPeer( m_bVerifyPeer );
     }
@@ -224,10 +293,97 @@ namespace IASLib
     bool CTlsContext::useSystemTrustStore( void )
     {
         ERR_clear_error();
-        if ( m_pContext == NULL || SSL_CTX_set_default_verify_paths( m_pContext ) != 1 )
+        if ( m_pContext == NULL )
             return fail( "could not load the system's trusted certificates" );
+        bool bOk = ( SSL_CTX_set_default_verify_paths( m_pContext ) == 1 );
+#ifdef IASLIB_WIN32__
+        bOk = loadWindowsRoots( SSL_CTX_get_cert_store( m_pContext ) ) > 0 || getTrustedCertificateCount() > 0;
+#endif
+        if ( ! bOk )
+            return fail( "could not load the system's trusted certificates" );
+        ERR_clear_error();
         m_strError = "";
         return true;
+    }
+
+    int CTlsContext::getTrustedCertificateCount( void ) const
+    {
+        if ( m_pContext == NULL )
+            return 0;
+        X509_STORE *pStore = SSL_CTX_get_cert_store( m_pContext );
+        int nCount = 0;
+        X509_STORE_lock( pStore );
+        STACK_OF( X509_OBJECT ) *pObjects = X509_STORE_get0_objects( pStore );
+        for ( int n = 0; n < sk_X509_OBJECT_num( pObjects ); n++ )
+        {
+            if ( X509_OBJECT_get_type( sk_X509_OBJECT_value( pObjects, n ) ) == X509_LU_X509 )
+                nCount++;
+        }
+        X509_STORE_unlock( pStore );
+        return nCount;
+    }
+
+    bool CTlsContext::addHostContext( const char *pszHostName, const std::shared_ptr<CTlsContext> &pContext )
+    {
+        if ( m_eRole != SERVER || pszHostName == NULL || *pszHostName == '\0' )
+        {
+            m_strError = "host contexts are for servers, and need a host name";
+            return false;
+        }
+        if ( ! pContext || pContext.get() == this || pContext->getRole() != SERVER || ! pContext->isReady() )
+        {
+            m_strError = "a host context must be another server context with a certificate and its key";
+            return false;
+        }
+        std::string strName = lowerCase( pszHostName );
+        std::lock_guard<std::mutex> lock( m_hostMutex );
+        for ( size_t n = 0; n < m_aHosts.size(); n++ )
+        {
+            if ( m_aHosts[ n ].first == strName )
+            {
+                m_aHosts[ n ].second = pContext;
+                m_strError = "";
+                return true;
+            }
+        }
+        m_aHosts.push_back( std::make_pair( strName, pContext ) );
+        m_strError = "";
+        return true;
+    }
+
+    std::shared_ptr<CTlsContext> CTlsContext::findHost( const char *pszHostName ) const
+    {
+        std::string strHost = lowerCase( pszHostName );
+        std::lock_guard<std::mutex> lock( m_hostMutex );
+            // Exact names first, then patterns.
+        for ( size_t n = 0; n < m_aHosts.size(); n++ )
+            if ( m_aHosts[ n ].first == strHost )
+                return m_aHosts[ n ].second;
+        for ( size_t n = 0; n < m_aHosts.size(); n++ )
+            if ( hostMatches( m_aHosts[ n ].first, strHost ) )
+                return m_aHosts[ n ].second;
+        return std::shared_ptr<CTlsContext>();
+    }
+
+        // Picks the certificate for the host name the client asked for.
+    int CTlsContext::serverNameCallback( SSL *pSsl, int *pnAlert, void *pArgument )
+    {
+        CTlsContext *pThis = static_cast<CTlsContext *>( pArgument );
+        const char *pszName = SSL_get_servername( pSsl, TLSEXT_NAMETYPE_host_name );
+        if ( pszName == NULL || *pszName == '\0' )
+            return SSL_TLSEXT_ERR_NOACK;            // no name asked for: the default
+        std::shared_ptr<CTlsContext> pHost = pThis->findHost( pszName );
+        if ( pHost )
+        {
+            SSL_set_SSL_CTX( pSsl, pHost->getNativeContext() );
+            return SSL_TLSEXT_ERR_OK;
+        }
+        if ( pThis->m_bRequireKnownHost )
+        {
+            *pnAlert = SSL_AD_UNRECOGNIZED_NAME;
+            return SSL_TLSEXT_ERR_ALERT_FATAL;
+        }
+        return SSL_TLSEXT_ERR_NOACK;
     }
 
     void CTlsContext::setVerifyPeer( bool bVerify )

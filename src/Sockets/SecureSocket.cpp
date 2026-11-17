@@ -261,21 +261,47 @@ namespace IASLib
         else
         {
             SSL_set_connect_state( m_pSsl );
-            if ( ! m_strHost.empty() )
-            {
-                bool bIp = isIpAddress( m_strHost );
-                if ( ! bIp )
-                    SSL_set_tlsext_host_name( m_pSsl, m_strHost.c_str() );     // SNI
-                if ( m_pContext->getVerifyPeer() )
-                {
-                    X509_VERIFY_PARAM *pParam = SSL_get0_param( m_pSsl );
-                    if ( bIp )
-                        X509_VERIFY_PARAM_set1_ip_asc( pParam, m_strHost.c_str() );
-                    else
-                        X509_VERIFY_PARAM_set1_host( pParam, m_strHost.c_str(), 0 );
-                }
-            }
+            applyServerName();
         }
+    }
+
+        // The name asked for (SNI, not for addresses) and checked against the
+        // certificate (a name, or an address).
+    void CSecureSocket::applyServerName( void )
+    {
+        if ( m_pSsl == NULL || m_bServer || m_strHost.empty() )
+            return;
+        bool bIp = isIpAddress( m_strHost );
+        if ( bIp )
+            SSL_set_tlsext_host_name( m_pSsl, NULL );
+        else
+            SSL_set_tlsext_host_name( m_pSsl, const_cast<char *>( m_strHost.c_str() ) );
+        if ( m_pContext->getVerifyPeer() )
+        {
+            X509_VERIFY_PARAM *pParam = SSL_get0_param( m_pSsl );
+            X509_VERIFY_PARAM_set1_host( pParam, NULL, 0 );
+            X509_VERIFY_PARAM_set1_ip( pParam, NULL, 0 );
+            if ( bIp )
+                X509_VERIFY_PARAM_set1_ip_asc( pParam, m_strHost.c_str() );
+            else
+                X509_VERIFY_PARAM_set1_host( pParam, m_strHost.c_str(), 0 );
+        }
+    }
+
+    void CSecureSocket::SetServerName( const char *pszName )
+    {
+        std::lock_guard<std::mutex> lock( m_mutex );
+        if ( m_bServer || m_bHandshakeDone || pszName == NULL )
+            return;
+        m_strHost = pszName;
+        applyServerName();
+    }
+
+    CString CSecureSocket::GetServerName( void )
+    {
+        std::lock_guard<std::mutex> lock( m_mutex );
+        const char *pszName = m_pSsl ? SSL_get_servername( m_pSsl, TLSEXT_NAMETYPE_host_name ) : NULL;
+        return CString( pszName ? pszName : "" );
     }
 
     void CSecureSocket::recordError( const char *pszWhat, int nSslError )

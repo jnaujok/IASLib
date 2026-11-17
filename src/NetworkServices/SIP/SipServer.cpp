@@ -117,6 +117,7 @@ namespace IASLib
         m_strRealm = "IASLib";
         m_strServerName = "IASLib/2.0";
         m_bSend100Trying = true;
+        m_bRequireTlsForSips = true;
         m_nT1 = 500;
         m_nT2 = 4000;
         m_nT4 = 5000;
@@ -131,6 +132,7 @@ namespace IASLib
         m_strRealm = "IASLib";
         m_strServerName = "IASLib/2.0";
         m_bSend100Trying = true;
+        m_bRequireTlsForSips = true;
         m_nT1 = 500;
         m_nT2 = 4000;
         m_nT4 = 5000;
@@ -500,8 +502,14 @@ namespace IASLib
                 }
             }
 
+            bool bSecureTransport = ( pTransport != NULL && strcmp( pTransport->getProtocol(), "TLS" ) == 0 );
             if ( scheme != "sip" && scheme != "sips" && scheme != "tel" )
             {
+                response->setStatus( 416 );
+            }
+            else if ( scheme == "sips" && m_bRequireTlsForSips && ! bSecureTransport )
+            {
+                    // The sips: guarantee (TLS on every hop) cannot be kept.
                 response->setStatus( 416 );
             }
             else if ( unsupported.GetLength() > 0 )

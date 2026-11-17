@@ -394,19 +394,54 @@ static void testHttps( const CTestCertificate &good, const CTestCertificate &oth
     CHECK( idle.ReadWithTimeout( &achByte, 1, 2000 ) <= 0 && idle.ReadWithTimeout( &achByte, 1, 100 ) != CSocket::READ_TIMEOUT );
 }
 
-static std::string sipOptions( const char *pszBranch, int nCSeq )
+static std::string sipOptions( const char *pszBranch, int nCSeq, const char *pszTransport = "TLS", const char *pszScheme = "sips" )
 {
     char achRequest[ 1024 ];
     snprintf( achRequest, sizeof( achRequest ),
-              "OPTIONS sips:server@localhost SIP/2.0\r\n"
-              "Via: SIP/2.0/TLS client.example;branch=%s\r\n"
+              "OPTIONS %s:server@localhost SIP/2.0\r\n"
+              "Via: SIP/2.0/%s client.example;branch=%s\r\n"
               "Max-Forwards: 70\r\n"
-              "From: <sips:alice@client.example>;tag=tls1\r\n"
-              "To: <sips:server@localhost>\r\n"
+              "From: <%s:alice@client.example>;tag=tls1\r\n"
+              "To: <%s:server@localhost>\r\n"
               "Call-ID: tls-call@client.example\r\n"
               "CSeq: %d OPTIONS\r\n"
-              "Content-Length: 0\r\n\r\n", pszBranch, nCSeq );
+              "Content-Length: 0\r\n\r\n", pszScheme, pszTransport, pszBranch, pszScheme, pszScheme, nCSeq );
     return achRequest;
+}
+
+    // Sends one SIP request over plain TCP and returns the first response.
+static std::string tcpSipExchange( int nPort, const std::string &strRequest )
+{
+    int fd = rawConnect( nPort );
+    if ( fd < 0 )
+        return "";
+    send( fd, strRequest.data(), (int)strRequest.size(), MSG_NOSIGNAL );
+    std::string strReceived;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds( 3 );
+    while ( std::chrono::steady_clock::now() < deadline )
+    {
+        size_t nLeading = 0;
+        long nLength = CSipUtils::frameMessage( strReceived.data(), strReceived.size(), nLeading, 65535 );
+        if ( nLength > 0 )
+        {
+            closeSocket( fd );
+            return strReceived.substr( nLeading, (size_t)nLength - nLeading );
+        }
+        struct pollfd pfd;
+        pfd.fd = fd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        if ( poll( &pfd, 1, 50 ) > 0 )
+        {
+            char achBuffer[ 4096 ];
+            int n = (int)recv( fd, achBuffer, sizeof( achBuffer ), 0 );
+            if ( n <= 0 )
+                break;
+            strReceived.append( achBuffer, (size_t)n );
+        }
+    }
+    closeSocket( fd );
+    return strReceived;
 }
 
 static void testSipOverTls( const CTestCertificate &good )
@@ -464,14 +499,127 @@ static void testSipOverTls( const CTestCertificate &good )
     all.Start();
     CHECK( all.waitUntilReady( 5000 ) );
     CHECK( all.getUdpPort() > 0 && all.getTcpPort() > 0 && all.getTlsPort() > 0 && all.getTlsPort() != all.getTcpPort() );
+
+        // sips: needs TLS: refused over TCP (416), sip: is fine over TCP.
+    CHECK( all.getRequireTlsForSips() );
+    std::string strReply = tcpSipExchange( all.getTcpPort(), sipOptions( "z9hG4bKtcpsips", 1, "TCP", "sips" ) );
+    CHECK( strReply.compare( 0, 34, "SIP/2.0 416 Unsupported URI Scheme" ) == 0 );
+    strReply = tcpSipExchange( all.getTcpPort(), sipOptions( "z9hG4bKtcpsip", 2, "TCP", "sip" ) );     // a new CSeq: not a merged request
+    CHECK( strReply.compare( 0, 14, "SIP/2.0 200 OK" ) == 0 );
     all.Stop();
     all.Wait();
     CHECK( all.getTlsPort() == 0 );
+
+        // Behind a proxy that ends TLS for it, the check can be turned off.
+    CBasicSipServer behindProxy( 0, false, true, 1 );
+    behindProxy.AddHandlerFactory( new CBaseSipHandlerFactory() );
+    behindProxy.setRequireTlsForSips( false );
+    behindProxy.Start();
+    CHECK( behindProxy.waitUntilReady( 5000 ) );
+    strReply = tcpSipExchange( behindProxy.getTcpPort(), sipOptions( "z9hG4bKproxied", 1, "TCP", "sips" ) );
+    CHECK( strReply.compare( 0, 14, "SIP/2.0 200 OK" ) == 0 );
+    behindProxy.Stop();
+    behindProxy.Wait();
 
     auto start = std::chrono::steady_clock::now();
     server.Stop();
     server.Wait();
     CHECK( elapsedMs( start ) < 2000 );
+}
+
+    // Connects to the server's address asking for pszName, and returns the
+    // certificate subject it got ("" if the handshake failed).
+static std::string subjectFor( int nPort, const char *pszName, const std::shared_ptr<CTlsContext> &client )
+{
+    CSecureSocket socket( "127.0.0.1", nPort, client );
+    if ( pszName )
+        socket.SetServerName( pszName );
+    if ( ! socket.Handshake( 5000 ) )
+        return "";
+    return (const char *)socket.GetPeerSubject();
+}
+
+static void testServerNames( const CTestCertificate &good, const CTestCertificate &other )
+{
+    printf( "Server name indication\n" );
+    CTestCertificate wild = makeCertificate( "Wild", "DNS:*.wild.example" );
+    CTestCertificate late = makeCertificate( "Late", "DNS:late.example" );
+
+    std::shared_ptr<CTlsContext> tls = serverContext( good );
+    CHECK( ! tls->addHostContext( "x.example", std::make_shared<CTlsContext>( CTlsContext::CLIENT ) ) );
+    CHECK( ! tls->addHostContext( "x.example", std::make_shared<CTlsContext>( CTlsContext::SERVER ) ) );   // no certificate
+    CHECK( ! tls->addHostContext( "", serverContext( other ) ) );
+    CHECK( ! std::make_shared<CTlsContext>( CTlsContext::CLIENT )->addHostContext( "x.example", serverContext( other ) ) );
+    CHECK( tls->addHostContext( "Other.Example", serverContext( other ) ) );
+    CHECK( tls->addHostContext( "*.wild.example", serverContext( wild ) ) );
+
+    CBasicHttpServer server( 0, 8 );
+    server.AddHandlerFactory( new CBaseHttpHandlerFactory() );
+    CHECK( server.setTlsContext( tls ) );
+    server.Start();
+    CHECK( server.waitUntilReady( 5000 ) );
+    int nPort = server.getListeningPort();
+
+    std::shared_ptr<CTlsContext> anyCertificate = std::make_shared<CTlsContext>( CTlsContext::CLIENT );
+    anyCertificate->setVerifyPeer( false );
+
+        // The certificate follows the name asked for, and is verified for it.
+    CHECK( subjectFor( nPort, "other.example", clientTrusting( other ) ).find( "CN=Other" ) != std::string::npos );
+    CHECK( subjectFor( nPort, "OTHER.example", clientTrusting( other ) ).find( "CN=Other" ) != std::string::npos );
+    CHECK( subjectFor( nPort, "a.wild.example", clientTrusting( wild ) ).find( "CN=Wild" ) != std::string::npos );
+    CHECK( subjectFor( nPort, "a.b.wild.example", anyCertificate ).find( "CN=IASLib test" ) != std::string::npos );   // one label only
+    CHECK( subjectFor( nPort, "nobody.example", anyCertificate ).find( "CN=IASLib test" ) != std::string::npos );
+    CHECK( subjectFor( nPort, NULL, clientTrusting( good ) ).find( "CN=IASLib test" ) != std::string::npos );          // an address: no name
+    CHECK( subjectFor( nPort, "localhost", clientTrusting( good ) ).find( "CN=IASLib test" ) != std::string::npos );
+        // Verification uses the name asked for: the default certificate is
+        // not valid for other.example.
+    CHECK( subjectFor( nPort, "nobody.example", clientTrusting( good ) ).empty() );
+
+        // The client side reports the name it asked for.
+    {
+        CSecureSocket socket( "127.0.0.1", nPort, clientTrusting( other ) );
+        socket.SetServerName( "other.example" );
+        CHECK( socket.Handshake( 5000 ) && socket.GetServerName() == "other.example" );
+    }
+
+        // Hosts can be added while serving.
+    CHECK( subjectFor( nPort, "late.example", anyCertificate ).find( "CN=IASLib test" ) != std::string::npos );
+    CHECK( tls->addHostContext( "late.example", serverContext( late ) ) );
+    CHECK( subjectFor( nPort, "late.example", clientTrusting( late ) ).find( "CN=Late" ) != std::string::npos );
+    server.Stop();
+    server.Wait();
+
+        // Strict: unknown names are refused; no name still gets the default.
+    std::shared_ptr<CTlsContext> strict = serverContext( good );
+    strict->addHostContext( "other.example", serverContext( other ) );
+    strict->setRequireKnownHostName( true );
+    CBasicHttpServer strictServer( 0, 4 );
+    strictServer.AddHandlerFactory( new CBaseHttpHandlerFactory() );
+    strictServer.setTlsContext( strict );
+    strictServer.Start();
+    CHECK( strictServer.waitUntilReady( 5000 ) );
+    nPort = strictServer.getListeningPort();
+    CHECK( subjectFor( nPort, "nobody.example", anyCertificate ).empty() );
+    CHECK( subjectFor( nPort, "other.example", clientTrusting( other ) ).find( "CN=Other" ) != std::string::npos );
+    CHECK( subjectFor( nPort, NULL, clientTrusting( good ) ).find( "CN=IASLib test" ) != std::string::npos );
+    strictServer.Stop();
+    strictServer.Wait();
+}
+
+static void testTrustStore( const CTestCertificate &good )
+{
+    printf( "Trusted certificates\n" );
+    CHECK( clientTrusting( good )->getTrustedCertificateCount() >= 1 );
+    CTlsContext system( CTlsContext::CLIENT );
+    int nSystem = system.getTrustedCertificateCount();
+#ifdef IASLIB_WIN32__
+        // Read from the Windows Trusted Root store.
+    CHECK( nSystem > 0 );
+    CHECK( system.useSystemTrustStore() );
+#endif
+    printf( "  %d system certificates loaded\n", nSystem );
+    CTlsContext server( CTlsContext::SERVER );
+    CHECK( server.getTrustedCertificateCount() == 0 );
 }
 
 int main( void )
@@ -483,6 +631,8 @@ int main( void )
     testContexts( good, other );
     testHttps( good, other );
     testSipOverTls( good );
+    testServerNames( good, other );
+    testTrustStore( good );
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );
     return ( g_nFailures == 0 ) ? 0 : 1;

@@ -81,6 +81,15 @@ namespace IASLib
                 // (default 30 seconds).
             void                    SetHandshakeTimeout( int nTimeoutMs ) { m_nHandshakeTimeoutMs = nTimeoutMs; }
 
+                // Clients: the host name to ask for (SNI) and to check the
+                // certificate against, when it differs from the host connected
+                // to (for example, connecting to an address). Before the
+                // handshake.
+            void                    SetServerName( const char *pszName );
+                // The host name the client asked for (on either side); "" if
+                // none.
+            CString                 GetServerName( void );
+
                 // About the connection, once the handshake is done.
             CString                 GetTlsError( void );
             CString                 GetProtocolVersion( void );     // "TLSv1.3"
@@ -100,6 +109,7 @@ namespace IASLib
             std::string             m_strTlsError;
 
             void                    setUp( void );
+            void                    applyServerName( void );
             int                     waitFor( int nSslError, int nTimeoutMs );
             void                    recordError( const char *pszWhat, int nSslError );
 

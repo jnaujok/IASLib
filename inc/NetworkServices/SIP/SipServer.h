@@ -12,7 +12,9 @@
  *          missing To, From, Call-ID, CSeq or Via gives 400, another SIP
  *          version gives 505, an unknown method gives 501 and a known one
  *          with no handler gives 405 (both with Allow), an unsupported URI
- *          scheme gives 416 and an unsupported Require option gives 420;
+ *          scheme gives 416 (so does a sips: Request-URI that did not
+ *          arrive over TLS, unless setRequireTlsForSips( false )) and an
+ *          unsupported Require option gives 420;
  *        - adds the "received" and "rport" Via parameters (section 18.2.1,
  *          RFC 3581) and sends responses where section 18.2.2 says to;
  *        - runs the server transactions of section 17.2: retransmitted
@@ -75,6 +77,7 @@ namespace IASLib
             CString         m_strRealm;
             CString         m_strServerName;
             bool            m_bSend100Trying;
+            bool            m_bRequireTlsForSips;
 
             unsigned long   m_nT1;
             unsigned long   m_nT2;
@@ -127,6 +130,13 @@ namespace IASLib
                 // Whether INVITE is answered with 100 Trying before its handler
                 // runs (on by default; RFC 3261 17.2.1).
             virtual void    setSend100Trying( bool bSend ) { m_bSend100Trying = bSend; }
+
+                // A sips: Request-URI asks for TLS on every hop (RFC 3261 26.2,
+                // RFC 5630), so one that arrives over UDP or TCP is refused with
+                // 416 (on by default). Turn off for a server behind a proxy that
+                // terminates TLS for it.
+            virtual void    setRequireTlsForSips( bool bRequire ) { m_bRequireTlsForSips = bRequire; }
+            virtual bool    getRequireTlsForSips( void ) { return m_bRequireTlsForSips; }
 
                 // The RFC 3261 timer values in milliseconds (defaults 500, 4000
                 // and 5000).

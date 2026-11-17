@@ -10,6 +10,14 @@
  * certificate and host name by default; a server does not ask for client
  * certificates unless setVerifyPeer( true ) is called.
  *
+ *      A server can present different certificates for different host names
+ * (Server Name Indication): addHostContext() names another server context
+ * for clients that ask for that host.
+ *
+ *      Clients start with the system's trusted certificates: OpenSSL's
+ * default locations, and on Windows the system's Trusted Root store (which
+ * OpenSSL does not read by itself).
+ *
  *          std::shared_ptr<CTlsContext> tls = std::make_shared<CTlsContext>( CTlsContext::SERVER );
  *          if ( ! tls->setCertificateFile( "server.crt" ) || ! tls->setPrivateKeyFile( "server.key" ) )
  *              printf( "%s\n", (const char *)tls->getError() );
@@ -34,7 +42,14 @@
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/String_.h"
 
+#include <memory>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
+
 struct ssl_ctx_st;
+struct ssl_st;
 
 namespace IASLib
 {
@@ -65,6 +80,21 @@ namespace IASLib
             bool                addTrustedCertificatePem( const char *pszPem );
             bool                useSystemTrustStore( void );
 
+                // The number of certificates trusted so far (those loaded from
+                // directories are only read when needed, so are not counted).
+            int                 getTrustedCertificateCount( void ) const;
+
+                // Servers: use pContext (another ready SERVER context, with its
+                // own certificate) for clients asking for this host name. A name
+                // "*.example.com" matches any one label in its place; names
+                // ignore case. Clients asking for other names, or none, get this
+                // context's certificate. May be called while serving.
+            bool                addHostContext( const char *pszHostName, const std::shared_ptr<CTlsContext> &pContext );
+                // Servers: refuse handshakes that ask for a host name with no
+                // context here (default false). Handshakes naming no host still
+                // get this context's certificate.
+            void                setRequireKnownHostName( bool bRequire ) { m_bRequireKnownHost = bRequire; }
+
                 // Clients: verify the server (default true). Servers: require a
                 // client certificate (default false).
             void                setVerifyPeer( bool bVerify );
@@ -86,10 +116,16 @@ namespace IASLib
             bool                m_bHaveCertificate;
             bool                m_bHaveKey;
             bool                m_bVerifyPeer;
+            bool                m_bRequireKnownHost;
             CString             m_strError;
+
+            mutable std::mutex  m_hostMutex;
+            std::vector< std::pair< std::string, std::shared_ptr<CTlsContext> > > m_aHosts;
 
             bool                fail( const char *pszWhat );
             bool                checkKey( void );
+            std::shared_ptr<CTlsContext> findHost( const char *pszHostName ) const;
+            static int          serverNameCallback( struct ssl_st *pSsl, int *pnAlert, void *pArgument );
 
                                 CTlsContext( const CTlsContext & );
             CTlsContext        &operator =( const CTlsContext & );
