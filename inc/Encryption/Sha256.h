@@ -18,11 +18,19 @@
 #include "BaseTypes/Object.h"
 #include "BaseTypes/String_.h"
 
+#include <array>
+#include <stddef.h>
+#include <string>
+#include <vector>
+
 namespace IASLib
 { 
     typedef unsigned char uint8;
     typedef unsigned int uint32;
     typedef unsigned long long uint64;
+
+        // A SHA-256 digest: 32 bytes.
+    typedef std::array<unsigned char, 32> CSha256Digest;
 
     class CSHA256 : public CObject
     {
@@ -35,15 +43,30 @@ namespace IASLib
 
             static const uint32 DIGEST_SIZE = ( 256 / 8);
 
+                // Incremental use: init(), update() as often as needed, final().
+                // A context can be copied part way through to hash several
+                // messages that share a prefix.
             void init();
             void update(const uint8 *message, uint32 len);
+            void updateData(const void *pData, size_t nLength);     // any length
             void final(uint8 *digest);
 
-            static CString StringDigest(CString &input);
+                // The digest of some bytes, at once.
+            static CSha256Digest Digest( const void *pData, size_t nLength );
+            static CSha256Digest Digest( const std::vector<unsigned char> &aData );
+            static CSha256Digest Digest( const std::string &strData );
+                // Lower-case hexadecimal (64 characters), and back. FromHex
+                // is false for anything but 64 hexadecimal digits.
+            static std::string   ToHex( const CSha256Digest &digest );
+            static bool          FromHex( const std::string &strHex, CSha256Digest &digest );
+
+                // The hexadecimal digest of a string's text. (CString stops at
+                // a NUL byte: use Digest() for binary data.)
+            static CString StringDigest(const CString &input);
         
         protected:
             void transform(const uint8 *message, uint32 block_nb);
-            uint32  m_tot_len;
+            uint64  m_tot_len;      // bytes hashed so far, in whole blocks
             uint32  m_len;
             uint8   m_block[2*SHA224_256_BLOCK_SIZE];
             uint32  m_h[8];

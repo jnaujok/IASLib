@@ -3,6 +3,7 @@
 
 #include "Encryption/Sha256.h"
 #include <stdio.h>
+#include <string.h>
 
 namespace IASLib
 {
@@ -104,43 +105,103 @@ namespace IASLib
         rem_len = new_len % SHA224_256_BLOCK_SIZE;
         memcpy(m_block, &shifted_message[block_nb << 6], rem_len);
         m_len = rem_len;
-        m_tot_len += (block_nb + 1) << 6;
+        m_tot_len += (uint64)(block_nb + 1) << 6;
+    }
+
+    void CSHA256::updateData( const void *pData, size_t nLength )
+    {
+            // In pieces that the 32-bit update can take.
+        const unsigned char *pBytes = (const unsigned char *)pData;
+        const size_t nChunk = (size_t)1 << 30;
+        while ( nLength > 0 )
+        {
+            size_t nPart = ( nLength < nChunk ) ? nLength : nChunk;
+            update( pBytes, (uint32)nPart );
+            pBytes += nPart;
+            nLength -= nPart;
+        }
     }
     
     void CSHA256::final(unsigned char *digest)
     {
         unsigned int block_nb;
         unsigned int pm_len;
-        unsigned int len_b;
+        uint64 len_b;
         int i;
         block_nb = (1 + ((SHA224_256_BLOCK_SIZE - 9)
                         < (m_len % SHA224_256_BLOCK_SIZE)));
+            // The message length in bits, as 64 bits big-endian (FIPS 180-4).
         len_b = (m_tot_len + m_len) << 3;
         pm_len = block_nb << 6;
         memset(m_block + m_len, 0, pm_len - m_len);
         m_block[m_len] = 0x80;
-        SHA2_UNPACK32(len_b, m_block + pm_len - 4);
+        for ( i = 0; i < 8; i++ )
+            m_block[ pm_len - 1 - i ] = (uint8)( len_b >> ( 8 * i ) );
         transform(m_block, block_nb);
         for (i = 0 ; i < 8; i++) {
             SHA2_UNPACK32(m_h[i], &digest[i << 2]);
         }
     }
     
-    CString CSHA256::StringDigest(CString &input)
+    CString CSHA256::StringDigest(const CString &input)
     {
-        unsigned char digest[CSHA256::DIGEST_SIZE];
-        memset(digest,0,CSHA256::DIGEST_SIZE);
-    
-        CSHA256 ctx = CSHA256();
+        CString text( input );
+        return CString( ToHex( Digest( text.getBytes(), text.Length() ) ).c_str() );
+    }
+
+    CSha256Digest CSHA256::Digest( const void *pData, size_t nLength )
+    {
+        CSha256Digest digest;
+        CSHA256 ctx;
         ctx.init();
-        ctx.update( (unsigned char*)input.getBytes(), input.Length());
-        ctx.final(digest);
-    
-        char buf[2*CSHA256::DIGEST_SIZE+1];
-        buf[2*CSHA256::DIGEST_SIZE] = 0;
-        for (uint32 i = 0; i < CSHA256::DIGEST_SIZE; i++)
-            sprintf(buf+i*2, "%02x", digest[i]);
-        return CString(buf);
+        ctx.updateData( pData, nLength );
+        ctx.final( digest.data() );
+        return digest;
+    }
+
+    CSha256Digest CSHA256::Digest( const std::vector<unsigned char> &aData )
+    {
+        return Digest( aData.empty() ? NULL : &aData[0], aData.size() );
+    }
+
+    CSha256Digest CSHA256::Digest( const std::string &strData )
+    {
+        return Digest( strData.data(), strData.size() );
+    }
+
+    std::string CSHA256::ToHex( const CSha256Digest &digest )
+    {
+        static const char *HEX = "0123456789abcdef";
+        std::string strHex;
+        strHex.reserve( 64 );
+        for ( size_t n = 0; n < digest.size(); n++ )
+        {
+            strHex += HEX[ digest[ n ] >> 4 ];
+            strHex += HEX[ digest[ n ] & 15 ];
+        }
+        return strHex;
+    }
+
+    bool CSHA256::FromHex( const std::string &strHex, CSha256Digest &digest )
+    {
+        if ( strHex.size() != 64 )
+            return false;
+        for ( size_t n = 0; n < 32; n++ )
+        {
+            int nValue = 0;
+            for ( size_t m = 0; m < 2; m++ )
+            {
+                char c = strHex[ n * 2 + m ];
+                int nDigit;
+                if ( c >= '0' && c <= '9' ) nDigit = c - '0';
+                else if ( c >= 'a' && c <= 'f' ) nDigit = c - 'a' + 10;
+                else if ( c >= 'A' && c <= 'F' ) nDigit = c - 'A' + 10;
+                else return false;
+                nValue = nValue * 16 + nDigit;
+            }
+            digest[ n ] = (unsigned char)nValue;
+        }
+        return true;
     }
 
 }; // namespace IASLib
