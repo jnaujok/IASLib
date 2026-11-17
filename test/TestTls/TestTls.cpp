@@ -10,6 +10,7 @@
 #include "IASLib.h"
 #include "NetworkServices/HTTP/BasicHttpServer.h"
 #include "NetworkServices/HTTP/Handlers/BaseHttpHandlerFactory.h"
+#include "NetworkServices/Entities/TextPlainEntity.h"
 #include "NetworkServices/SIP/BasicSipServer.h"
 #include "NetworkServices/SIP/SipUtils.h"
 #include "NetworkServices/SIP/Handlers/BaseSipHandlerFactory.h"
@@ -123,6 +124,33 @@ static std::shared_ptr<CTlsContext> clientTrusting( const CTestCertificate &cert
 /***********************************************************************
  * Helpers
  ***********************************************************************/
+
+    // GET answers with the name of its site.
+class CSiteHandler : public CHttpHandler
+{
+    public:
+        DEFINE_OBJECT( CSiteHandler );
+        CSiteHandler( CString site, CString uri = "", CString version = "" ) : CHttpHandler( uri, version ), m_site( site ) {}
+        virtual CString getMethod( void ) { return CString( "GET" ); }
+        virtual CHttpHandler *generateHandler( CString uri, CString version ) { return new CSiteHandler( m_site, uri, version ); }
+        virtual bool process( CHttpRequest *request, CHttpResponse *response )
+        {
+            (void)request;
+            response->setStatus( 200 );
+            response->SetEntity( new CTextPlainEntity( m_site ) );
+            return true;
+        }
+    private:
+        CString m_site;
+};
+IMPLEMENT_OBJECT( CSiteHandler, CHttpHandler );
+
+static CHttpHandlerFactory *siteFactory( const char *pszSite )
+{
+    CHttpHandlerFactory *factory = new CHttpHandlerFactory();
+    factory->registerHandler( new CSiteHandler( pszSite ) );
+    return factory;
+}
 
     // Reads until the text contains nMarkers copies of strMarker followed by
     // a complete header block, the peer closes, or the time runs out.
@@ -606,6 +634,71 @@ static void testServerNames( const CTestCertificate &good, const CTestCertificat
     strictServer.Wait();
 }
 
+    // One request on a TLS connection that asked for pszSni (NULL: none),
+    // with the given Host; returns the response, and whether the server then
+    // closed the connection.
+static std::string httpsRequest( int nPort, const char *pszSni, const std::shared_ptr<CTlsContext> &client,
+                                 const char *pszHost, bool &bClosed )
+{
+    CSecureSocket socket( "127.0.0.1", nPort, client );
+    if ( pszSni )
+        socket.SetServerName( pszSni );
+    bClosed = false;
+    if ( ! socket.Handshake( 5000 ) )
+        return "no handshake";
+    std::string strRequest = std::string( "GET / HTTP/1.1\r\nHost: " ) + pszHost + "\r\n\r\n";
+    socket.Send( strRequest.data(), (int)strRequest.size() );
+    std::string strData = readUntil( socket, "HTTP/1.1 ", 1, 3000, bClosed );
+    if ( ! bClosed )
+    {
+        char achByte;
+        int nRead = socket.ReadWithTimeout( &achByte, 1, 500 );
+        bClosed = ( nRead == 0 || nRead == CSocket::READ_ERROR );
+    }
+    return strData;
+}
+
+static void testHttpsVirtualHosts( const CTestCertificate &good, const CTestCertificate &other )
+{
+    printf( "HTTPS virtual hosts\n" );
+    std::shared_ptr<CTlsContext> tls = serverContext( good );          // localhost
+    tls->addHostContext( "other.example", serverContext( other ) );
+
+    CBasicHttpServer server( 0, 8 );
+    server.AddVirtualHost( "localhost", siteFactory( "local site" ) );
+    server.AddVirtualHost( "other.example", siteFactory( "other site" ) );
+    CHECK( server.setTlsContext( tls ) );
+    server.Start();
+    CHECK( server.waitUntilReady( 5000 ) );
+    int nPort = server.getListeningPort();
+    std::shared_ptr<CTlsContext> anyCertificate = std::make_shared<CTlsContext>( CTlsContext::CLIENT );
+    anyCertificate->setVerifyPeer( false );
+
+        // Each name gets its own certificate and its own site.
+    bool bClosed = false;
+    std::string strData = httpsRequest( nPort, "other.example", clientTrusting( other ), "other.example", bClosed );
+    CHECK( strData.find( "HTTP/1.1 200" ) == 0 && strData.find( "other site" ) != std::string::npos && ! bClosed );
+    strData = httpsRequest( nPort, "localhost", clientTrusting( good ), "localhost:443", bClosed );
+    CHECK( strData.find( "HTTP/1.1 200" ) == 0 && strData.find( "local site" ) != std::string::npos );
+
+        // Another site's Host on a connection made for other.example: 421,
+        // and the connection is closed.
+    strData = httpsRequest( nPort, "other.example", clientTrusting( other ), "localhost", bClosed );
+    CHECK( strData.find( "HTTP/1.1 421 Misdirected Request" ) == 0 );
+    CHECK( strData.find( "local site" ) == std::string::npos && bClosed );
+
+        // A client that asked for no name (an address) is routed by Host.
+    strData = httpsRequest( nPort, NULL, anyCertificate, "other.example", bClosed );
+    CHECK( strData.find( "HTTP/1.1 200" ) == 0 && strData.find( "other site" ) != std::string::npos );
+
+        // An unknown name: the default certificate, and no virtual host.
+    strData = httpsRequest( nPort, "nobody.example", anyCertificate, "nobody.example", bClosed );
+    CHECK( strData.find( "HTTP/1.1 405" ) == 0 );                  // no default handlers at all
+
+    server.Stop();
+    server.Wait();
+}
+
 static void testTrustStore( const CTestCertificate &good )
 {
     printf( "Trusted certificates\n" );
@@ -632,6 +725,7 @@ int main( void )
     testHttps( good, other );
     testSipOverTls( good );
     testServerNames( good, other );
+    testHttpsVirtualHosts( good, other );
     testTrustStore( good );
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );

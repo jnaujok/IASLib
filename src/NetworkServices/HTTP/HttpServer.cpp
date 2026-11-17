@@ -48,11 +48,112 @@ namespace IASLib
         m_nMaxBodySize = 10 * 1024 * 1024;
         m_nKeepAliveTimeoutMs = 30000;
         m_nRequestTimeoutMs = 30000;
+        m_bRequireMatchingHost = true;
     }
 
     CHttpServer::~CHttpServer( void )
     {
         m_aHandlerFactories.DeleteAll();
+        for ( size_t nX = 0; nX < m_aVirtualHosts.size(); nX++ )
+            for ( size_t nY = 0; nY < m_aVirtualHosts[ nX ].second.size(); nY++ )
+                delete m_aVirtualHosts[ nX ].second[ nY ];
+        m_aVirtualHosts.clear();
+    }
+
+    namespace
+    {
+            // A host name against a name or "*.domain" pattern (both already
+            // normalized).
+        bool hostMatches( const std::string &strPattern, const std::string &strHost )
+        {
+            if ( strPattern.size() > 2 && strPattern[0] == '*' && strPattern[1] == '.' )
+            {
+                std::string strSuffix = strPattern.substr( 1 );       // ".domain"
+                if ( strHost.size() <= strSuffix.size() ||
+                     strHost.compare( strHost.size() - strSuffix.size(), strSuffix.size(), strSuffix ) != 0 )
+                    return false;
+                return strHost.substr( 0, strHost.size() - strSuffix.size() ).find( '.' ) == std::string::npos;
+            }
+            return strPattern == strHost;
+        }
+
+        std::string normalizedPattern( const char *pszHostName )
+        {
+            std::string strName( pszHostName ? pszHostName : "" );
+            if ( strName.compare( 0, 2, "*." ) == 0 )
+                return "*." + std::string( (const char *)CHttpRequest::normalizeHostName( CString( strName.substr( 2 ).c_str() ) ) );
+            return std::string( (const char *)CHttpRequest::normalizeHostName( CString( strName.c_str() ) ) );
+        }
+    }
+
+    void CHttpServer::AddVirtualHost( const char *pszHostName, CHttpHandlerFactory *pFactory )
+    {
+        std::string strName = normalizedPattern( pszHostName );
+        if ( pFactory == NULL || strName.empty() || strName == "*." )
+        {
+            delete pFactory;
+            return;
+        }
+        for ( size_t nX = 0; nX < m_aVirtualHosts.size(); nX++ )
+        {
+            if ( m_aVirtualHosts[ nX ].first == strName )
+            {
+                m_aVirtualHosts[ nX ].second.insert( m_aVirtualHosts[ nX ].second.begin(), pFactory );
+                return;
+            }
+        }
+        m_aVirtualHosts.push_back( std::make_pair( strName, std::vector<CHttpHandlerFactory *>( 1, pFactory ) ) );
+    }
+
+    bool CHttpServer::RemoveVirtualHost( const char *pszHostName )
+    {
+        std::string strName = normalizedPattern( pszHostName );
+        for ( size_t nX = 0; nX < m_aVirtualHosts.size(); nX++ )
+        {
+            if ( m_aVirtualHosts[ nX ].first == strName )
+            {
+                for ( size_t nY = 0; nY < m_aVirtualHosts[ nX ].second.size(); nY++ )
+                    delete m_aVirtualHosts[ nX ].second[ nY ];
+                m_aVirtualHosts.erase( m_aVirtualHosts.begin() + nX );
+                return true;
+            }
+        }
+        return false;
+    }
+
+    CString CHttpServer::findVirtualHost( const CString &strHostName )
+    {
+        std::string strHost( (const char *)CHttpRequest::normalizeHostName( strHostName ) );
+        if ( strHost.empty() )
+            return CString( "" );
+            // Exact names first, then patterns.
+        for ( size_t nX = 0; nX < m_aVirtualHosts.size(); nX++ )
+            if ( m_aVirtualHosts[ nX ].first == strHost )
+                return CString( m_aVirtualHosts[ nX ].first.c_str() );
+        for ( size_t nX = 0; nX < m_aVirtualHosts.size(); nX++ )
+            if ( hostMatches( m_aVirtualHosts[ nX ].first, strHost ) )
+                return CString( m_aVirtualHosts[ nX ].first.c_str() );
+        return CString( "" );
+    }
+
+        // The factories that serve a request: its virtual host's, or (for
+        // other hosts, and with no request) the server's own.
+    std::vector<CHttpHandlerFactory *> CHttpServer::factoriesFor( CHttpRequest *request )
+    {
+        if ( request != NULL && ! m_aVirtualHosts.empty() )
+        {
+            CString strHost = findVirtualHost( request->getHostName() );
+            if ( strHost.GetLength() > 0 )
+            {
+                for ( size_t nX = 0; nX < m_aVirtualHosts.size(); nX++ )
+                    if ( m_aVirtualHosts[ nX ].first == (const char *)strHost )
+                        return m_aVirtualHosts[ nX ].second;
+            }
+        }
+        std::vector<CHttpHandlerFactory *> factories;
+        for ( size_t nX = 0; nX < m_aHandlerFactories.GetCount(); nX++ )
+            factories.push_back( (CHttpHandlerFactory *)m_aHandlerFactories[ nX ] );
+        return factories;
     }
 
     void *CHttpServer::Run( void )
@@ -68,9 +169,10 @@ namespace IASLib
 
     CHttpHandler *CHttpServer::GetHandler( const CString &method, CHttpRequest *request, CUUID erid )
     {
-        for ( size_t nX = 0; nX < m_aHandlerFactories.GetCount(); nX++ )
+        std::vector<CHttpHandlerFactory *> factories = factoriesFor( request );
+        for ( size_t nX = 0; nX < factories.size(); nX++ )
         {
-            CHttpHandlerFactory *pFactory = (CHttpHandlerFactory *)m_aHandlerFactories[ nX ];
+            CHttpHandlerFactory *pFactory = factories[ nX ];
             CHttpHandler *pRetVal = pFactory->getHandler( method, request, erid );
             if ( pRetVal )
             {
@@ -103,13 +205,23 @@ namespace IASLib
 
     CString CHttpServer::getAllowedList( void )
     {
+        return allowedFrom( factoriesFor( NULL ) );
+    }
+
+    CString CHttpServer::getAllowedList( CHttpRequest *request )
+    {
+        return allowedFrom( factoriesFor( request ) );
+    }
+
+    CString CHttpServer::allowedFrom( const std::vector<CHttpHandlerFactory *> &factories )
+    {
         CStringArray all;
         bool bHasGet = false;
         bool bHasHead = false;
 
-        for ( size_t nX = 0; nX < m_aHandlerFactories.GetCount(); nX++ )
+        for ( size_t nX = 0; nX < factories.size(); nX++ )
         {
-            CStringArray methods = ((CHttpHandlerFactory *)m_aHandlerFactories[ nX ])->getMethods();
+            CStringArray methods = factories[ nX ]->getMethods();
             for ( size_t nY = 0; nY < methods.Count(); nY++ )
             {
                 bool bFound = false;
@@ -174,11 +286,18 @@ namespace IASLib
 
     CString CHttpServer::handleRequest( const CString &message, const CInternetAddress &source, bool &keepAlive )
     {
+        return handleRequest( message, source, keepAlive, false, CString( "" ) );
+    }
+
+    CString CHttpServer::handleRequest( const CString &message, const CInternetAddress &source, bool &keepAlive,
+                                        bool bSecure, const CString &strTlsServerName )
+    {
         keepAlive = false;
 
         CHttpRequest request( source );
         CHttpResponse response;
         bool bParsed = false;
+        request.setConnection( bSecure, strTlsServerName );
 
         try
         {
@@ -250,6 +369,21 @@ namespace IASLib
             return;
         }
 
+            // RFC 9110 15.5.20: over TLS the request must be for the host the
+            // client asked for in the handshake.
+        if ( m_bRequireMatchingHost && request->isSecureConnection() )
+        {
+            CString strAskedFor = CHttpRequest::normalizeHostName( request->getTlsServerName() );
+            CString strHost = request->getHostName();
+            if ( strAskedFor.GetLength() > 0 && strHost.GetLength() > 0 && strHost != strAskedFor )
+            {
+                response->setStatus( 421 );
+                keepAlive = false;
+                addStandardHeaders( response, false, bHttp10 );
+                return;
+            }
+        }
+
         CString expect = request->getHeaderValue( "Expect" );
         expect.Trim();
         expect.ToLowerCase();
@@ -270,7 +404,7 @@ namespace IASLib
         if ( method == "OPTIONS" && request->getUri() == "*" )
         {
             response->setStatus( 200 );
-            response->addHeader( "Allow", getAllowedList() );
+            response->addHeader( "Allow", getAllowedList( request ) );
             addStandardHeaders( response, keepAlive, bHttp10 );
             return;
         }
@@ -286,7 +420,7 @@ namespace IASLib
             if ( CHttpUtils::isKnownMethod( method ) )
             {
                 response->setStatus( 405 );
-                response->addHeader( "Allow", getAllowedList() );
+                response->addHeader( "Allow", getAllowedList( request ) );
             }
             else
             {

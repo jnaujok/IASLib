@@ -90,6 +90,9 @@ namespace IASLib
                 // none.
             CString                 GetServerName( void );
 
+            virtual bool            IsSecure( void ) { return true; }
+            virtual CString         GetTlsServerName( void ) { return GetServerName(); }
+
                 // About the connection, once the handshake is done.
             CString                 GetTlsError( void );
             CString                 GetProtocolVersion( void );     // "TLSv1.3"

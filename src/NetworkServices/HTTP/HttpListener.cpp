@@ -96,7 +96,8 @@ namespace IASLib
 
                 bool bKeepAlive = false;
                 CString response = m_pParentServer->handleRequest( CString( frame.message.data(), frame.message.size() ),
-                                                                   m_internetAddress, bKeepAlive );
+                                                                   m_internetAddress, bKeepAlive,
+                                                                   m_pSocket->IsSecure(), m_pSocket->GetTlsServerName() );
                 if ( ! sendData( response ) || ! bKeepAlive )
                 {
                     break;

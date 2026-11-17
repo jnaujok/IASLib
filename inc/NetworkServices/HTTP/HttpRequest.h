@@ -51,6 +51,22 @@ namespace IASLib
                 // The query string (after '?'), or "".
             virtual CString getQuery( void );
 
+                // The host the request is for, in lower case and without a
+                // port: the authority of an absolute-form target, else the Host
+                // header (RFC 9112 3.2.2). "" if there is none.
+            virtual CString getHostName( void );
+
+                // How the request arrived: set by the server for requests read
+                // from a connection. bSecure for TLS; strTlsServerName is the
+                // host name the client asked for in the handshake ("" if none).
+            void            setConnection( bool bSecure, const CString &strTlsServerName ) { m_bSecureConnection = bSecure; m_strTlsServerName = strTlsServerName; }
+            bool            isSecureConnection( void ) const { return m_bSecureConnection; }
+            CString         getTlsServerName( void ) const { return m_strTlsServerName; }
+
+                // A host name in the form getHostName() gives: lower case,
+                // without a port or a trailing dot.
+            static CString  normalizeHostName( const CString &strHost );
+
             virtual CString toString( void );
             virtual void    toStream( CStream *pStream );
 
@@ -58,6 +74,9 @@ namespace IASLib
 
         protected:
             virtual CHeaderList *newHeaderList( void ) { return new CHttpHeaderList(); }
+
+            bool            m_bSecureConnection;
+            CString         m_strTlsServerName;
     };
 } // namespace IASLib
 

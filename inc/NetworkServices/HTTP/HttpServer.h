@@ -22,6 +22,19 @@
  *      Handlers come from the handler factories added with
  * AddHandlerFactory(). The server owns its factories.
  *
+ *      Virtual hosts: AddVirtualHost( "www.example.com", factory ) gives a
+ * host name its own factories. A request is for the host in its Host header
+ * (or the authority of an absolute-form target); a request for a virtual
+ * host uses only that host's factories, and any other request uses the
+ * server's own. "*.example.com" matches any one label in its place; exact
+ * names are tried first; names ignore case and port.
+ *
+ *      Over TLS, a request whose host is not the one the client asked for in
+ * the TLS handshake (SNI) gets 421 Misdirected Request (RFC 9110 15.5.20)
+ * and the connection is closed, so one site's certificate cannot be used
+ * to reach another. Clients that asked for no name are not checked.
+ * setRequireMatchingHost( false ) turns the check off.
+ *
  *	Author: Jeffrey R. Naujok
  *	Created: September 24, 2019
  *
@@ -40,6 +53,10 @@
 #include "NetworkServices/HTTP/Handlers/HttpHandler.h"
 #include "NetworkServices/HTTP/Handlers/HttpHandlerFactory.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace IASLib
 {
     class CHttpServer : public CGenericServer
@@ -57,6 +74,8 @@ namespace IASLib
             size_t          m_nMaxBodySize;
             int             m_nKeepAliveTimeoutMs;
             int             m_nRequestTimeoutMs;
+            bool            m_bRequireMatchingHost;
+            std::vector< std::pair< std::string, std::vector<CHttpHandlerFactory *> > > m_aVirtualHosts;
 
         public:
                 // Port and interface are kept for derived servers that bind
@@ -76,17 +95,38 @@ namespace IASLib
             virtual void    AddHandlerFactory( CHttpHandlerFactory *pFactory );
                 // Removes the factory and returns ownership of it to the caller.
             virtual void    RemoveHandlerFactory( CHttpHandlerFactory *pFactory );
+                // Adds a handler factory for one host name (see above); factories
+                // of a host are consulted newest first. Set up virtual hosts
+                // before the server starts. The server takes ownership.
+            virtual void    AddVirtualHost( const char *pszHostName, CHttpHandlerFactory *pFactory );
+                // Removes a host, deleting its factories. False if there is none.
+            virtual bool    RemoveVirtualHost( const char *pszHostName );
+                // The virtual host name (as added) a host name falls under, or
+                // "" for the server's own factories.
+            virtual CString findVirtualHost( const CString &strHostName );
+
+                // Whether an HTTPS request's host must be the one asked for in
+                // the TLS handshake (on by default).
+            virtual void    setRequireMatchingHost( bool bRequire ) { m_bRequireMatchingHost = bRequire; }
+            virtual bool    getRequireMatchingHost( void ) { return m_bRequireMatchingHost; }
+
                 // Returns a new handler for the request's method, or NULL.
             virtual CHttpHandler   *GetHandler( CHttpRequest *request, CUUID erid );
             virtual CHttpHandler   *GetHandler( const CString &method, CHttpRequest *request, CUUID erid );
 
-                // The methods of all factories, for an Allow header.
+                // The methods of all factories, for an Allow header: the
+                // server's own, or those that serve this request's host.
             virtual CString getAllowedList( void );
+            virtual CString getAllowedList( CHttpRequest *request );
 
                 // Processes one framed request (see CHttpUtils::frameRequest) and
                 // returns the serialized response. keepAlive is set to whether
                 // the connection may be used for another request. Thread-safe.
             virtual CString handleRequest( const CString &message, const CInternetAddress &source, bool &keepAlive );
+                // The same for a request read from a connection: bSecure for TLS,
+                // with the host name asked for in the handshake ("" if none).
+            virtual CString handleRequest( const CString &message, const CInternetAddress &source, bool &keepAlive,
+                                           bool bSecure, const CString &strTlsServerName );
 
                 // A complete response for a request that could not be framed or
                 // timed out; it always closes the connection.
@@ -124,6 +164,8 @@ namespace IASLib
 
         private:
             void            init( void );
+            std::vector<CHttpHandlerFactory *> factoriesFor( CHttpRequest *request );
+            CString         allowedFrom( const std::vector<CHttpHandlerFactory *> &factories );
     };
 } // namespace IASLib
 

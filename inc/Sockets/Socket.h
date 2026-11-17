@@ -114,6 +114,12 @@ namespace IASLib
                 // accepted connection to another socket class (CSecureSocket).
             SOCKET                  ReleaseHandle( void );
 
+                // Whether the connection is protected by TLS, and the host name
+                // the client asked for in the TLS handshake ("" if none, or not
+                // TLS). Overridden by CSecureSocket.
+            virtual bool            IsSecure( void ) { return false; }
+            virtual CString         GetTlsServerName( void ) { return CString( "" ); }
+
             static const int        READ_TIMEOUT = -1;
             static const int        READ_ERROR = -2;
 

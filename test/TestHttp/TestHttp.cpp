@@ -103,6 +103,33 @@ class CEchoPostHandler : public CHttpHandler
 };
 IMPLEMENT_OBJECT( CEchoPostHandler, CHttpHandler );
 
+    // GET answers with the name of its site, to show which host's handlers ran.
+class CSiteHandler : public CHttpHandler
+{
+    public:
+        DEFINE_OBJECT( CSiteHandler );
+        CSiteHandler( CString site, CString uri = "", CString version = "" ) : CHttpHandler( uri, version ), m_site( site ) {}
+        virtual CString getMethod( void ) { return CString( "GET" ); }
+        virtual CHttpHandler *generateHandler( CString uri, CString version ) { return new CSiteHandler( m_site, uri, version ); }
+        virtual bool process( CHttpRequest *request, CHttpResponse *response )
+        {
+            (void)request;
+            response->setStatus( 200 );
+            response->SetEntity( new CTextPlainEntity( m_site ) );
+            return true;
+        }
+    private:
+        CString m_site;
+};
+IMPLEMENT_OBJECT( CSiteHandler, CHttpHandler );
+
+static CHttpHandlerFactory *siteFactory( const char *pszSite )
+{
+    CHttpHandlerFactory *factory = new CHttpHandlerFactory();
+    factory->registerHandler( new CSiteHandler( pszSite ) );
+    return factory;
+}
+
 static CHttpHandlerFactory *testFactory( void )
 {
     CHttpHandlerFactory *factory = new CHttpHandlerFactory();
@@ -532,12 +559,105 @@ static void testBasicServer( void )
     }
 }
 
+    // Handles one request as if it came over a connection.
+static std::string exchangeOn( CHttpServer &server, const std::string &request, bool bSecure, const char *pszSni, bool &keepAlive )
+{
+    CHttpFrame frame = CHttpUtils::frameRequest( request.data(), request.size(), 65536, 1024 * 1024 );
+    if ( frame.status != CHttpFrame::COMPLETE )
+        return "unframed";
+    CString response = server.handleRequest( CString( frame.message.data(), frame.message.size() ), loopback(), keepAlive,
+                                             bSecure, CString( pszSni ) );
+    return std::string( (const char *)response, response.GetLength() );
+}
+
+static std::string siteFor( CHttpServer &server, const std::string &host, const char *pszTarget = "/" )
+{
+    bool keepAlive = false;
+    std::string request = std::string( "GET " ) + pszTarget + " HTTP/1.1\r\nHost: " + host + "\r\n\r\n";
+    std::string response = exchangeOn( server, request, false, "", keepAlive );
+    return ( statusOf( response ) == 200 ) ? bodyOf( response ) : std::to_string( statusOf( response ) );
+}
+
+static void testVirtualHosts( void )
+{
+    printf( "Virtual hosts and misdirected requests\n" );
+
+        // Host names as requests carry them.
+    struct { const char *pszIn; const char *pszOut; } names[] = {
+        { "www.example.com", "www.example.com" }, { "WWW.Example.COM", "www.example.com" }, { "www.example.com:8080", "www.example.com" },
+        { "www.example.com.", "www.example.com" }, { " www.example.com ", "www.example.com" }, { "[::1]:443", "[::1]" },
+        { "127.0.0.1:80", "127.0.0.1" }, { "", "" },
+    };
+    for ( size_t n = 0; n < sizeof( names ) / sizeof( names[0] ); n++ )
+        CHECK( CHttpRequest::normalizeHostName( names[ n ].pszIn ) == names[ n ].pszOut );
+    CHttpRequest absolute( loopback() );
+    CHECK( absolute.parse( "GET http://user@WWW.example.com:81/x HTTP/1.1\r\nHost: other.example\r\n\r\n" ) );
+    CHECK( absolute.getHostName() == "www.example.com" );         // the target's authority wins (RFC 9112 3.2.2)
+
+    CHttpServer server( 0 );
+    server.AddHandlerFactory( testFactory() );                    // the default site: /hello, POST echo
+    server.AddVirtualHost( "www.example.com", siteFactory( "www" ) );
+    server.AddVirtualHost( "*.example.com", siteFactory( "wild" ) );
+    server.AddVirtualHost( "API.example.com", siteFactory( "api-old" ) );
+    server.AddVirtualHost( "api.example.com", siteFactory( "api" ) );      // same host: newest first
+    server.AddVirtualHost( "", siteFactory( "ignored" ) );                  // no name: dropped
+    server.AddVirtualHost( "nothing.example", NULL );
+
+    CHECK( siteFor( server, "www.example.com" ) == "www" );
+    CHECK( siteFor( server, "WWW.EXAMPLE.COM:8443" ) == "www" );
+    CHECK( siteFor( server, "a.example.com" ) == "wild" );
+    CHECK( siteFor( server, "api.example.com" ) == "api" );
+    CHECK( siteFor( server, "a.b.example.com", "/hello" ) == "hello" );   // one label only: the default site
+    CHECK( siteFor( server, "example.com", "/hello" ) == "hello" );
+    CHECK( siteFor( server, "[::1]", "/hello" ) == "hello" );
+    CHECK( siteFor( server, "elsewhere", "http://www.example.com/" ) == "www" );
+    CHECK( server.findVirtualHost( "B.Example.com" ) == "*.example.com" && server.findVirtualHost( "example.org" ) == "" );
+
+        // A virtual host only has its own handlers: no POST there, and its
+        // Allow header says so. The default site still echoes.
+    bool keepAlive = false;
+    std::string response = exchangeOn( server, "POST / HTTP/1.1\r\nHost: www.example.com\r\nContent-Length: 2\r\n\r\nhi", false, "", keepAlive );
+    CHECK( statusOf( response ) == 405 && headerOf( response, "Allow" ) == "GET, HEAD" );
+    response = exchangeOn( server, "POST / HTTP/1.1\r\nHost: elsewhere\r\nContent-Length: 2\r\n\r\nhi", false, "", keepAlive );
+    CHECK( statusOf( response ) == 200 && bodyOf( response ) == "hi" );
+    response = exchangeOn( server, "OPTIONS * HTTP/1.1\r\nHost: www.example.com\r\n\r\n", false, "", keepAlive );
+    CHECK( headerOf( response, "Allow" ) == "GET, HEAD" );
+    CHECK( server.getAllowedList().IndexOf( "POST" ) != NOT_FOUND );
+
+        // Removing a host: www.example.com falls under the wildcard now.
+    CHECK( server.RemoveVirtualHost( "WWW.example.com" ) && ! server.RemoveVirtualHost( "www.example.com" ) );
+    CHECK( siteFor( server, "www.example.com" ) == "wild" );
+
+        // Over TLS the host must be the one asked for in the handshake.
+    std::string get = "GET / HTTP/1.1\r\nHost: api.example.com\r\n\r\n";
+    response = exchangeOn( server, get, true, "api.example.com", keepAlive );
+    CHECK( statusOf( response ) == 200 && bodyOf( response ) == "api" && keepAlive );
+    response = exchangeOn( server, "GET / HTTP/1.1\r\nHost: API.example.com:443\r\n\r\n", true, "api.example.com.", keepAlive );
+    CHECK( statusOf( response ) == 200 );
+    response = exchangeOn( server, get, true, "a.example.com", keepAlive );
+    CHECK( response.compare( 0, strlen( "HTTP/1.1 421 Misdirected Request" ), "HTTP/1.1 421 Misdirected Request" ) == 0 );
+    CHECK( ! keepAlive && headerOf( response, "Connection" ) == "close" );
+    response = exchangeOn( server, "GET http://api.example.com/ HTTP/1.1\r\nHost: a.example.com\r\n\r\n", true, "a.example.com", keepAlive );
+    CHECK( statusOf( response ) == 421 );                          // the target's authority is the host
+    response = exchangeOn( server, get, true, "", keepAlive );       // no name asked for: not checked
+    CHECK( statusOf( response ) == 200 );
+    response = exchangeOn( server, get, false, "a.example.com", keepAlive );    // not TLS: not checked
+    CHECK( statusOf( response ) == 200 );
+    response = exchangeOn( server, "GET /hello HTTP/1.0\r\n\r\n", true, "api.example.com", keepAlive );   // no host at all
+    CHECK( statusOf( response ) == 200 );
+    server.setRequireMatchingHost( false );
+    CHECK( ! server.getRequireMatchingHost() );
+    response = exchangeOn( server, get, true, "a.example.com", keepAlive );
+    CHECK( statusOf( response ) == 200 && bodyOf( response ) == "api" );
+}
+
 int main( int argc, char *argv[] )
 {
     CTestLogSink *log = new CTestLogSink();
 
     testFraming();
     testCore();
+    testVirtualHosts();
     testBasicServer();
 
     printf( "\n%d checks, %d failures, %d log lines\n", g_nChecks, g_nFailures, (int)log->lines );
