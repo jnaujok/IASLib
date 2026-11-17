@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 #set project name
-project(IASLib VERSION 2.0)
+project(IASLib VERSION 2.5)
 
 # specify the C++ standard
 set(CMAKE_CXX_STANDARD 11)

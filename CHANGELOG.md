@@ -1,9 +1,10 @@
 # Changelog
 
 All notable changes to IASLib are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/) from 2.5.0 on.
 
-## [Unreleased] — 2026-11-17
+## [2.5.0] — 2026-11-17
 
 A large update: the library now builds and passes its tests on Linux (GCC and Clang), macOS and Windows (MSVC) from the same source, and gains named time zones, a complete JSON library, TLS, and a rebuilt blockchain.
 
