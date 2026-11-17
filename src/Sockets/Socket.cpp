@@ -79,7 +79,7 @@ static const char *inet_ntop( int iAddrFamily, unsigned long *addrConvert, char 
         if ( pResult )
 		{
 #ifdef IASLIB_WIN32__
-			strncpy_s( strBuffer, nMaxLen, pResult, nMaxLen );
+			strncpy_s( strBuffer, nMaxLen, pResult, _TRUNCATE );
 #else
 			strncpy( strBuffer, pResult, nMaxLen );
 #endif
@@ -87,7 +87,7 @@ static const char *inet_ntop( int iAddrFamily, unsigned long *addrConvert, char 
         else
 		{
 #ifdef IASLIB_WIN32__
-            strcpy_s( strBuffer, nMaxLen, "Unknown Address" );
+            strncpy_s( strBuffer, nMaxLen, "Unknown Address", _TRUNCATE );
 #else
             strcpy( strBuffer, "Unknown Address" );
 #endif

@@ -23,6 +23,12 @@
 **
 ***********************************************************************/
 
+    // The parser uses sscanf with a width on every string conversion, the
+    // same on every platform; MSVC would otherwise suggest sscanf_s.
+#if defined( _MSC_VER ) && ! defined( _CRT_SECURE_NO_WARNINGS )
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "Date.h"
 #include "StringTokenizer.h"
 #include "TimeZone.h"
@@ -2624,11 +2630,7 @@ namespace IASLib
 
             /* DD/mth/YY:HH:MM:SS zone */
         if (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d:%d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%d/%400[a-zA-Z]/%d:%d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#endif
         &&
             ( ScanMonths( str_mon, tm_mon )  )
         &&
@@ -2649,20 +2651,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
-#else
                 ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#endif
             )
             &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2684,20 +2678,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
-#else
                 ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#else
             ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2719,20 +2705,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#else
                 ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#else
             ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2752,20 +2730,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#else
                 ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d %d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 5 )
-#else
             ( sscanf( strDate, "%d/%400[a-zA-Z]/%d %d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 5 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2785,20 +2755,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
-#else
                 ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2820,20 +2782,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2855,20 +2809,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d %400[apmAPM]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 7 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2888,20 +2834,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2922,20 +2860,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm ) == 7 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d %400[apmAPM]", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min, str_ampm ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min ) == 6 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d%400[a-z,] %d at %d:%d", str_mon, &tm_mday, str_trash, &tm_year, &tm_hour, &tm_min ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2954,20 +2884,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -2989,20 +2911,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3022,20 +2936,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d %400[^\t\n\r ]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3056,20 +2962,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d %d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min ) == 5 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d %d %d:%d", str_mon, &tm_mday, &tm_year, &tm_hour, &tm_min ) == 5 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3088,20 +2986,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
-#else
                 ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#else
             ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3123,20 +3013,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#else
                 ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#else
             ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3155,20 +3037,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#else
                 ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d %d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 5 )
-#else
             ( sscanf( strDate, "%d %400[a-zA-Z] %d %d:%d", &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 5 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3188,20 +3062,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d:%d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 6 )
-#else
                 ( sscanf( strDate, "%d %400[a-zA-Z] %d:%d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 6 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d:%d:%d", &tm_mday, str_mon, &tm_hour, &tm_min, &tm_sec ) == 5 )
-#else
             ( sscanf( strDate, "%d %400[a-zA-Z] %d:%d:%d", &tm_mday, str_mon, &tm_hour, &tm_min, &tm_sec ) == 5 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3220,20 +3086,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %400[a-zA-Z] %d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_hour, &tm_min, str_ampm ) == 5 )
-#else
                 ( sscanf( strDate, "%d %400[a-zA-Z] %d:%d %400[apmAPM]", &tm_mday, str_mon, &tm_hour, &tm_min, str_ampm ) == 5 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d:%d", &tm_mday, str_mon, &tm_hour, &tm_min ) == 4 )
-#else
             ( sscanf( strDate, "%d %400[a-zA-Z] %d:%d", &tm_mday, str_mon, &tm_hour, &tm_min ) == 4 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3252,20 +3110,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
-#else
                 ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#else
             ( sscanf( strDate, "%d:%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#endif
             )
         &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -3287,20 +3137,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#else
                 ( sscanf( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
-#else
             ( sscanf( strDate, "%d:%d %400[^\t\n\r ] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
-#endif
             )
         &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -3322,20 +3164,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, &tm_mday, str_mon, &tm_year ) == 7 )
-#else
                 ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, str_ampm, &tm_mday, str_mon, &tm_year ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, &tm_mday, str_mon, &tm_year ) == 6 )
-#else
             ( sscanf( strDate, "%d:%d:%d %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_sec, &tm_mday, str_mon, &tm_year ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3355,20 +3189,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, &tm_mday, str_mon, &tm_year ) == 6 )
-#else
                 ( sscanf( strDate, "%d:%d %400[apmAPM] %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, str_ampm, &tm_mday, str_mon, &tm_year ) == 6 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_mday, str_mon, &tm_year ) == 5 )
-#else
             ( sscanf( strDate, "%d:%d %d/%400[a-zA-Z]/%d", &tm_hour, &tm_min, &tm_mday, str_mon, &tm_year ) == 5 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3388,20 +3214,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
-#else
                 ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#else
             ( sscanf( strDate, "%d:%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#endif
             )
         &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -3423,20 +3241,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#else
                 ( sscanf( strDate, "%d:%d %400[apmAPM] %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
-#else
             ( sscanf( strDate, "%d:%d %400[^\t\n\r ] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_gmtoff, &tm_mday, str_mon, &tm_year ) == 6 )
-#endif
             )
         &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -3458,20 +3268,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, &tm_mday, str_mon, &tm_year ) == 7 )
-#else
                 ( sscanf( strDate, "%d:%d:%d %400[apmAPM] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, str_ampm, &tm_mday, str_mon, &tm_year ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, &tm_mday, str_mon, &tm_year ) == 6 )
-#else
             ( sscanf( strDate, "%d:%d:%d %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_sec, &tm_mday, str_mon, &tm_year ) == 6 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3491,20 +3293,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d:%d %400[apmAPM] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, &tm_mday, str_mon, &tm_year ) == 6 )
-#else
                 ( sscanf( strDate, "%d:%d %400[apmAPM] %d %400[a-zA-Z] %d", &tm_hour, &tm_min, str_ampm, &tm_mday, str_mon, &tm_year ) == 6 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_mday, str_mon, &tm_year ) == 5 )
-#else
             ( sscanf( strDate, "%d:%d %d %400[a-zA-Z] %d", &tm_hour, &tm_min, &tm_mday, str_mon, &tm_year ) == 5 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3524,20 +3318,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3562,20 +3348,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3600,20 +3378,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 7 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3636,20 +3406,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 7 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 6 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d/%400[a-zA-Z]/%d %d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 6 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3672,20 +3434,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 9 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 8 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3710,20 +3464,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[^\t\n\r ]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 7 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3748,20 +3494,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 7 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3784,20 +3522,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 7 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d %400[apmAPM]", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min, str_ampm ) == 7 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 6 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z], %d %400[a-zA-Z] %d %d:%d", str_wday, &tm_mday, str_mon, &tm_year, &tm_hour, &tm_min ) == 6 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3820,20 +3550,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_year ) == 9 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff, &tm_year ) == 9 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_year ) == 8 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff, &tm_year ) == 8 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3858,20 +3580,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_year ) == 8 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[apmAPM] %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff, &tm_year ) == 8 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff, &tm_year ) == 7 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %400[a-zA-Z] %d %d:%d %400[^\t\n\r ] %d", str_wday, str_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff, &tm_year ) == 7 )
-#endif
             )
         &&
             ( ScanWday( str_wday, tm_wday ) )
@@ -3896,20 +3610,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d:%d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 6 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d %d:%d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 6 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d:%d:%d", str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec ) == 5 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d %d:%d:%d", str_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec ) == 5 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3928,20 +3634,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%400[a-zA-Z] %d %d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm ) == 5 )
-#else
                 ( sscanf( strDate, "%400[a-zA-Z] %d %d:%d %400[apmAPM]", str_mon, &tm_mday, &tm_hour, &tm_min, str_ampm ) == 5 )
-#endif
             &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d %d:%d", str_mon, &tm_mday, &tm_hour, &tm_min ) == 4 )
-#else
             ( sscanf( strDate, "%400[a-zA-Z] %d %d:%d", str_mon, &tm_mday, &tm_hour, &tm_min ) == 4 )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -3957,11 +3655,7 @@ namespace IASLib
 
             /* DD/mth/YY */
         if (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d/%400[a-zA-Z]/%d", &tm_mday, str_mon, &tm_year ) == 3 )
-#else
             ( sscanf( strDate, "%d/%400[a-zA-Z]/%d", &tm_mday, str_mon, &tm_year ) == 3 )
-#endif
         &&
             ( ScanMonths( str_mon, tm_mon ) )
         )
@@ -3975,11 +3669,7 @@ namespace IASLib
 
             /* DD mth YY */
         if (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z] %d", &tm_mday, str_mon, &tm_year ) == 3 )
-#else
             ( sscanf( strDate, "%d %400[a-zA-Z] %d", &tm_mday, str_mon, &tm_year ) == 3 )
-#endif
         &&
             ( ScanMonths( str_mon, tm_mon ) )
         )
@@ -3995,20 +3685,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
-#else
                 ( sscanf( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 8  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 7 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4029,20 +3711,12 @@ namespace IASLib
         /* MM/DD/YYYY HH:MM:SS ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d:%d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 7 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d:%d", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d:%d:%d", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, &tm_sec ) == 6 )
-#endif
         )
         {
             if ( tm_mon > 12 || ctx.yearFirst )
@@ -4069,20 +3743,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 7  )
-#else
                 ( sscanf( strDate, "%ld/%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 7  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 6 )
-#else
             ( sscanf( strDate, "%ld/%d %d:%d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 6 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4102,20 +3768,12 @@ namespace IASLib
         /* MM/DD HH:MM:SS ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 6 )
-#else
             ( sscanf( strDate, "%ld/%d %d:%d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 6 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d:%d", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec ) == 5 )
-#else
             ( sscanf( strDate, "%ld/%d %d:%d:%d", &tm_mon, &tm_mday, &tm_hour, &tm_min, &tm_sec ) == 5 )
-#endif
         )
         {
             tmVals.tm_mday = tm_mday;
@@ -4133,20 +3791,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 6  )
-#else
                 ( sscanf( strDate, "%d %d:%d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm, str_gmtoff ) == 6  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 5 )
-#else
             ( sscanf( strDate, "%d %d:%d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_gmtoff ) == 5 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4163,20 +3813,12 @@ namespace IASLib
         /* DD HH:MM:SS ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d:%d %400[apmAPM]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 5 )
-#else
             ( sscanf( strDate, "%d %d:%d:%d %400[apmAPM]", &tm_mday, &tm_hour, &tm_min, &tm_sec, str_ampm ) == 5 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d:%d", &tm_mday, &tm_hour, &tm_min, &tm_sec ) == 4 )
-#else
             ( sscanf( strDate, "%d %d:%d:%d", &tm_mday, &tm_hour, &tm_min, &tm_sec ) == 4 )
-#endif
         )
         {
             tmVals.tm_mday = tm_mday;
@@ -4191,20 +3833,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7  )
-#else
                 ( sscanf( strDate, "%ld/%d/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 7  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_gmtoff ) == 6 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4225,20 +3859,12 @@ namespace IASLib
         /* MM/DD/YYYY HH:MM ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min, str_ampm ) == 6 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d:%d", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min ) == 5 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d:%d", &tm_mon, &tm_mday, &tm_year, &tm_hour, &tm_min ) == 5 )
-#endif
         )
         {
             if ( tm_mon > 12 || ctx.yearFirst )
@@ -4264,20 +3890,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 6  )
-#else
                 ( sscanf( strDate, "%ld/%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 6  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 5 )
-#else
             ( sscanf( strDate, "%ld/%d %d:%d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 5 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4296,20 +3914,12 @@ namespace IASLib
         /* MM/DD HH:MM ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm ) == 5 )
-#else
             ( sscanf( strDate, "%ld/%d %d:%d %400[apmAPM]", &tm_mon, &tm_mday, &tm_hour, &tm_min, str_ampm ) == 5 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d:%d", &tm_mon, &tm_mday, &tm_hour, &tm_min ) == 4 )
-#else
             ( sscanf( strDate, "%ld/%d %d:%d", &tm_mon, &tm_mday, &tm_hour, &tm_min ) == 4 )
-#endif
         )
         {
             tmVals.tm_mday = tm_mday;
@@ -4326,20 +3936,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 5  )
-#else
                 ( sscanf( strDate, "%d %d:%d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_ampm, str_gmtoff ) == 5  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 4 )
-#else
             ( sscanf( strDate, "%d %d:%d %400[^\t\n\r ]", &tm_mday, &tm_hour, &tm_min, str_gmtoff ) == 4 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4355,20 +3957,12 @@ namespace IASLib
         /* DD HH:MM ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d %400[apmAPM]", &tm_mday, &tm_hour, &tm_min, str_ampm ) == 4 )
-#else
             ( sscanf( strDate, "%d %d:%d %400[apmAPM]", &tm_mday, &tm_hour, &tm_min, str_ampm ) == 4 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d", &tm_mday, &tm_hour, &tm_min ) == 3 )
-#else
             ( sscanf( strDate, "%d %d:%d", &tm_mday, &tm_hour, &tm_min ) == 3 )
-#endif
         )
         {
             tmVals.tm_mday = tm_mday;
@@ -4382,20 +3976,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm, str_gmtoff ) == 6  )
-#else
                 ( sscanf( strDate, "%ld/%d/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm, str_gmtoff ) == 6  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_gmtoff ) == 5 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_gmtoff ) == 5 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4414,20 +4000,12 @@ namespace IASLib
         /* MM/DD/YYYY HH ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d %400[apmAPM]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm ) == 5 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d %400[apmAPM]", &tm_mon, &tm_mday, &tm_year, &tm_hour, str_ampm ) == 5 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d/%d %d", &tm_mon, &tm_mday, &tm_year, &tm_hour ) == 4 )
-#else
             ( sscanf( strDate, "%ld/%d/%d %d", &tm_mon, &tm_mday, &tm_year, &tm_hour ) == 4 )
-#endif
         )
         {
             if ( tm_mon > 12 || ctx.yearFirst )
@@ -4452,20 +4030,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%ld/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 5  )
-#else
                 ( sscanf( strDate, "%ld/%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 5  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_gmtoff ) == 4 )
-#else
             ( sscanf( strDate, "%ld/%d %d %400[^\t\n\r ]", &tm_mon, &tm_mday, &tm_hour, str_gmtoff ) == 4 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4483,20 +4053,12 @@ namespace IASLib
         /* MM/DD HH ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d %400[apmAPM]", &tm_mon, &tm_mday, &tm_hour, str_ampm ) == 4 )
-#else
             ( sscanf( strDate, "%ld/%d %d %400[apmAPM]", &tm_mon, &tm_mday, &tm_hour, str_ampm ) == 4 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%ld/%d %d", &tm_mon, &tm_mday, &tm_hour ) == 3 )
-#else
             ( sscanf( strDate, "%ld/%d %d", &tm_mon, &tm_mday, &tm_hour ) == 3 )
-#endif
         )
         {
             tmVals.tm_mday = tm_mday;
@@ -4512,20 +4074,12 @@ namespace IASLib
         if (
             (
             (
-#ifdef IASLIB_WIN32__
-                ( sscanf_s( strDate, "%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 4  )
-#else
                 ( sscanf( strDate, "%d %d %400[apmAPM] %400[^\t\n\r ]", &tm_mday, &tm_hour, str_ampm, str_gmtoff ) == 4  )
-#endif
                 &&
                 ( ScanAMPM( str_ampm, ampm ) )
             )
             ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d %400[^\t\n\r ]", &tm_mday, &tm_hour, str_gmtoff ) == 3 )
-#else
             ( sscanf( strDate, "%d %d %400[^\t\n\r ]", &tm_mday, &tm_hour, str_gmtoff ) == 3 )
-#endif
             )
             &&
             ( ScanGMTOffset( str_gmtoff, gmtoff ) )
@@ -4540,20 +4094,12 @@ namespace IASLib
         /* DD HH:MM ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d %400[apmAPM]", &tm_mday, &tm_hour, &tm_min, str_ampm ) == 4 )
-#else
             ( sscanf( strDate, "%d %d:%d %400[apmAPM]", &tm_mday, &tm_hour, &tm_min, str_ampm ) == 4 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %d:%d", &tm_mday, &tm_hour, &tm_min ) == 3 )
-#else
             ( sscanf( strDate, "%d %d:%d", &tm_mday, &tm_hour, &tm_min ) == 3 )
-#endif
         )
         {
             tmVals.tm_mday = tm_mday;
@@ -4564,11 +4110,7 @@ namespace IASLib
         }
 
         /* MM/DD/YYYY */
-#ifdef IASLIB_WIN32__
-        if ( sscanf_s( strDate, "%ld/%d/%d", &tm_mon, &tm_mday, &tm_year ) == 3 )
-#else
         if ( ( sscanf( strDate, "%ld/%d/%d%n", &tm_mon, &tm_mday, &tm_year, &nUsed ) == 3 ) && restBlank( strDate, nUsed ) )
-#endif
         {
             if ( tm_mon > 12 || ctx.yearFirst )
             {
@@ -4588,11 +4130,7 @@ namespace IASLib
         }
 
         /* MM/DD */
-#ifdef IASLIB_WIN32__
-        if ( sscanf_s( strDate, "%ld/%d", &tm_mon, &tm_mday ) == 2 )
-#else
         if ( ( sscanf( strDate, "%ld/%d%n", &tm_mon, &tm_mday, &nUsed ) == 2 ) && restBlank( strDate, nUsed ) )
-#endif
         {
             tmVals.tm_mday = tm_mday;
             tmVals.tm_mon = tm_mon;
@@ -4605,20 +4143,12 @@ namespace IASLib
         /* HH:MM:SS ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d %400[apmAPM]", &tm_hour, &tm_min, &tm_sec, str_ampm ) == 4 )
-#else
             ( sscanf( strDate, "%d:%d:%d %400[apmAPM]", &tm_hour, &tm_min, &tm_sec, str_ampm ) == 4 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d:%d", &tm_hour, &tm_min, &tm_sec ) == 3 )
-#else
             ( sscanf( strDate, "%d:%d:%d", &tm_hour, &tm_min, &tm_sec ) == 3 )
-#endif
         )
         {
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
@@ -4631,20 +4161,12 @@ namespace IASLib
             /* HH:MM ampm */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d %400[apmAPM]", &tm_hour, &tm_min, str_ampm ) == 3 )
-#else
             ( sscanf( strDate, "%d:%d %400[apmAPM]", &tm_hour, &tm_min, str_ampm ) == 3 )
-#endif
             &&
             ( ScanAMPM( str_ampm, ampm ) )
             )
         ||
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d:%d", &tm_hour, &tm_min ) == 2 )
-#else
             ( sscanf( strDate, "%d:%d", &tm_hour, &tm_min ) == 2 )
-#endif
         )
         {
             tmVals.tm_hour = FixAMPM( tm_hour, ampm );
@@ -4656,11 +4178,7 @@ namespace IASLib
             /* DD mth */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%d %400[a-zA-Z]", &tm_mday, str_mon ) == 2 )
-#else
             ( ( sscanf( strDate, "%d %400[a-zA-Z]%n", &tm_mday, str_mon, &nUsed ) == 2 ) && restBlank( strDate, nUsed ) )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )
@@ -4684,11 +4202,7 @@ namespace IASLib
         }
 
         /* DD */
-#ifdef IASLIB_WIN32__
-        if ( sscanf_s( strDate, "%d", &tm_mday ) == 1 )
-#else
         if ( ( sscanf( strDate, "%d%n", &tm_mday, &nUsed ) == 1 ) && restBlank( strDate, nUsed ) )
-#endif
         {
             tmVals.tm_mday = tm_mday;
             AdjustTime( tmVals, NO_ZONE );
@@ -4698,11 +4212,7 @@ namespace IASLib
             /* mth DD */
         if (
             (
-#ifdef IASLIB_WIN32__
-            ( sscanf_s( strDate, "%400[a-zA-Z] %d", str_mon, &tm_mday ) == 2 )
-#else
             ( ( sscanf( strDate, "%400[a-zA-Z] %d%n", str_mon, &tm_mday, &nUsed ) == 2 ) && restBlank( strDate, nUsed ) )
-#endif
             )
         &&
             ( ScanMonths( str_mon, tm_mon ) )

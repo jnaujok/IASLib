@@ -385,7 +385,7 @@ namespace IASLib
             if ( pEntry )
             {
 #ifdef IASLIB_WIN32__
-                strncpy_s( pszBuffer, nBufferSize, pEntry->GetValue(), nBufferSize );
+                strncpy_s( pszBuffer, nBufferSize, pEntry->GetValue(), _TRUNCATE );
 #else
                 strncpy( pszBuffer, pEntry->GetValue(), nBufferSize );
 #endif
@@ -396,7 +396,7 @@ namespace IASLib
         if (! bFound )
         {
 #ifdef IASLIB_WIN32__
-            strncpy_s( pszBuffer, nBufferSize, pszDefault, nBufferSize );
+            strncpy_s( pszBuffer, nBufferSize, pszDefault, _TRUNCATE );
 #else
             strncpy( pszBuffer, pszDefault, nBufferSize );
 #endif
