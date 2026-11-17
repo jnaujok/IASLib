@@ -325,6 +325,13 @@ namespace IASLib
         }
 
         transportClosed( &transport );
+
+            // Forget the socket under the lock before closing it, so that
+            // shutdown never touches a closed (possibly reused) descriptor.
+        {
+            std::lock_guard<std::mutex> lock( m_pState->connectionMutex );
+            pConnection->socket = NULL;
+        }
         pSocket->Close();
         delete pSocket;
         pConnection->finished = true;
@@ -446,7 +453,7 @@ namespace IASLib
             std::lock_guard<std::mutex> lock( m_pState->connectionMutex );
             for ( std::list< std::shared_ptr<CSipConnection> >::iterator it = m_pState->connections.begin(); it != m_pState->connections.end(); ++it )
             {
-                if ( ! (*it)->finished && (*it)->socket )
+                if ( (*it)->socket )
                 {
                     (*it)->socket->Shutdown();
                 }
