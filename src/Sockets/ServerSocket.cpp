@@ -19,8 +19,8 @@
 #include "SocketException.h"
 #include <stdio.h>
 #include <errno.h>
-#include <fcntl.h>
 #ifndef IASLIB_WIN32__
+#include <fcntl.h>
 #include <poll.h>
 #endif
 

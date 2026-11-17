@@ -10,7 +10,11 @@
  */
 
 #include "Uuid.h"
+#ifdef IASLIB_WIN32__
+#include <winsock2.h>     // htonl
+#else
 #include <arpa/inet.h>
+#endif
 #include <ctime>
 #include <cctype>
 
@@ -22,7 +26,7 @@ namespace IASLib
 #ifdef IASLIB_MULTI_THREADED__
     CMutex CUUID::randomMutex;
 #endif
-    TRandom< (8), __uint32_t > *CUUID::m_pRandomGenerator = NULL;
+    TRandom< (8), uint32_t > *CUUID::m_pRandomGenerator = NULL;
 
     CUUID::CUUID( void ) 
     {
@@ -114,7 +118,7 @@ namespace IASLib
 #endif
                 if ( m_pRandomGenerator == NULL )
                 {
-                    m_pRandomGenerator = new TRandom< (8), __uint32_t>( time(NULL), time(NULL) * time(NULL), (time(NULL) * 183601463UL) % 2147430101UL );
+                    m_pRandomGenerator = new TRandom< (8), uint32_t>( time(NULL), time(NULL) * time(NULL), (time(NULL) * 183601463UL) % 2147430101UL );
                 }
                 bSeeded = true;
 #ifdef IASLIB_MULTI_THREADED__
@@ -127,7 +131,7 @@ namespace IASLib
         randomMutex.Lock();
 #endif
 
-        __uint32_t *pLong = (__uint32_t *)bytes;
+        uint32_t *pLong = (uint32_t *)bytes;
         // First hextet of two random 32 bit values (64 bits). (8 bytes)
         pLong[0] = m_pRandomGenerator->rand();
         pLong[1] = m_pRandomGenerator->rand();
@@ -149,7 +153,7 @@ namespace IASLib
 
     CString CUUID::bytesToString( unsigned char *byteArray )
     {
-        __uint32_t *pLong = (__uint32_t *)byteArray;
+        uint32_t *pLong = (uint32_t *)byteArray;
         CString retVal = "";
 
         retVal.Format( "%04x%04x-%04x-%04x-%04x-%04x%04x%04x", 
@@ -184,8 +188,8 @@ namespace IASLib
         }
 
         // We need to make sure the bytes are in the correct order for the machine.
-        __uint32_t *pLong = (__uint32_t *)temp;
-        __uint32_t *pBytes = (__uint32_t *)bytes;
+        uint32_t *pLong = (uint32_t *)temp;
+        uint32_t *pBytes = (uint32_t *)bytes;
 
         for ( nX = 0; nX < 8; nX++ )
         {

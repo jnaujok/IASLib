@@ -28,7 +28,7 @@ namespace IASLib
         m_nDifficulty = 6;
     }
 
-    CBlockchain::CBlockchain( __uint32_t difficulty ) 
+    CBlockchain::CBlockchain( uint32_t difficulty ) 
     {
         m_aChain.Append( new CBlock(0, "Genesis Block"));
         m_nDifficulty = difficulty;

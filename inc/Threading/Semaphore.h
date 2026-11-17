@@ -13,10 +13,19 @@
 #ifndef IASLIB_SEMAPHORE_H__
 #define IASLIB_SEMAPHORE_H__
 
-#ifdef IASLIB_LINUX__
+#include "ThreadPlatform.h"
+
+#ifdef IASLIB_PTHREAD__
 #include <pthread.h>
-#include <semaphore.h>
-#define SEMAPHORE_T sem_t
+    // A counting semaphore from a mutex and condition variable: unnamed
+    // POSIX semaphores (sem_init) are not supported on macOS.
+struct IASLibPthreadSemaphore
+{
+    pthread_mutex_t mutex;
+    pthread_cond_t  condition;
+    unsigned int    nCount;
+};
+#define SEMAPHORE_T IASLibPthreadSemaphore
 #endif
 
 #ifdef IASLIB_WIN32__

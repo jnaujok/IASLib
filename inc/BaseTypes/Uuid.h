@@ -15,6 +15,7 @@
 #include "Object.h"
 #include "String_.h"
 #include "Random.h"
+#include <stdint.h>
 #ifdef IASLIB_MULTI_THREADED__
     #include "../Threading/Mutex.h"
 #endif
@@ -25,7 +26,7 @@ namespace IASLib
     {
         private:
             static bool bSeeded;
-            static TRandom< (8), __uint32_t > *m_pRandomGenerator;
+            static TRandom< (8), uint32_t > *m_pRandomGenerator;
 #ifdef IASLIB_MULTI_THREADED__
             static CMutex randomMutex;
 #endif

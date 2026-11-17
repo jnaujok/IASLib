@@ -47,7 +47,7 @@ namespace IASLib
                 SMALL, // < 500 objects
                 NORMAL, // < 2,500 objects
                 LARGE, //  < 10,000 objects
-                HUGE, // < 100,000 objects
+                ENORMOUS, // < 100,000 objects (was HUGE, which macOS math.h defines as a macro)
                 GARGANTUAN // > 100,000 objects. Performance will degrade with more than about 5M objects
             };
 

@@ -1606,16 +1606,25 @@ namespace IASLib
         // Julian Days are in UT: a date with a time zone is converted first.
     double CDate::GetJulianDate( void ) const
     {
+            // The day from the 64-bit milliseconds directly: seconds since AD 1
+            // do not fit a 32-bit long (as on Windows), and rounding to seconds
+            // first would put the last second of a day before AD 1 on the next.
         long long llUtc = UtcMilliseconds();
-        long lDay = (long)floorDiv( (long)( llUtc / 1000 ), 86400 );
-        long long llMs = llUtc - (long long)lDay * MS_PER_DAY;
+        long long llDay = llUtc / MS_PER_DAY;
+        if ( llUtc % MS_PER_DAY < 0 )
+            llDay--;
+        long lDay = (long)llDay;
+        long long llMs = llUtc - llDay * MS_PER_DAY;
         return (double)( lDay + JULIAN_DAY_OFFSET ) + (double)( llMs - MS_PER_DAY / 2 ) / (double)MS_PER_DAY;
     }
 
     long CDate::GetJulianDayNumber( void ) const
     {
         long long llUtc = UtcMilliseconds();
-        return (long)floorDiv( (long)( llUtc / 1000 ), 86400 ) + JULIAN_DAY_OFFSET;
+        long long llDay = llUtc / MS_PER_DAY;
+        if ( llUtc % MS_PER_DAY < 0 )
+            llDay--;
+        return (long)llDay + JULIAN_DAY_OFFSET;
     }
 
     CDate CDate::FromJulianDate( double dJulianDate )

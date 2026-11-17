@@ -25,10 +25,12 @@
 #ifndef IASLIB_MUTEX_H__
 #define IASLIB_MUTEX_H__
 
+#include "ThreadPlatform.h"
+
 #ifndef IASLIB_MULTI_THREADED__
     #define MUTEX_T int
 #else
-     #ifdef IASLIB_LINUX__
+    #ifdef IASLIB_PTHREAD__
         #include <pthread.h>
         #define MUTEX_T pthread_mutex_t
     #endif
@@ -36,7 +38,6 @@
     #ifdef IASLIB_WIN32__
         #include <windows.h>
         #define MUTEX_T HANDLE
-        #pragma message( "Mutex Type: Windows" )
     #endif
 #endif
 

@@ -27,13 +27,15 @@
 #ifndef IASLIB_THREAD_H__
 #define IASLIB_THREAD_H__
 
+#include "ThreadPlatform.h"
+
 #ifdef IASLIB_MULTI_THREADED__
 
     #ifdef IASLIB_WIN32__
         #include <windows.h>
         #define THREAD_T HANDLE
     #else
-        #ifdef IASLIB_LINUX__
+        #ifdef IASLIB_PTHREAD__
             #include <pthread.h>
             #define THREAD_T pthread_t
         #else

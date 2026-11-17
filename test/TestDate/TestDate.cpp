@@ -652,6 +652,16 @@ static void testJulianDay( void )
     CHECK_EQ_STR( "jdn", hist( CDate::FromJulianDayNumber( 2299161 ) ), "1582-10-15 12:00:00.000" );
     CHECK( CDate::FromJulianDate( 2451545.0 ).IsGMT() );
 
+        // The last second of a day before AD 1 (and the day after it).
+    for ( long lDay = -3000000L; lDay <= 3000000L; lDay += 1000000L )
+    {
+        CDate late( lDay, 86399999L );
+        CDate early( lDay + 1, 0L );
+        CHECK( CDate::FromJulianDate( late.GetJulianDate() ) == late );
+        CHECK( late.GetJulianDayNumber() == CDate( lDay, 43200000L ).GetJulianDayNumber() );
+        CHECK( early.GetJulianDayNumber() == late.GetJulianDayNumber() + 1 );
+    }
+
         // Round trips at millisecond precision across the supported range.
     std::mt19937 generator( 4713 );
     std::uniform_int_distribution<long> dayDist( CDate( 1, 0, -10000 ).GetEpochDay(), CDate( 31, 11, 10000 ).GetEpochDay() );

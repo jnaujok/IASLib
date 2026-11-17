@@ -36,7 +36,7 @@
     typedef void *DYN_LIB_TYPE;
 #endif
 
-#ifdef IASLIB_LINUX__
+#if defined( IASLIB_LINUX__ ) || defined( IASLIB_MAC__ )
     #include <dlfcn.h>
     typedef void *DYN_LIB_TYPE;
     //#define __cdecl

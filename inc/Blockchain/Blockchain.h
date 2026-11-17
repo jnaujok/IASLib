@@ -23,20 +23,21 @@
 #include "BaseTypes/Date.h"
 #include "Collections/Array.h"
 #include "Blockchain/Block.h"
+#include <stdint.h>
 
 namespace IASLib
 {
     class CBlockchain : public CObject
     {
         private:
-            __uint32_t m_nDifficulty;
+            uint32_t m_nDifficulty;
             CArray   m_aChain;
 
         public:
             DECLARE_OBJECT( CBlockchain, CObject );
 
             CBlockchain();
-            CBlockchain( __uint32_t difficulty );
+            CBlockchain( uint32_t difficulty );
 
             void addBlock(CBlock *bNew);
 

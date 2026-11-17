@@ -56,7 +56,9 @@ bool testMemoryStream() {
     catch (CXMLException &oE )
     {
         std::cout << oE.DumpStack() << std::endl;
+        return false;
     }
+    return true;
 }
 
 bool testFileStream( int argc, char *argv[] ) {
@@ -98,7 +100,9 @@ bool testFileStream( int argc, char *argv[] ) {
     catch (CXMLException &oE )
     {
         std::cout << oE.DumpStack() << std::endl;
+        return false;
     }
+    return true;
 }
 
 #ifdef IASLIB_WIN32__
@@ -107,8 +111,8 @@ int _tmain(int argc, _TCHAR* argv[])
 int main( int argc, char *argv[] )
 #endif
 {
-    testMemoryStream();
-    testFileStream(argc,argv);
-	return 0;
+    bool bMemory = testMemoryStream();
+    bool bFile = testFileStream(argc,argv);
+	return ( bMemory && bFile ) ? 0 : 1;
 }
 

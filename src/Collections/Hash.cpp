@@ -120,7 +120,7 @@ namespace IASLib
                 m_nHashKey = 1607;
                 break;
 
-            case HUGE:
+            case ENORMOUS:
                 m_strSize = "HUGE";
                 m_nArraySize = 20333;
                 m_nHashKey = 32713;

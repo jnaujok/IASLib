@@ -21,11 +21,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#ifdef IASLIB_WIN32__
+#include <ws2tcpip.h>
+#else
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#ifndef IASLIB_WIN32__
 #include <poll.h>
 #endif
 

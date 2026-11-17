@@ -25,7 +25,9 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_PTHREAD__
-        printf( "Semaphore init returns: %d\n", sem_init( &m_threadSemaphore, 0, nValue ) );
+        pthread_mutex_init( &m_threadSemaphore.mutex, NULL );
+        pthread_cond_init( &m_threadSemaphore.condition, NULL );
+        m_threadSemaphore.nCount = nValue;
     #endif
 
     #ifdef IASLIB_WIN32__
@@ -39,7 +41,8 @@ namespace IASLib
         sema_destroy( &m_threadSemaphore );
     #endif
     #ifdef IASLIB_PTHREAD__
-        sem_destroy( &m_threadSemaphore );
+        pthread_cond_destroy( &m_threadSemaphore.condition );
+        pthread_mutex_destroy( &m_threadSemaphore.mutex );
     #endif
     #ifdef IASLIB_WIN32__
         CloseHandle( m_threadSemaphore );
@@ -53,7 +56,11 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_PTHREAD__
-        sem_wait( &m_threadSemaphore );
+        pthread_mutex_lock( &m_threadSemaphore.mutex );
+        while ( m_threadSemaphore.nCount == 0 )
+            pthread_cond_wait( &m_threadSemaphore.condition, &m_threadSemaphore.mutex );
+        m_threadSemaphore.nCount--;
+        pthread_mutex_unlock( &m_threadSemaphore.mutex );
     #endif
 
     #ifdef IASLIB_WIN32__
@@ -68,7 +75,10 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_PTHREAD__
-        sem_post( &m_threadSemaphore );
+        pthread_mutex_lock( &m_threadSemaphore.mutex );
+        m_threadSemaphore.nCount++;
+        pthread_cond_signal( &m_threadSemaphore.condition );
+        pthread_mutex_unlock( &m_threadSemaphore.mutex );
     #endif
 
     #ifdef IASLIB_WIN32__
@@ -86,10 +96,16 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_PTHREAD__
-        if ( sem_trywait( &m_threadSemaphore ) == 0 )
+        bool bTaken = false;
+        pthread_mutex_lock( &m_threadSemaphore.mutex );
+        if ( m_threadSemaphore.nCount > 0 )
         {
-            return true;
+            m_threadSemaphore.nCount--;
+            bTaken = true;
         }
+        pthread_mutex_unlock( &m_threadSemaphore.mutex );
+        if ( bTaken )
+            return true;
     #endif
 
     #ifdef IASLIB_WIN32__

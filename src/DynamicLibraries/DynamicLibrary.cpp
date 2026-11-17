@@ -31,7 +31,7 @@ namespace IASLib
         m_LibHandle = dlopen( libName, RTLD_LAZY );
     #endif
 
-    #ifdef IASLIB_LINUX__
+    #if defined( IASLIB_LINUX__ ) || defined( IASLIB_MAC__ )
         libName.Format( "lib%s.so", strLibPath );
         m_LibHandle = dlopen( libName, RTLD_LAZY );
     #endif
@@ -52,7 +52,7 @@ namespace IASLib
         dlclose( m_LibHandle );
     #endif
 
-    #ifdef IASLIB_LINUX__
+    #if defined( IASLIB_LINUX__ ) || defined( IASLIB_MAC__ )
         dlclose( m_LibHandle );
     #endif
 
@@ -87,7 +87,7 @@ namespace IASLib
         }
     #endif
 
-    #ifdef IASLIB_LINUX__
+    #if defined( IASLIB_LINUX__ ) || defined( IASLIB_MAC__ )
         const char *strError = NULL;
         dlerror();
         pRetVal = dlsym( m_LibHandle, strFunctionName );
