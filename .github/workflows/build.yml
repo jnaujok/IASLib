@@ -49,7 +49,18 @@ jobs:
         run: cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
       - name: Build
-        run: cmake --build build --config Release --parallel 4
+        shell: bash
+        run: |
+          set -o pipefail
+          cmake --build build --config Release --parallel 4 2>&1 | tee build.log
 
       - name: Test
+        shell: bash
         run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Error summary
+        if: failure()
+        shell: bash
+        run: |
+          echo "Distinct compiler and linker errors:"
+          grep -E "(error|fatal error)( [A-Z]+[0-9]+)?:" build.log | sed -E 's/ \[[^]]*\.vcxproj\]//' | sort -u | head -400 || true
