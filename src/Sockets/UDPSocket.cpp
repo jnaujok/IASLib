@@ -26,6 +26,11 @@
 
 namespace IASLib
 {
+#ifdef IASLIB_WIN32__
+    bool CUDPSocket::m_bInitialized = false;
+    WSADATA CUDPSocket::m_wsaData;
+#endif
+
         // Server port constructor
     CUDPSocket::CUDPSocket( int nPort )
     {

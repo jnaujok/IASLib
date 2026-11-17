@@ -112,6 +112,34 @@ static std::string hist( const CDate &d )
 
     // Every day from 1000 BC to AD 9999 in the historical calendar: consecutive
     // day numbers, round trips, weekdays and the ISO (proleptic Gregorian) label.
+    // localtime_r, gmtime_r and timegm, which Windows spells differently.
+static bool localTime( time_t t, struct tm &out )
+{
+#ifdef IASLIB_WIN32__
+    return localtime_s( &out, &t ) == 0;
+#else
+    return localtime_r( &t, &out ) != NULL;
+#endif
+}
+
+static bool utcTime( time_t t, struct tm &out )
+{
+#ifdef IASLIB_WIN32__
+    return gmtime_s( &out, &t ) == 0;
+#else
+    return gmtime_r( &t, &out ) != NULL;
+#endif
+}
+
+static long long utcSeconds( struct tm &value )
+{
+#ifdef IASLIB_WIN32__
+    return (long long)_mkgmtime( &value );
+#else
+    return (long long)timegm( &value );
+#endif
+}
+
 static void testCalendarSweep( void )
 {
     printf( "Calendar sweep, 1000 BC to AD 9999\n" );
@@ -563,7 +591,7 @@ static void testUnixAndTimestamps( void )
         long long v = ( n < 4 ) ? ( n == 0 ? 0 : n == 1 ? -1 : n == 2 ? -86401 : 2147483648LL ) : dist( generator );
         time_t t = (time_t)v;
         struct tm g;
-        if ( gmtime_r( &t, &g ) == NULL )
+        if ( ! utcTime( t, g ) )
             continue;
         char ref[ 64 ];
         snprintf( ref, sizeof( ref ), "%04d-%02d-%02dT%02d:%02d:%02d.000Z", g.tm_year + 1900, g.tm_mon + 1, g.tm_mday, g.tm_hour, g.tm_min, g.tm_sec );
@@ -617,7 +645,7 @@ static void testUnixAndTimestamps( void )
  * Julian Day
  ***********************************************************************/
 
-static bool near( double a, double b, double tolerance ) { return fabs( a - b ) <= tolerance; }
+static bool isNear( double a, double b, double tolerance ) { return fabs( a - b ) <= tolerance; }
 
 static void testJulianDay( void )
 {
@@ -626,12 +654,12 @@ static void testJulianDay( void )
 
         // Reference values; the historical ones are from Meeus, Astronomical
         // Algorithms, chapter 7 (Julian calendar before 1582).
-    CHECK( near( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );          // J2000.0
-    CHECK( near( CDate( 1, 0, 1970 ).GetJulianDate(), 2440587.5, ms ) );                     // Unix epoch
-    CHECK( near( CDate( 4, 9, 1957, 19, 26, 24 ).GetJulianDate(), 2436116.31, ms ) );        // Sputnik 1
-    CHECK( near( CDate( 27, 0, 333, 12, 0, 0 ).GetJulianDate(), 1842713.0, ms ) );
-    CHECK( near( CDate( 12, 6, -1001, 12, 0, 0 ).GetJulianDate(), 1356001.0, ms ) );        // -1000 July 12.5
-    CHECK( near( CDate( 1, 0, -4713, 12, 0, 0 ).GetJulianDate(), 0.0, ms ) );                // the zero point
+    CHECK( isNear( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );          // J2000.0
+    CHECK( isNear( CDate( 1, 0, 1970 ).GetJulianDate(), 2440587.5, ms ) );                     // Unix epoch
+    CHECK( isNear( CDate( 4, 9, 1957, 19, 26, 24 ).GetJulianDate(), 2436116.31, ms ) );        // Sputnik 1
+    CHECK( isNear( CDate( 27, 0, 333, 12, 0, 0 ).GetJulianDate(), 1842713.0, ms ) );
+    CHECK( isNear( CDate( 12, 6, -1001, 12, 0, 0 ).GetJulianDate(), 1356001.0, ms ) );        // -1000 July 12.5
+    CHECK( isNear( CDate( 1, 0, -4713, 12, 0, 0 ).GetJulianDate(), 0.0, ms ) );                // the zero point
     CHECK( CDate( 4, 9, 1582 ).GetJulianDayNumber() == 2299160 );
     CHECK( CDate( 15, 9, 1582 ).GetJulianDayNumber() == 2299161 );
     CHECK( CDate( 1, 0, -4713 ).GetJulianDayNumber() == 0 );
@@ -640,8 +668,8 @@ static void testJulianDay( void )
         // The day number is the JD at noon: it does not change through the
         // civil day, while the JD crosses a whole number at noon.
     CHECK( CDate( 2, 5, 2001, 0, 0, 0 ).GetJulianDayNumber() == CDate( 2, 5, 2001, 23, 59, 59 ).GetJulianDayNumber() );
-    CHECK( near( CDate( 2, 5, 2001, 0, 0, 0 ).GetJulianDate(), 2452062.5, ms ) );
-    CHECK( near( CDate( 2, 5, 2001, 18, 0, 0 ).GetJulianDate(), 2452063.25, ms ) );
+    CHECK( isNear( CDate( 2, 5, 2001, 0, 0, 0 ).GetJulianDate(), 2452062.5, ms ) );
+    CHECK( isNear( CDate( 2, 5, 2001, 18, 0, 0 ).GetJulianDate(), 2452063.25, ms ) );
 
         // The other direction.
     CHECK_EQ_STR( "J2000", iso( CDate::FromJulianDate( 2451545.0 ) ), "2000-01-01T12:00:00.000Z" );
@@ -711,33 +739,6 @@ static void skipSystemZone( void )
     printf( "  (skipped: this system's C library cannot use IANA zone names)\n" );
 }
 
-    // localtime_r, gmtime_r and timegm, which Windows spells differently.
-static bool localTime( time_t t, struct tm &out )
-{
-#ifdef IASLIB_WIN32__
-    return localtime_s( &out, &t ) == 0;
-#else
-    return localtime_r( &t, &out ) != NULL;
-#endif
-}
-
-static bool utcTime( time_t t, struct tm &out )
-{
-#ifdef IASLIB_WIN32__
-    return gmtime_s( &out, &t ) == 0;
-#else
-    return gmtime_r( &t, &out ) != NULL;
-#endif
-}
-
-static long long utcSeconds( struct tm &value )
-{
-#ifdef IASLIB_WIN32__
-    return (long long)_mkgmtime( &value );
-#else
-    return (long long)timegm( &value );
-#endif
-}
 
 static void testTimeZones( void )
 {
@@ -763,13 +764,13 @@ static void testTimeZones( void )
         // Julian Days are UT: a zoned local time is converted.
     CDate india( 1, 0, 2000, 17, 30, 0 );
     CHECK( india.SetTimeZone( 19800 ) );
-    CHECK( near( india.GetJulianDate(), 2451545.0, ms ) );
+    CHECK( isNear( india.GetJulianDate(), 2451545.0, ms ) );
     CDate kiritimati( 2, 0, 2000, 0, 30, 0 );       // UTC+14: still 1 January in UT
     kiritimati.SetTimeZone( 14 * 3600 );
     CHECK( kiritimati.GetJulianDayNumber() == 2451545 );
-    CHECK( near( kiritimati.GetJulianDate(), 2451544.9375, ms ) );
-    CHECK( near( CDate::Parse( "Sat, 01 Jan 2000 07:00:00 EST" ).GetJulianDate(), 2451545.0, ms ) );
-    CHECK( near( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );     // no zone: system zone, UTC here
+    CHECK( isNear( kiritimati.GetJulianDate(), 2451544.9375, ms ) );
+    CHECK( isNear( CDate::Parse( "Sat, 01 Jan 2000 07:00:00 EST" ).GetJulianDate(), 2451545.0, ms ) );
+    CHECK( isNear( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );     // no zone: system zone, UTC here
 
         // Zone edits.
     CDate plain( 2, 5, 2001, 12, 0, 0 );
@@ -822,7 +823,7 @@ static void testTimeZones( void )
     setZone( "Europe/London" );
     CDate london( 2, 5, 2001, 12, 0, 0 );
     CHECK( london.AssumeLocalTimeZone() && london.GetUTCOffset() == 3600 );
-    CHECK( near( london.GetJulianDate(), CDate::Parse( "2001-06-02T11:00:00Z" ).GetJulianDate(), ms ) );
+    CHECK( isNear( london.GetJulianDate(), CDate::Parse( "2001-06-02T11:00:00Z" ).GetJulianDate(), ms ) );
 
     setZone( "UTC" );
 }
@@ -841,7 +842,7 @@ static void testUnknownZoneDefault( void )
 
     CDate noon( 1, 0, 2000, 12, 0, 0 );                 // 12:00 MST = 19:00 UT
     CHECK( ! noon.HasTimeZone() && noon.GetUTCOffset() == -25200 && noon.GetHour() == 12 );
-    CHECK( near( noon.GetJulianDate(), 2451545.0 + 7.0 / 24.0, ms ) );
+    CHECK( isNear( noon.GetJulianDate(), 2451545.0 + 7.0 / 24.0, ms ) );
     CHECK( noon.GetJulianDayNumber() == 2451545 );
     CHECK_EQ_STR( "utc", iso( noon.ToUTC(), false ), "2000-01-01T19:00:00Z" );
     CHECK_EQ_STR( "rfc1123", std::string( (const char *)noon.FormatDate( CDate::DF_RFC1123 ) ), "Sat, 01 Jan 2000 19:00:00 GMT" );
@@ -858,17 +859,17 @@ static void testUnknownZoneDefault( void )
         // A stored zone wins over the default.
     CDate utc( 1, 0, 2000, 12, 0, 0 );
     utc.SetTimeZone( 0 );
-    CHECK( near( utc.GetJulianDate(), 2451545.0, ms ) );
+    CHECK( isNear( utc.GetJulianDate(), 2451545.0, ms ) );
 
         // UTC instead of the system zone.
     CDate::SetUnknownTimeZoneLocal( false );
     CHECK( ! CDate::GetUnknownTimeZoneLocal() );
-    CHECK( noon.GetUTCOffset() == 0 && near( noon.GetJulianDate(), 2451545.0, ms ) );
+    CHECK( noon.GetUTCOffset() == 0 && isNear( noon.GetJulianDate(), 2451545.0, ms ) );
     CDate::SetUnknownTimeZoneLocal( true );
 
         // With the system zone set to UTC the default changes nothing.
     setZone( "UTC" );
-    CHECK( noon.GetUTCOffset() == 0 && near( noon.GetJulianDate(), 2451545.0, ms ) );
+    CHECK( noon.GetUTCOffset() == 0 && isNear( noon.GetJulianDate(), 2451545.0, ms ) );
     printf( "\"Today\" and missing date parts use the local date\n" );
     bool bDiffersFromUtc = false;
     const char *zones[] = { "Etc/GMT-14", "Etc/GMT+12", "America/Denver", "Asia/Tokyo" };   // UTC+14, UTC-12, ...
@@ -923,7 +924,7 @@ static void testDefaultTimezone( void )
     CHECK( ! CDate::IsDefaultTimezoneSystem() && CDate::GetDefaultTimezoneOffset() == 19800 );
     CDate india( 1, 0, 2000, 17, 30, 0 );
     CHECK( ! india.HasTimeZone() && india.GetUTCOffset() == 19800 );
-    CHECK( near( india.GetJulianDate(), 2451545.0, ms ) );
+    CHECK( isNear( india.GetJulianDate(), 2451545.0, ms ) );
     CHECK_EQ_STR( "india utc", iso( india.ToUTC(), false ), "2000-01-01T12:00:00Z" );
     CHECK( india == CDate::Parse( "2000-01-01T12:00:00Z" ) );
         // Stored zones are not affected.
@@ -1147,7 +1148,7 @@ static void testNamedZones( void )
 
         // Julian Day of a local time in a named zone.
     CDate nyNoon( 1, 0, 2000, 7, 0, 0 );
-    CHECK( nyNoon.AssumeTimeZone( "America/New_York" ) && near( nyNoon.GetJulianDate(), 2451545.0, 1.0 / 86400000.0 ) );
+    CHECK( nyNoon.AssumeTimeZone( "America/New_York" ) && isNear( nyNoon.GetJulianDate(), 2451545.0, 1.0 / 86400000.0 ) );
 }
 
     // ICU zones (what Windows uses) against the zone files, where this build
