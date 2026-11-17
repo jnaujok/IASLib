@@ -58,6 +58,11 @@ jobs:
         shell: bash
         run: ctest --test-dir build -C Release --output-on-failure --timeout 240
 
+      - name: Time zone sources (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: build/test/Release/TestDate.exe | grep -E "zones|ICU|skipped|not installed|checks" || true
+
       - name: Error summary
         if: failure()
         shell: bash
