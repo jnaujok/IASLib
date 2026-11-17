@@ -2,6 +2,7 @@
 
 
 #include "Encryption/Sha256.h"
+#include <stdio.h>
 
 namespace IASLib
 {

@@ -197,8 +197,9 @@ if(USE_SQLITE)
         target_link_libraries(IASLib PUBLIC sqlite3)
     endif()
 endif()
-if(USE_NETWORK AND NOT WIN32)
-    # Secure sockets use OpenSSL.
+if(USE_NETWORK)
+    # Secure sockets use OpenSSL (on Windows, set OPENSSL_ROOT_DIR if CMake
+    # does not find it).
     find_package(OpenSSL)
     if(OPENSSL_FOUND)
         target_link_libraries(IASLib PUBLIC OpenSSL::SSL OpenSSL::Crypto)

@@ -20,6 +20,7 @@
 
 #include "Object.h"
 #include "Bool.h"
+#include <stdlib.h>
 
 namespace IASLib
 {

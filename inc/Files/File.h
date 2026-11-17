@@ -49,6 +49,10 @@ namespace IASLib
         public:
 	                        CFile();
                             CFile( const char *strFileName, int nMode );
+#ifdef IASLIB_WIN32__
+                                // A C runtime file descriptor (from _open).
+                            CFile( int nHandle, int nMode );
+#endif
 	        virtual         ~CFile();
 
                             DEFINE_OBJECT( CFile )

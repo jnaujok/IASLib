@@ -18,12 +18,11 @@
 
 #ifdef IASLIB_WIN32__
 #include "Platform.h"
-#else
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <memory.h>
-#endif
 
 #ifdef IASLIB_MULTI_THREADED__
 #include "../Threading/Mutex.h"

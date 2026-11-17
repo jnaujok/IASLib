@@ -1,4 +1,5 @@
 #include "Blockchain/Block.h"
+#include <string>
 #include "Encryption/Sha256.h"
 
 namespace IASLib
@@ -15,14 +16,8 @@ namespace IASLib
 
     void CBlock::mineBlock(uint32_t nDifficulty) 
     {
-        char cstr[nDifficulty + 1];
-        for (uint32_t i = 0; i < nDifficulty; ++i) 
-        {
-            cstr[i] = '0';
-        }
-        cstr[nDifficulty] = '\0';
-
-        CString str(cstr);
+        std::string strZeros( nDifficulty, '0' );
+        CString str( strZeros.c_str() );
 
         do 
         {
@@ -39,7 +34,7 @@ namespace IASLib
         ss = _nIndex;
         ss += _tTime.FormatDate( CDate::DF_ISO_8601_MS_PACKED);
         ss += _sData;
-        ss += _nNonce;
+        ss += std::to_string( (long long)_nNonce ).c_str();     // int64_t is long or long long by platform
         ss += sPrevHash;
 
         return CSHA256::StringDigest( ss );
