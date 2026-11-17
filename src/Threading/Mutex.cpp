@@ -131,6 +131,9 @@ namespace IASLib
     void CMutex::Unlock( void )
     {
         ASSERT( 0 != m_nLocked );
+            // Update the count while we still hold the mutex; another thread
+            // can acquire it as soon as it is released.
+        m_nLocked--;
 
     #ifndef IASLIB_MULTI_THREADED__
         m_Mutex = 0;
@@ -152,7 +155,6 @@ namespace IASLib
         ReleaseMutex( m_Mutex );
     #endif
     #endif
-        m_nLocked--;
     }
 
     bool CMutex::IsLocked( void )

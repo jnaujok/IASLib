@@ -44,6 +44,7 @@
     #include "../BaseTypes/Object.h"
     #include "../BaseTypes/IASLib_String.h"
     #include "Mutex.h"
+    #include <atomic>
 
     namespace IASLib
     {
@@ -51,10 +52,10 @@
         {
             protected:
                 THREAD_T        m_ptThreadID;
-                bool            m_bIsRunning;
+                std::atomic<bool> m_bIsRunning;     // Shared with the thread itself.
                 int             m_nReturnCode;
                 bool            m_bDetached;
-                bool            m_bShutdown;
+                std::atomic<bool> m_bShutdown;      // Set by other threads.
                 bool            m_bContained;
                 bool            m_bNoDelete;
                 bool            m_bDaemon;

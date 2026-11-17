@@ -186,8 +186,12 @@ CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetache
         return;
     }
 
+        // Mark the thread as running before it exists: a short thread can
+        // finish (and clear the flag) before pthread_create even returns.
+    m_bIsRunning = true;
     if ( ( nRetCode = pthread_create( &m_ptThreadID, &m_stAttributes, ThreadStartRoutine, this ) ) != 0 )
     {
+        m_bIsRunning = false;
         if ( ! bStartSuspended )
         {
             CThread::LeaveCriticalSection();
@@ -222,7 +226,9 @@ CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetache
 #endif
 
     m_bContained = true;
+#ifndef IASLIB_PTHREAD__
     m_bIsRunning = true;
+#endif
 
         // This prevents recursion in the Thread Monitor. It adds itself to the thread monitor array.
     if ( m_strThreadName != "Thread Monitor" )
