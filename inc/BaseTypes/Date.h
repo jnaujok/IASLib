@@ -106,7 +106,8 @@ namespace IASLib
             static long         m_lOffsetSeconds;
             long                m_lEpochDay;
             long                m_lMilliseconds;
-            bool                m_bIsGMT;
+            bool                m_bHasZone;     // Whether the offset below is known.
+            int                 m_nUTCOffset;   // Seconds east of UTC (UTC+5:30 is 19800).
             CString             m_castBuffer;
         public:
             enum FormatFlags {
@@ -140,7 +141,8 @@ namespace IASLib
                                 CDate( const CDate &oSource );
                                 CDate( const char *strSource );
                                 CDate( tm_type &tmSource );
-                                CDate( long lEpochDay, long lMilliseconds ) { m_lEpochDay = lEpochDay; m_lMilliseconds = lMilliseconds; m_bIsGMT = false; }
+                // A day number and milliseconds since midnight, with no time zone.
+                                CDate( long lEpochDay, long lMilliseconds ) { m_lEpochDay = lEpochDay; m_lMilliseconds = lMilliseconds; m_bHasZone = false; m_nUTCOffset = 0; }
             virtual            ~CDate();
 
                                 DEFINE_OBJECT( CDate )
@@ -181,9 +183,39 @@ namespace IASLib
             bool                IsLeapYear( int nYear ) const;
                 // True if the day, month (0-11) and year form a real date.
             static bool         IsValidDate( int nDay, int nMonth, int nYear );
-                // True if the date is known to be UTC (the current time, or text
-                // that gave a time zone).
-            bool                IsGMT( void ) const { return m_bIsGMT; }
+                // Time zones. A date holds its local (wall clock) time and, when
+                // known, its offset from UTC in seconds east of UTC (-18000 for
+                // EST, 19800 for UTC+5:30). The day, month, hour and so on are
+                // always the local time. Anything that needs the instant uses the
+                // offset automatically: comparisons, Elapsed(), ToUTC(), the Julian
+                // Day methods and the formats that say "GMT". A date without a
+                // zone (from numbers, or text without a zone) is treated as UTC
+                // for those; give it a zone with SetTimeZone() or
+                // AssumeLocalTimeZone() first if it is not.
+                //
+                // The current time, Unix times and Julian Days are UTC. Parsed text
+                // keeps its zone ("12:14 EST" is 12:14 at -05:00).
+            bool                HasTimeZone( void ) const { return m_bHasZone; }
+                // The offset in seconds east of UTC (0 if there is no zone).
+            int                 GetUTCOffset( void ) const { return m_bHasZone ? m_nUTCOffset : 0; }
+                // True if the date is known to be UTC.
+            bool                IsGMT( void ) const { return m_bHasZone && m_nUTCOffset == 0; }
+                // Sets the zone the local time is in, without changing the local
+                // time. False for an offset of a day or more.
+            bool                SetTimeZone( int nOffsetSeconds );
+            void                ClearTimeZone( void );
+                // The same instant as local time in another zone.
+            CDate               ToTimeZone( int nOffsetSeconds ) const;
+            CDate               ToUTC( void ) const;
+                // The same instant as local time in the system's time zone (with
+                // its daylight saving rules for that date).
+            CDate               ToLocalTime( void ) const;
+                // Takes the local time to be in the system's time zone and records
+                // the offset in force then. A local time that happens twice (clocks
+                // going back) is taken as the earlier one; one that never happened
+                // (clocks going forward) moves forward by the gap. Returns false if
+                // the system has no offset for the date.
+            bool                AssumeLocalTimeZone( void );
 
             void                SetInvalid( void ) { m_lMilliseconds = -1; m_lEpochDay = 0; }
             void                SetDate( int nDay, int nMonth, int nYear, int nHour = 0, int nMinute = 0, int nSecond = 0, int nMillisecond = 0 );
@@ -196,7 +228,8 @@ namespace IASLib
             CString             HTTPDate( void ) const;
 
                 // ISO 8601 extended format: "YYYY-MM-DD", or with bTime
-                // "YYYY-MM-DDTHH:MM:SS[.sss]" plus "Z" when IsGMT(). Proleptic
+                // "YYYY-MM-DDTHH:MM:SS[.sss]" plus the zone ("Z", "+05:30", or
+                // nothing when the zone is unknown). Proleptic
                 // Gregorian calendar; years outside 0000-9999 get a sign
                 // ("-0043" is 44 BC, "+10000").
             CString             FormatISO8601( bool bTime = true, bool bMilliseconds = false ) const;
@@ -208,13 +241,15 @@ namespace IASLib
                 // week dates (YYYY-Www-D), expanded years (+YYYYY, -YYYY), times
                 // after "T" or a space (hh, hh:mm, hh:mm:ss, basic forms, a
                 // fraction on the last part, 24:00), and zones (Z, +hh, +hh:mm,
-                // +hhmm). A time with a zone is converted to UTC. Returns an
+                // +hhmm). The time is kept as written, with its zone. Returns an
                 // invalid date, and sets *pbValid to false, if the text is not
                 // exactly an ISO 8601 date.
             static CDate        ParseISO8601( const char *strValue, bool *pbValid = NULL );
             static CDate        GetSafeDate( const char *strValue );
             static CDate        Parse( const char *strValue ) { return GetSafeDate( strValue ); }
-            static CDate        ParseGMT( const char *strValue ) { CDate dttTemp; dttTemp=GetSafeDate( strValue ); dttTemp.m_bIsGMT = true; return dttTemp; }
+                // Parses text whose times are UTC unless it gives a zone; the result
+                // is in UTC.
+            static CDate        ParseGMT( const char *strValue ) { CDate dttTemp = GetSafeDate( strValue ); if ( ! dttTemp.m_bHasZone ) dttTemp.SetTimeZone( 0 ); return dttTemp.ToUTC(); }
             static CDate        ParseSybase( const char *strValue );
             static CDate        ParseUnix( time_t tValue );
 
@@ -222,7 +257,8 @@ namespace IASLib
                 // 1 January 4713 BC (Julian calendar). GetJulianDate() includes
                 // the time of day as a fraction (days start at noon, so midnight
                 // is .5); GetJulianDayNumber() is the whole number for the day,
-                // the JD at noon. The time is taken as UT. A double gives about a
+                // the JD at noon, of the UT date. A date with a time zone is
+                // converted to UT first; one without is taken as UT. A double gives about a
                 // microsecond of resolution for current dates.
             double              GetJulianDate( void ) const;
             long                GetJulianDayNumber( void ) const;
@@ -259,6 +295,9 @@ namespace IASLib
 
             void                TestFunction( long &lEpoch, long &lMillis ) { lEpoch = m_lEpochDay; lMillis = m_lMilliseconds; }
 
+                // Older interface; offsets in minutes east of UTC. TZAdjust converts
+                // a UTC date to that zone and anything else to UTC; SetToGMT
+                // converts to UTC, taking a date without a zone to be in that zone.
             void                TZAdjust( int nOffset );
             void                SetToGMT( int nOffset );
 
@@ -280,6 +319,8 @@ namespace IASLib
             static void         DayToDate( long lDay, int &nDay, int &nMonth, int &nYear );
             static CDate        DateParse( const char *strRawDate );
             static CDate        FinishParse( tm_type &tmVals );
+            long long           UtcMilliseconds( void ) const;
+            static CDate        FromUtcMilliseconds( long long llUtc, int nOffsetSeconds );
             static bool         ScanGMTOffset( const char *pszOffset, long &lValue );
             static bool         ScanMonths( const char *pszMonth, long &lValue );
             static bool         ScanWday( const char *pszWday, long &lValue );

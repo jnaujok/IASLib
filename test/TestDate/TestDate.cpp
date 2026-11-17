@@ -274,8 +274,9 @@ static void runParseCases( const char *title, const ParseCase *cases, size_t cou
     printf( "%s\n", title );
     for ( size_t n = 0; n < count; n++ )
     {
+            // Compare in UTC: dates with a zone keep their local time.
         CDate d = CDate::Parse( cases[ n ].input );
-        CHECK_EQ_STR( cases[ n ].input, hist( d ), cases[ n ].expected );
+        CHECK_EQ_STR( cases[ n ].input, hist( d.ToUTC() ), cases[ n ].expected );
     }
 }
 
@@ -397,9 +398,12 @@ static void testParsing( void )
     CHECK( CDate::Parse( "" ).IsValid() && CDate::Parse( "" ).Elapsed( n ) < 2000 );
     CHECK( ! CDate::Parse( "November 2" ).GetSOD() || CDate::Parse( "November 2" ).GetMonth() == 10 );
 
-    printf( "Time zones mark the result as UTC\n" );
-    CHECK( CDate::Parse( "Sat, 02 Jun 2001 12:14:11 EST" ).IsGMT() );
-    CHECK( ! CDate::Parse( "06/02/2001 12:14:11" ).IsGMT() );
+    printf( "Parsed time zones are kept\n" );
+    CDate est = CDate::Parse( "Sat, 02 Jun 2001 12:14:11 EST" );
+    CHECK( est.HasTimeZone() && est.GetUTCOffset() == -18000 && ! est.IsGMT() );
+    CHECK( est.GetHour() == 12 && est.ToUTC().GetHour() == 17 );
+    CHECK( CDate::Parse( "Sat, 02 Jun 2001 12:14:11 GMT" ).IsGMT() );
+    CHECK( ! CDate::Parse( "06/02/2001 12:14:11" ).HasTimeZone() );
 
     printf( "ParseHTTP and ParseSybase\n" );
     CHECK_EQ_STR( "rfc1123", hist( CDate::ParseHTTP( "Sat, 02 Jun 2001 12:14:11 GMT" ) ), "2001-06-02 12:14:11.000" );
@@ -471,9 +475,10 @@ static void testISO8601( void )
         { "2001-06-02T12:14.5", "2001-06-02T12:14:30.000" },
         { "2001-06-02T24:00", "2001-06-03T00:00:00.000" },
         { "2001-06-02T23:59:60Z", "2001-06-02T23:59:59.999Z" },
-        { "2001-06-02T12:14:11+05:30", "2001-06-02T06:44:11.000Z" },
-        { "2001-06-02T12:14:11-0700", "2001-06-02T19:14:11.000Z" },
-        { "2001-06-02T01:00:00+02", "2001-06-01T23:00:00.000Z" },
+        { "2001-06-02T12:14:11+05:30", "2001-06-02T12:14:11.000+05:30" },
+        { "2001-06-02T12:14:11-0700", "2001-06-02T12:14:11.000-07:00" },
+        { "2001-06-02T01:00:00+02", "2001-06-02T01:00:00.000+02:00" },
+        { "2001-06-02T01:00:00+05:30:15", "2001-06-02T01:00:00.000+05:30:15" },
         { "0000-01-01", "0000-01-01T00:00:00.000" },
         { "-0043-03-15", "-0043-03-15T00:00:00.000" },
         { "+12345-01-01", "+12345-01-01T00:00:00.000" },
@@ -662,6 +667,105 @@ static void testJulianDay( void )
     CHECK( errors == 0 );
 }
 
+/***********************************************************************
+ * Time zones
+ ***********************************************************************/
+
+static void setZone( const char *tz )
+{
+    if ( tz )
+        setenv( "TZ", tz, 1 );
+    else
+        unsetenv( "TZ" );
+    tzset();
+}
+
+static void testTimeZones( void )
+{
+    printf( "Time zones\n" );
+    const double ms = 1.0 / 86400000.0;
+
+        // Local time is kept; the instant uses the offset.
+    CDate est = CDate::Parse( "Sat, 02 Jun 2001 12:14:11 EST" );
+    CHECK_EQ_STR( "est iso", std::string( (const char *)est.FormatISO8601() ), "2001-06-02T12:14:11-05:00" );
+    CHECK_EQ_STR( "est rfc1123", std::string( (const char *)est.FormatDate( CDate::DF_RFC1123 ) ), "Sat, 02 Jun 2001 17:14:11 GMT" );
+    CHECK_EQ_STR( "est pretty", std::string( (const char *)est.FormatDate( CDate::DF_PRETTY ) ), "06/02/2001  12:14:11" );
+    CHECK_EQ_STR( "est utc", iso( est.ToUTC(), false ), "2001-06-02T17:14:11Z" );
+    CHECK_EQ_STR( "est in india", iso( est.ToTimeZone( 19800 ), false ), "2001-06-02T22:44:11+05:30" );
+    CHECK( est.ToTimeZone( 19800 ) == est );
+
+        // Comparisons and Elapsed() use instants.
+    CDate paris = CDate::Parse( "2001-06-02T19:14:11+02:00" );
+    CHECK( paris == est && ! ( paris < est ) && ! ( paris > est ) && paris.Elapsed( est ) == 0 );
+    CHECK( CDate::Parse( "2001-06-02T19:14:12+02:00" ) > est );
+    CHECK( paris.GetHour() == 19 );
+    CHECK( CDate::Parse( "2001-06-02T00:30:00+14:00" ).ElapsedDays( CDate::Parse( "2001-06-01T23:30:00Z" ) ) == 1 );
+
+        // Julian Days are UT: a zoned local time is converted.
+    CDate india( 1, 0, 2000, 17, 30, 0 );
+    CHECK( india.SetTimeZone( 19800 ) );
+    CHECK( near( india.GetJulianDate(), 2451545.0, ms ) );
+    CDate kiritimati( 2, 0, 2000, 0, 30, 0 );       // UTC+14: still 1 January in UT
+    kiritimati.SetTimeZone( 14 * 3600 );
+    CHECK( kiritimati.GetJulianDayNumber() == 2451545 );
+    CHECK( near( kiritimati.GetJulianDate(), 2451544.9375, ms ) );
+    CHECK( near( CDate::Parse( "Sat, 01 Jan 2000 07:00:00 EST" ).GetJulianDate(), 2451545.0, ms ) );
+    CHECK( near( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );     // no zone: taken as UT
+
+        // Zone edits.
+    CDate plain( 2, 5, 2001, 12, 0, 0 );
+    CHECK( ! plain.SetTimeZone( 86400 ) && ! plain.HasTimeZone() );
+    CHECK( plain.SetTimeZone( -3600 ) && plain.GetHour() == 12 && plain.ToUTC().GetHour() == 13 );
+    plain.ClearTimeZone();
+    CHECK( ! plain.HasTimeZone() && plain.ToUTC().GetHour() == 12 );
+
+        // The older interface (minutes).
+    CDate legacy( 2, 5, 2001, 12, 0, 0 );
+    legacy.SetToGMT( -300 );
+    CHECK( legacy.IsGMT() && legacy.GetHour() == 17 );
+    legacy.TZAdjust( 60 );
+    CHECK( legacy.GetUTCOffset() == 3600 && legacy.GetHour() == 18 );
+    legacy.TZAdjust( 60 );
+    CHECK( legacy.IsGMT() && legacy.GetHour() == 17 );
+    CDate gmt = CDate::ParseGMT( "2001-06-02 12:00:00" );
+    CHECK( gmt.IsGMT() && gmt.GetHour() == 12 );
+    gmt = CDate::ParseGMT( "06/02/2001 12:00 EST" );
+    CHECK( gmt.IsGMT() && gmt.GetHour() == 17 );
+
+    printf( "System time zone (America/Denver, Europe/London)\n" );
+    const char *saved = getenv( "TZ" );
+    std::string savedZone = saved ? saved : "";
+    setZone( "America/Denver" );
+
+    CDate summer( 2, 5, 2001, 12, 0, 0 );
+    CHECK( summer.AssumeLocalTimeZone() && summer.GetUTCOffset() == -21600 && summer.GetHour() == 12 );
+    CDate winter( 2, 0, 2001, 12, 0, 0 );
+    CHECK( winter.AssumeLocalTimeZone() && winter.GetUTCOffset() == -25200 );
+    CHECK_EQ_STR( "to local", iso( CDate::ParseUnix( 991483651 ).ToLocalTime(), false ), "2001-06-02T06:07:31-06:00" );
+    CHECK( CDate::ParseUnix( 991483651 ).ToLocalTime() == CDate::ParseUnix( 991483651 ) );
+
+        // 1 April 2001 02:30 never happened (clocks went from 02:00 to 03:00).
+    CDate gap( 1, 3, 2001, 2, 30, 0 );
+    CHECK( gap.AssumeLocalTimeZone() );
+    CHECK_EQ_STR( "gap", iso( gap, false ), "2001-04-01T03:30:00-06:00" );
+        // 28 October 2001 01:30 happened twice; the first is in daylight time.
+    CDate overlap( 28, 9, 2001, 1, 30, 0 );
+    CHECK( overlap.AssumeLocalTimeZone() );
+    CHECK_EQ_STR( "overlap", iso( overlap, false ), "2001-10-28T01:30:00-06:00" );
+        // Before standard time (1883) Denver kept local mean time.
+    CDate lmt( 4, 6, 1850, 12, 0, 0 );
+    CHECK( lmt.AssumeLocalTimeZone() && lmt.GetUTCOffset() == -25196 );
+    CHECK_EQ_STR( "lmt", iso( lmt, false ), "1850-07-04T12:00:00-06:59:56" );
+    CHECK( CDate::ParseISO8601( "1850-07-04T12:00:00-06:59:56" ) == lmt );
+
+    setZone( "Europe/London" );
+    CDate london( 2, 5, 2001, 12, 0, 0 );
+    CHECK( london.AssumeLocalTimeZone() && london.GetUTCOffset() == 3600 );
+    CHECK( near( london.GetJulianDate(), CDate( 2, 5, 2001, 11, 0, 0 ).GetJulianDate(), ms ) );
+
+    setZone( savedZone.empty() ? NULL : savedZone.c_str() );
+}
+
 int main( int argc, char *argv[] )
 {
 #ifdef IASLIB_HERSCHEL_CORRECTION__
@@ -678,6 +782,7 @@ int main( int argc, char *argv[] )
     testISO8601();
     testUnixAndTimestamps();
     testJulianDay();
+    testTimeZones();
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );
     return ( g_nFailures == 0 ) ? 0 : 1;

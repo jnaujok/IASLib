@@ -281,12 +281,12 @@ namespace IASLib
     CDate::CDate()
     {
         SetToCurrent();
-        m_bIsGMT = true;
     }
 
     CDate::CDate( int nDay, int nMonth, int nYear, int nHour, int nMinute, int nSecond, int nMilli )
     {
-        m_bIsGMT = false;
+        m_bHasZone = false;
+        m_nUTCOffset = 0;
         SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, nMilli );
     }
 
@@ -294,7 +294,8 @@ namespace IASLib
     {
         m_lMilliseconds = oSource.m_lMilliseconds;
         m_lEpochDay = oSource.m_lEpochDay;
-        m_bIsGMT = oSource.m_bIsGMT;
+        m_bHasZone = oSource.m_bHasZone;
+        m_nUTCOffset = oSource.m_nUTCOffset;
     }
 
     CDate::CDate( const char *strParse )
@@ -302,12 +303,13 @@ namespace IASLib
         *this = GetSafeDate( strParse );
     }
 
-        // tm_year is the full year, tm_mon is 0-11, and tm_gmtoffset is the
-        // offset of the time given from UTC in seconds (east positive); the
-        // result is that time converted to UTC.
+        // tm_year is the full year and tm_mon is 0-11. A non-zero tm_gmtoffset
+        // (seconds east of UTC) becomes the date's time zone; the fields are kept
+        // as the local time in that zone.
     CDate::CDate( tm_type &tmSource )
     {
-        m_bIsGMT = false;
+        m_bHasZone = false;
+        m_nUTCOffset = 0;
 
         if ( ( tmSource.tm_year == 0 ) && ( tmSource.tm_mon == 0 ) && ( tmSource.tm_mday == 0 ) && ( tmSource.tm_msec == -1 ) )
         {
@@ -318,7 +320,7 @@ namespace IASLib
         SetDate( tmSource.tm_mday, tmSource.tm_mon, tmSource.tm_year, tmSource.tm_hour, tmSource.tm_min, tmSource.tm_sec, tmSource.tm_msec );
         if ( IsValid() && tmSource.tm_gmtoffset != 0 )
         {
-            Add( 0, 0, -tmSource.tm_gmtoffset );
+            SetTimeZone( tmSource.tm_gmtoffset );
         }
     }
 
@@ -331,7 +333,8 @@ namespace IASLib
     {
         m_lMilliseconds = oSource.m_lMilliseconds;
         m_lEpochDay = oSource.m_lEpochDay;
-        m_bIsGMT = oSource.m_bIsGMT;
+        m_bHasZone = oSource.m_bHasZone;
+        m_nUTCOffset = oSource.m_nUTCOffset;
 
         return *this;
     }
@@ -351,24 +354,12 @@ namespace IASLib
 
     bool CDate::operator >( const CDate &oCompare ) const
     {
-        if ( m_lEpochDay > oCompare.m_lEpochDay )
-            return true;
-
-        if ( ( m_lEpochDay == oCompare.m_lEpochDay ) && ( m_lMilliseconds > oCompare.m_lMilliseconds ) )
-            return true;
-
-        return false;
+        return UtcMilliseconds() > oCompare.UtcMilliseconds();
     }
 
     bool CDate::operator <( const CDate &oCompare ) const
     {
-        if ( m_lEpochDay < oCompare.m_lEpochDay )
-            return true;
-
-        if ( ( m_lEpochDay == oCompare.m_lEpochDay ) && ( m_lMilliseconds < oCompare.m_lMilliseconds ) )
-            return true;
-
-        return false;
+        return UtcMilliseconds() < oCompare.UtcMilliseconds();
     }
 
     bool CDate::operator >=( const CDate &oCompare ) const
@@ -383,7 +374,7 @@ namespace IASLib
 
     bool CDate::operator ==( const CDate &oCompare ) const
     {
-        return ( m_lEpochDay == oCompare.m_lEpochDay ) && ( m_lMilliseconds == oCompare.m_lMilliseconds );
+        return UtcMilliseconds() == oCompare.UtcMilliseconds();
     }
 
     bool CDate::operator !=( const CDate &oCompare ) const
@@ -393,7 +384,8 @@ namespace IASLib
 
     void CDate::SetDate( int nDay, int nMonth, int nYear, int nHour, int nMinute, int nSecond, int nMilli )
     {
-        m_bIsGMT = false;
+        m_bHasZone = false;
+        m_nUTCOffset = 0;
 
         long lDay;
         if ( ! DateToDay( nDay, nMonth, nYear, lDay ) ||
@@ -505,6 +497,23 @@ namespace IASLib
         return CString( buffer );
     }
 
+        // "Z", "+hh:mm" or "-hh:mm" ("+hh:mm:ss" for an offset with seconds,
+        // such as local mean time), or "" when the zone is unknown.
+    static CString isoOffset( bool bHasZone, int nOffset )
+    {
+        if ( ! bHasZone )
+            return CString( "" );
+        if ( nOffset == 0 )
+            return CString( "Z" );
+        char buffer[ 32 ];
+        int nAbs = ( nOffset < 0 ) ? -nOffset : nOffset;
+        if ( nAbs % 60 )
+            snprintf( buffer, sizeof( buffer ), "%c%02d:%02d:%02d", nOffset < 0 ? '-' : '+', nAbs / 3600, ( nAbs / 60 ) % 60, nAbs % 60 );
+        else
+            snprintf( buffer, sizeof( buffer ), "%c%02d:%02d", nOffset < 0 ? '-' : '+', nAbs / 3600, ( nAbs / 60 ) % 60 );
+        return CString( buffer );
+    }
+
     void CDate::GetISODate( long &lYear, int &nMonth, int &nDay ) const
     {
         gregorianFromDays( m_lEpochDay - UNIX_EPOCH_DAY, lYear, nMonth, nDay );
@@ -533,8 +542,7 @@ namespace IASLib
             else
                 snprintf( buffer, sizeof( buffer ), "T%02d:%02d:%02d", GetHours(), GetMinutes(), GetSeconds() );
             retVal += buffer;
-            if ( m_bIsGMT )
-                retVal += "Z";
+            retVal += isoOffset( m_bHasZone, m_nUTCOffset );
         }
         return retVal;
     }
@@ -713,7 +721,7 @@ namespace IASLib
             // fraction on the last part.
         long lMs = 0;
         bool bZone = false;
-        long lOffsetMinutes = 0;
+        long lOffsetSeconds = 0;
 
         if ( ( c.peek() == 'T' || c.peek() == 't' || c.peek() == ' ' ) && c.isDigitAt( 1 ) )
         {
@@ -790,33 +798,36 @@ namespace IASLib
                 {
                     zm = c.take( 2 );
                 }
-                if ( zh > 23 || zm > 59 )
+                long zs = 0;
+                if ( c.peek() == ':' && c.isDigitAt( 1 ) )
+                {
+                    c.p++;
+                    if ( c.digitRun() != 2 )
+                        return dttInvalid;
+                    zs = c.take( 2 );
+                }
+                if ( zh > 23 || zm > 59 || zs > 59 )
                     return dttInvalid;
                 bZone = true;
-                lOffsetMinutes = nZoneSign * ( zh * 60 + zm );
+                lOffsetSeconds = nZoneSign * ( zh * 3600 + zm * 60 + zs );
             }
         }
 
         if ( ! c.atEnd() )
             return dttInvalid;
 
-            // Convert to UTC when a zone was given.
-        long long llMs = (long long)lMs - (long long)lOffsetMinutes * 60000LL;
-        long lDays = (long)floorDiv( (long)( llMs / 1000 ), 86400 );
-        llMs -= (long long)lDays * MS_PER_DAY;
-        while ( llMs < 0 )
+            // The local time is kept as written, with its zone. "24:00" is
+            // midnight at the start of the next day.
+        long lDays = 0;
+        if ( lMs >= MS_PER_DAY )
         {
-            llMs += MS_PER_DAY;
-            lDays--;
-        }
-        while ( llMs >= MS_PER_DAY )
-        {
-            llMs -= MS_PER_DAY;
-            lDays++;
+            lMs -= MS_PER_DAY;
+            lDays = 1;
         }
 
-        CDate dttResult( unixDay + lDays + UNIX_EPOCH_DAY, (long)llMs );
-        dttResult.m_bIsGMT = bZone;
+        CDate dttResult( unixDay + lDays + UNIX_EPOCH_DAY, lMs );
+        if ( bZone )
+            dttResult.SetTimeZone( (int)lOffsetSeconds );
         if ( pbValid )
             *pbValid = true;
         return dttResult;
@@ -840,6 +851,13 @@ namespace IASLib
         {
             strRetVal = "Invalid Date";
             return strRetVal;
+        }
+
+            // The formats that say "GMT" must show UTC.
+        if ( m_bHasZone && m_nUTCOffset != 0 &&
+             ( nDateFormat == CDate::DF_RFC850 || nDateFormat == CDate::DF_RFC1123 || nDateFormat == CDate::DF_RFC7231 ) )
+        {
+            return ToUTC().FormatDate( nDateFormat );
         }
 
         int nDay, nMonth, nYear;
@@ -1033,7 +1051,8 @@ namespace IASLib
     ** everything else is read in the historical calendar. Years written with three or
     ** more digits are taken literally ("0044" is AD 44); one- and two-digit years
     ** fall in the window from 30 years before to 70 years after the current year.
-    ** Times with a time zone are converted to UTC.
+    ** A time zone in the text is kept with the date: "12:14 EST" is 12:14 at -05:00
+    ** (ToUTC() gives 17:14).
     **
     **          ""                                  = "08/13/1998  13:05:20"
     **          "01/01/1998  12:24:44"              = "01/01/1998  12:24:44"
@@ -1044,7 +1063,7 @@ namespace IASLib
     **          "1/1/1998 1:1:1 AM"                 = "01/01/1998  01:01:01"
     **          "1-1-98 10:13 PM"                   = "01/01/1998  22:13:00"
     **          "1-1 1 AM"                          = "01/01/1998  01:00:00"
-    **          "1-17  10:05 GMT +5:40"             = "01/17/1998  04:25:00"
+    **          "1-17  10:05 GMT +5:40"             = "01/17/1998  10:05:00 +05:40" (04:25 UTC)
     **          "Today"                             = "08/13/1998  00:00:00"
     **          "Today +6"                          = "08/19/1998  00:00:00"
     **          "Now"                               = "08/13/1998  13:05:20"
@@ -1363,12 +1382,14 @@ namespace IASLib
     }
 
         // Milliseconds from oThen to this date (positive when this is later).
+        // Dates with different time zones are compared as instants.
     long long CDate::Elapsed( const CDate &oThen ) const
     {
-        return ( (long long)( m_lEpochDay - oThen.m_lEpochDay ) * MS_PER_DAY ) + ( m_lMilliseconds - oThen.m_lMilliseconds );
+        return UtcMilliseconds() - oThen.UtcMilliseconds();
     }
 
-        // Days from oThen to this date (positive when this is later).
+        // Calendar days from oThen's date to this date (positive when this is
+        // later), each date in its own time zone.
     int CDate::ElapsedDays( const CDate &oThen ) const
     {
         return (int)( m_lEpochDay - oThen.m_lEpochDay );
@@ -1500,7 +1521,7 @@ namespace IASLib
         }
 
         CDate dttDate( (long)( llDays + UNIX_EPOCH_DAY ), (long)( llSeconds * 1000 ) );
-        dttDate.m_bIsGMT = true;
+        dttDate.SetTimeZone( 0 );
         return dttDate;
     }
 
@@ -1512,14 +1533,19 @@ namespace IASLib
     ** day (negative before noon).
     **
     ***********************************************************************************/
+        // Julian Days are in UT: a date with a time zone is converted first.
     double CDate::GetJulianDate( void ) const
     {
-        return (double)GetJulianDayNumber() + (double)( m_lMilliseconds - MS_PER_DAY / 2 ) / (double)MS_PER_DAY;
+        long long llUtc = UtcMilliseconds();
+        long lDay = (long)floorDiv( (long)( llUtc / 1000 ), 86400 );
+        long long llMs = llUtc - (long long)lDay * MS_PER_DAY;
+        return (double)( lDay + JULIAN_DAY_OFFSET ) + (double)( llMs - MS_PER_DAY / 2 ) / (double)MS_PER_DAY;
     }
 
     long CDate::GetJulianDayNumber( void ) const
     {
-        return m_lEpochDay + JULIAN_DAY_OFFSET;
+        long long llUtc = UtcMilliseconds();
+        return (long)floorDiv( (long)( llUtc / 1000 ), 86400 ) + JULIAN_DAY_OFFSET;
     }
 
     CDate CDate::FromJulianDate( double dJulianDate )
@@ -1536,7 +1562,7 @@ namespace IASLib
         }
 
         CDate dttDate( lDay - JULIAN_DAY_OFFSET, (long)llMs );
-        dttDate.m_bIsGMT = true;
+        dttDate.SetTimeZone( 0 );
         return dttDate;
     }
 
@@ -1544,7 +1570,7 @@ namespace IASLib
     {
             // The day number names the day; its Julian Date is at noon.
         CDate dttDate( lJulianDayNumber - JULIAN_DAY_OFFSET, MS_PER_DAY / 2 );
-        dttDate.m_bIsGMT = true;
+        dttDate.SetTimeZone( 0 );
         return dttDate;
     }
 
@@ -1637,7 +1663,7 @@ namespace IASLib
                 strTemp = strWork.Substring( 0, nTemp );
                 nSecond = atoi( strTemp );
                 dttDate.SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, 0 );
-                dttDate.m_bIsGMT = dttDate.IsValid();
+                if ( dttDate.IsValid() ) dttDate.SetTimeZone( 0 );
             }
             else
             {
@@ -1680,7 +1706,7 @@ namespace IASLib
                     strTemp = strWork.Substring( 0, nTemp );
                     nSecond = atoi( strTemp );
                     dttDate.SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, 0 );
-                    dttDate.m_bIsGMT = dttDate.IsValid();
+                    if ( dttDate.IsValid() ) dttDate.SetTimeZone( 0 );
                 }
                 else
                 {
@@ -1723,7 +1749,7 @@ namespace IASLib
                         nYear = atoi( strTemp );
 
                         dttDate.SetDate( nDay, nMonth, nYear, nHour, nMinute, nSecond, 0 );
-                        dttDate.m_bIsGMT = dttDate.IsValid();
+                        if ( dttDate.IsValid() ) dttDate.SetTimeZone( 0 );
                     }
                     else
                     {
@@ -1803,7 +1829,8 @@ namespace IASLib
 
         m_lEpochDay = (long)( llDays + UNIX_EPOCH_DAY );
         m_lMilliseconds = (long)( llRemainder * 1000 + llMilliseconds );
-        m_bIsGMT = true;
+        m_bHasZone = true;
+        m_nUTCOffset = 0;
     }
 
     void CDate::SetHerschelCorrection( bool bEnabled )
@@ -1814,6 +1841,168 @@ namespace IASLib
     bool CDate::GetHerschelCorrection( void )
     {
         return bHerschelCorrection;
+    }
+
+    /***********************************************************************************
+    **  Time zones
+    **
+    **      A date holds the local (wall clock) time and, when known, its offset from
+    ** UTC in seconds east. UtcMilliseconds() is the instant: the local time less the
+    ** offset. A date without a zone is treated as UTC wherever an instant is needed.
+    **
+    ***********************************************************************************/
+
+    long long CDate::UtcMilliseconds( void ) const
+    {
+        long long llLocal = (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds;
+        return m_bHasZone ? llLocal - (long long)m_nUTCOffset * 1000LL : llLocal;
+    }
+
+    CDate CDate::FromUtcMilliseconds( long long llUtc, int nOffsetSeconds )
+    {
+        long long llLocal = llUtc + (long long)nOffsetSeconds * 1000LL;
+        long long llDay = llLocal / MS_PER_DAY;
+        long long llMs = llLocal % MS_PER_DAY;
+        if ( llMs < 0 )
+        {
+            llMs += MS_PER_DAY;
+            llDay--;
+        }
+        CDate dttResult( (long)llDay, (long)llMs );
+        dttResult.m_bHasZone = true;
+        dttResult.m_nUTCOffset = nOffsetSeconds;
+        return dttResult;
+    }
+
+    bool CDate::SetTimeZone( int nOffsetSeconds )
+    {
+        if ( nOffsetSeconds <= -86400 || nOffsetSeconds >= 86400 )
+            return false;
+        m_bHasZone = true;
+        m_nUTCOffset = nOffsetSeconds;
+        return true;
+    }
+
+    void CDate::ClearTimeZone( void )
+    {
+        m_bHasZone = false;
+        m_nUTCOffset = 0;
+    }
+
+    CDate CDate::ToTimeZone( int nOffsetSeconds ) const
+    {
+        if ( ! IsValid() || nOffsetSeconds <= -86400 || nOffsetSeconds >= 86400 )
+            return *this;
+        return FromUtcMilliseconds( UtcMilliseconds(), nOffsetSeconds );
+    }
+
+    CDate CDate::ToUTC( void ) const
+    {
+        return ToTimeZone( 0 );
+    }
+
+        // The system's offset from UTC (seconds east) at an instant, or false if
+        // the system cannot say (the instant is outside what time_t covers).
+    static bool systemOffsetAt( long long llUtcSeconds, int &nOffset )
+    {
+        time_t t = (time_t)llUtcSeconds;
+        if ( (long long)t != llUtcSeconds )
+            return false;
+        struct tm local;
+#ifdef IASLIB_WIN32__
+        if ( _localtime64_s( &local, &t ) != 0 )
+            return false;
+        long long llLocal = (long long)_mkgmtime64( &local );
+#else
+        if ( localtime_r( &t, &local ) == NULL )
+            return false;
+        long long llLocal = (long long)timegm( &local );
+#endif
+        nOffset = (int)( llLocal - llUtcSeconds );
+        return true;
+    }
+
+    CDate CDate::ToLocalTime( void ) const
+    {
+        if ( ! IsValid() )
+            return *this;
+        long long llUtc = UtcMilliseconds();
+        int nOffset = 0;
+        long long llSeconds = llUtc / 1000;
+        if ( llUtc % 1000 < 0 )
+            llSeconds--;
+        llSeconds -= (long long)UNIX_EPOCH_DAY * 86400LL;      // to Unix seconds
+        if ( ! systemOffsetAt( llSeconds, nOffset ) )
+            return *this;
+        return FromUtcMilliseconds( llUtc, nOffset );
+    }
+
+    bool CDate::AssumeLocalTimeZone( void )
+    {
+        if ( ! IsValid() )
+            return false;
+
+            // Find the system's offset in force at this local time. Candidates
+            // come from the offset at the same reading of UTC, corrected twice.
+        long long llLocal = (long long)m_lEpochDay * MS_PER_DAY + m_lMilliseconds;
+        long long llLocalSeconds = llLocal / 1000;
+        if ( llLocal % 1000 < 0 )
+            llLocalSeconds--;
+        llLocalSeconds -= (long long)UNIX_EPOCH_DAY * 86400LL;      // to Unix seconds
+
+        int nCandidates[ 3 ];
+        int nCount = 0;
+        int nOffset = 0;
+        if ( ! systemOffsetAt( llLocalSeconds, nOffset ) )
+            return false;
+        nCandidates[ nCount++ ] = nOffset;
+        for ( int nPass = 0; nPass < 2; nPass++ )
+        {
+            int nNext = 0;
+            if ( ! systemOffsetAt( llLocalSeconds - nCandidates[ nCount - 1 ], nNext ) )
+                return false;
+            nCandidates[ nCount++ ] = nNext;
+        }
+
+            // An offset is consistent if the instant it gives has that offset.
+            // Two consistent offsets mean the local time happens twice (clocks
+            // went back): take the earlier instant, the larger offset. None means
+            // it never happened (clocks went forward): take the offset in force
+            // before the change, the smaller one, which moves the time forward by
+            // the length of the gap.
+        bool bFound = false;
+        int nSmallest = nCandidates[0];
+        for ( int nX = 0; nX < nCount; nX++ )
+        {
+            int nCheck = 0;
+            if ( nCandidates[ nX ] < nSmallest )
+                nSmallest = nCandidates[ nX ];
+            if ( systemOffsetAt( llLocalSeconds - nCandidates[ nX ], nCheck ) && nCheck == nCandidates[ nX ] )
+            {
+                if ( ! bFound || nCandidates[ nX ] > nOffset )
+                    nOffset = nCandidates[ nX ];
+                bFound = true;
+            }
+        }
+        if ( ! bFound )
+        {
+            nOffset = nSmallest;
+                // Keep the instant, so the local time moves forward by the gap.
+            long long llUtc = llLocal - (long long)nOffset * 1000LL;
+            int nAfter = nOffset;
+            long long llUtcSeconds = llUtc / 1000;
+            if ( llUtc % 1000 < 0 )
+                llUtcSeconds--;
+            if ( systemOffsetAt( llUtcSeconds - (long long)UNIX_EPOCH_DAY * 86400LL, nAfter ) )
+            {
+                *this = FromUtcMilliseconds( llUtc, nAfter );
+                return true;
+            }
+        }
+
+        m_bHasZone = true;
+        m_nUTCOffset = nOffset;
+        return true;
     }
 
     int CDate::FixAMPM( int nHour, int nAMPM )
@@ -2056,7 +2245,7 @@ namespace IASLib
         CDate dttResult( tmVals );
         if ( dttResult.IsValid() && g_parseContext.zone )
         {
-            dttResult.m_bIsGMT = true;
+            dttResult.SetTimeZone( tmVals.tm_gmtoffset );
         }
         return dttResult;
     }
@@ -4487,27 +4676,30 @@ namespace IASLib
         }
     }
 
+        // Toggles between UTC and the zone nOffset minutes east of UTC: a UTC
+        // date becomes local time in that zone, any other date becomes UTC (a
+        // date without a zone is taken to be in that zone).
     void CDate::TZAdjust( int nOffset )
     {
-        if ( m_bIsGMT )
+        if ( IsGMT() )
         {
-            Add( 0, nOffset, 0 );
-            m_bIsGMT = false;
+            *this = ToTimeZone( nOffset * 60 );
         }
         else
         {
-            Add( 0, -nOffset, 0 );
-            m_bIsGMT = true;
+            SetToGMT( nOffset );
         }
     }
 
+        // Converts to UTC; a date without a zone is taken to be nOffset minutes
+        // east of UTC.
     void CDate::SetToGMT( int nOffset )
     {
-        if ( ! m_bIsGMT )
+        if ( ! m_bHasZone )
         {
-            Add( 0, - nOffset, 0 );
-            m_bIsGMT = true;
+            SetTimeZone( nOffset * 60 );
         }
+        *this = ToUTC();
     }
 
         // The current time in seconds since 1 January 1970 UTC.
