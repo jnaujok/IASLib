@@ -20,6 +20,7 @@
 #include "SocketException.h"
 #include <cerrno>
 #include "Socket.h"
+#include "SocketWait.h"
 #ifndef IASLIB_WIN32__
 #include <poll.h>
 #endif
@@ -187,14 +188,8 @@ namespace IASLib
 
     int CUDPSocket::Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress, int nTimeoutMs )
     {
-#ifndef IASLIB_WIN32__
-        struct pollfd pfd;
-        pfd.fd = m_hSocket;
-        pfd.events = POLLIN;
-        pfd.revents = 0;
-
-        int nReady = poll( &pfd, 1, nTimeoutMs );
-        if ( nReady == 0 || ( nReady < 0 && errno == EINTR ) )
+        int nReady = WaitForReadable( m_hSocket, nTimeoutMs );
+        if ( nReady == 0 )
         {
             return CSocket::READ_TIMEOUT;
         }
@@ -202,7 +197,6 @@ namespace IASLib
         {
             return -1;
         }
-#endif
         return Read( pchBuffer, nBufferSize, incomingAddress );
     }
 

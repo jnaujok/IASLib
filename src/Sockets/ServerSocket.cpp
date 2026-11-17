@@ -17,6 +17,7 @@
 
 #include "ServerSocket.h"
 #include "SocketException.h"
+#include "SocketWait.h"
 #include <stdio.h>
 #include <errno.h>
 #ifndef IASLIB_WIN32__
@@ -112,17 +113,10 @@ namespace IASLib
             return NULL;
         }
 
-#ifndef IASLIB_WIN32__
-        struct pollfd pfd;
-        pfd.fd = m_hSocket;
-        pfd.events = POLLIN;
-        pfd.revents = 0;
-
-        if ( poll( &pfd, 1, nTimeoutMs ) <= 0 )
+        if ( WaitForReadable( m_hSocket, nTimeoutMs ) <= 0 )
         {
             return NULL;
         }
-#endif
 
         struct sockaddr_in sockAddr;
         socklen_t nAddrLen = sizeof( struct sockaddr_in );

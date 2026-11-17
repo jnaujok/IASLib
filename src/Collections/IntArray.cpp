@@ -89,7 +89,7 @@ namespace IASLib
                     aTemp[ nCount ] = m_apElements[ nCount ];
                 }
 
-                delete m_apElements;
+                delete [] m_apElements;
                 m_apElements = aTemp;
                 m_nSize += m_nScale;
             }
@@ -105,7 +105,7 @@ namespace IASLib
                     aTemp[ nCount ] = m_apElements[ nCount ];
                 }
 
-                delete m_apElements;
+                delete [] m_apElements;
                 m_apElements = aTemp;
                 m_nSize -= m_nScale;
             }
@@ -178,7 +178,7 @@ namespace IASLib
     {
         if ( m_nSize )
         {
-            delete m_apElements;
+            delete [] m_apElements;
             m_nElements = 0;
             m_nSize = 0;
             m_apElements = NULL;

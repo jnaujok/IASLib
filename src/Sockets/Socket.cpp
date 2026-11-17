@@ -32,6 +32,7 @@
 #endif
 
 #include "InternetAddress.h"
+#include "SocketWait.h"
 
     // Never raise SIGPIPE when the peer has closed the connection; send()
     // reports the error instead, which the callers already handle.
@@ -856,27 +857,20 @@ namespace IASLib
             return READ_ERROR;
         }
 
-#ifndef IASLIB_WIN32__
-        struct pollfd pfd;
-        pfd.fd = m_hSocket;
-        pfd.events = POLLIN;
-        pfd.revents = 0;
-
-        int nReady = poll( &pfd, 1, nTimeoutMs );
+        int nReady = WaitForReadable( m_hSocket, nTimeoutMs );
         if ( nReady == 0 )
         {
             return READ_TIMEOUT;
         }
         if ( nReady < 0 )
         {
-            return ( errno == EINTR ) ? READ_TIMEOUT : READ_ERROR;
+            return READ_ERROR;
         }
-#endif
 
         int nRet = (int)recv( m_hSocket, pchBuffer, nBufferSize, 0 );
         if ( nRet < 0 )
         {
-            return ( ( errno == EAGAIN ) || ( errno == EINTR ) ) ? READ_TIMEOUT : READ_ERROR;
+            return SocketErrorIsTimeout() ? READ_TIMEOUT : READ_ERROR;
         }
         return nRet;
     }

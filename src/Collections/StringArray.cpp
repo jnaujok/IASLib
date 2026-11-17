@@ -76,7 +76,7 @@ namespace IASLib
         m_nScale = oSource.m_nScale;
         m_nSize = oSource.m_nSize;
         m_nElements = oSource.m_nElements;
-        m_apElements = new CString *[ m_nSize ];
+        m_apElements = ( m_nSize > 0 ) ? new CString *[ m_nSize ] : NULL;
         for ( size_t nX = 0; nX < m_nElements; nX++ )
         {
             m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
@@ -91,7 +91,7 @@ namespace IASLib
             m_nScale = oSource.m_nScale;
             m_nSize = oSource.m_nSize;
             m_nElements = oSource.m_nElements;
-            m_apElements = new CString *[ m_nSize ];
+            m_apElements = ( m_nSize > 0 ) ? new CString *[ m_nSize ] : NULL;
             for ( size_t nX = 0; nX < m_nElements; nX++ )
             {
                 m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
@@ -215,22 +215,18 @@ namespace IASLib
 
     void CStringArray::DeleteAll( void )
     {
-        if ( m_nSize )
+        for ( size_t nIndex = 0; nIndex < m_nElements; nIndex++ )
         {
-            for ( size_t nIndex = 0; nIndex < m_nElements; nIndex++ )
-            {
-                delete m_apElements[ nIndex ];
-            }
-            delete [] m_apElements;
-            m_nElements = 0;
-            m_nSize = 0;
-            m_apElements = NULL;
+            delete m_apElements[ nIndex ];
         }
+        delete [] m_apElements;
+        m_nElements = 0;
+        m_nSize = 0;
+        m_apElements = NULL;
     }
 
     void CStringArray::EmptyAll( void )
     {
-        if ( m_nSize )
         {
             delete [] m_apElements;
             m_nElements = 0;

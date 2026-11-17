@@ -1969,7 +1969,7 @@ namespace IASLib
                 strRetVal += (*this);
             }
 
-            delete achPadding;
+            delete [] achPadding;
         }
         else
         {
