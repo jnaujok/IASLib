@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.10)
 #set project name
 project(IASLib VERSION 2.0)
 
+# specify the C++ standard
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
 option(USE_THREADS "Use multi-threaded code support." ON)
 option(USE_DATABASE "Database support - database must be specified." ON)
 option(USE_SYBASE "Use the Sybase database." OFF)
@@ -14,7 +18,9 @@ option(USE_RTTI "Use Run-Time Type Information." ON )
 option(USE_DEBUG "Use debugging features of the library." ON)
 option(USE_MEMORY_MANAGER "Use extended memory manager." OFF)
 option(USE_MEMORY_DEBUGGING "Use memory debugging features." ON)
-option(USE_JSON "Enable JSON support." ON)
+# JSON support is still a work in progress and does not compile yet; enable it
+# explicitly (-DUSE_JSON=ON) when working on it.
+option(USE_JSON "Enable JSON support." OFF)
 
 #Bring the headers, such as Student.h into the project
 include_directories(
@@ -93,7 +99,6 @@ set(
         ${ENCRYPTION}
         ${EXCEPTIONS}
         ${FILES}
-        ${JSON}
         ${LOGGING}
         ${NETWORK_SERVICES}
         ${SOCKETS}
@@ -102,7 +107,11 @@ set(
         ${STREAMS}
         ${THREADING}
         ${XML}
-        src/JSON/BooleanNode.cpp src/JSON/BinaryNode.cpp inc/Templates/TArray.h src/JSON/JsonParser.cpp src/Resources/Resource.cpp)
+        inc/Templates/TArray.h src/Resources/Resource.cpp)
+
+if(USE_JSON)
+    list(APPEND SOURCES ${JSON})
+endif()
 
 if(UNIX AND NOT APPLE)
     set(LINUX TRUE)
@@ -123,6 +132,10 @@ endif()
 
 if(USE_THREADS)
     add_definitions(-DIASLIB_MULTI_THREADED__)
+    if(NOT WIN32)
+        # Thread.cpp only creates threads through pthreads when this is set.
+        add_definitions(-DIASLIB_PTHREAD__)
+    endif()
 endif()
 if(USE_DATABASE)
     add_definitions(-DIASLIB_DATABASE__)
@@ -164,10 +177,21 @@ configure_file(${PROJECT_SOURCE_DIR}/inc/IASLibConfig.h.in ${PROJECT_SOURCE_DIR}
 #add library file
 add_library(IASLib ${SOURCES})
 
+if(USE_THREADS AND NOT WIN32)
+    find_package(Threads REQUIRED)
+    target_link_libraries(IASLib PUBLIC Threads::Threads)
+endif()
+if(USE_SQLITE)
+    target_link_libraries(IASLib PUBLIC sqlite3)
+endif()
+if(USE_NETWORK AND NOT WIN32)
+    # Secure sockets use OpenSSL.
+    find_package(OpenSSL)
+    if(OPENSSL_FOUND)
+        target_link_libraries(IASLib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    endif()
+endif()
+target_link_libraries(IASLib PUBLIC ${CMAKE_DL_LIBS})
+
 ENABLE_TESTING()
 ADD_SUBDIRECTORY( test )
-
-
-# specify the C++ standard
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
