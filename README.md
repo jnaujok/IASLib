@@ -59,6 +59,7 @@ It was years later that the movie "Sherlock Holmes", and the TV series of "Sherl
 - [Examples](#examples)
 - [Testing](#testing)
 - [Project layout](#project-layout)
+- [Changelog](#changelog)
 - [Contributing](#contributing)
 - [Security](#security)
 - [License](#license)
@@ -264,6 +265,10 @@ test/           the test suites, one directory each
 .github/        CI workflow and issue templates
 CMakeLists.txt  the build
 ```
+
+## Changelog
+
+What changed, including breaking changes, is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 

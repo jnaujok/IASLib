@@ -1,0 +1,126 @@
+# Changelog
+
+All notable changes to IASLib are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [Unreleased] — 2026-11-17
+
+A large update: the library now builds and passes its tests on Linux (GCC and Clang), macOS and Windows (MSVC) from the same source, and gains named time zones, a complete JSON library, TLS, and a rebuilt blockchain.
+
+### ⚠️ Breaking changes
+
+- **Legacy HTTP classes removed.** `CHTTPClient`, `CHTTPHeader`, `CHTTPHeaderList`, `CHTTPResponse`, `CHTTPServer` and `CServer` (the `NetworkServices/HTTP*.h` files) were replaced by the classes in `NetworkServices/HTTP/`. On case-insensitive file systems (macOS, Windows) their headers hid the new ones. They remain in git history.
+- **`CHash::HUGE` is now `CHash::ENORMOUS`.** Apple's `math.h` defines `HUGE` as a macro. Stored hashes still use the text `"HUGE"`.
+- **Blockchain difficulty is in leading zero bits**, no longer in hexadecimal zeros: the old `6` is `24` now. The default is 16.
+- **Blockchain hashes and formats changed entirely.** Blocks hash a fixed binary header and hold binary entries. Chains made with the old code can't be verified by the new code.
+- **`CBlock::getHash()` returns a binary digest.** Use `getHashString()` for hexadecimal text.
+- **`MerkleNode` removed**, replaced by `CMerkleTree`. It never compiled, so nothing could have depended on it.
+- **JSON API.** `longValue()` and `asLong()` return `long long`, since `long` is 32 bits on Windows. `binaryValue()` fills a byte vector instead of returning `char *`. The find methods return `std::vector`. `CPojoNode` and `CJsonDocument` are removed.
+- **Windows builds target Windows 10** (`_WIN32_WINNT 0x0A00`) unless a program sets its own target. The previous target, Windows 2000, was too old for the socket code. `windows.h` is now included lean, without the `min`/`max` macros or GDI.
+
+### Added
+
+- **Named time zones** (`CTimeZone`):
+  - IANA zones such as `America/New_York`, read from the system's zone database, with the full history and the rules for future years.
+  - On Windows, zones come from Windows' own ICU library (`icu.dll`).
+  - The system zone is read from `$TZ` or `/etc/localtime` with the same code, so it behaves identically on every platform.
+- **`CDate`:**
+  - ISO 8601 formatting and parsing.
+  - Julian Day conversions.
+  - A UTC offset stored with each date, with conversions between zones (`ToTimeZone`, `ToUTC`, `ToLocalTime`, `AssumeTimeZone`).
+  - `SetDefaultTimezone()` for dates without a zone. They follow the system's zone by default.
+  - An optional Herschel 4000-year rule (`USE_HERSCHEL_CORRECTION`).
+- **JSON library** (RFC 8259):
+  - A strict parser with line and column errors, options for comments, trailing commas and duplicate keys, and a nesting limit.
+  - A Jackson-style node tree with `path()` chains, JSON Pointer, find methods, deep equality and copying.
+  - Compact, pretty and ASCII-only output, with shortest-exact doubles regardless of locale.
+  - `JSON` is now built by default.
+- **SIP server** (RFC 3261):
+  - A rebuilt protocol core with server transactions and their timers, CANCEL, the RFC 6026 accepted state, `received`/`rport`, CRLF keep-alives and compact headers.
+  - `CBasicSipServer`, a working server over UDP and TCP.
+  - The base class's `Run()` stays a stub for derived servers.
+- **HTTP/1.1 server** (RFC 9110/9112):
+  - A protocol core with keep-alive and pipelining, chunked bodies, `100-continue`, and request-smuggling defences.
+  - `CBasicHttpServer`.
+- **Secure sockets** (OpenSSL):
+  - `CTlsContext`: certificates and keys from files or PEM text, TLS 1.2+, and verification of certificates and host names.
+  - A working `CSecureSocket` for both clients and servers, safe for one thread to read while another writes, and free of SIGPIPE.
+  - HTTPS (`CBasicHttpServer::setTlsContext`), and SIP over TLS on its own port (`CBasicSipServer::setTlsContext`).
+  - Server Name Indication: a certificate per host name (`addHostContext`).
+  - `sips:` requests must arrive over TLS (416 otherwise).
+  - On Windows, the system's Trusted Root store is used for verification.
+- **Virtual hosts** (`CHttpServer::AddVirtualHost`): separate handler factories per host name, including `*.example.com` patterns.
+  - HTTPS requests whose host isn't the TLS host name get 421 Misdirected Request.
+  - Requests carry how they arrived: `isSecureConnection()`, `getTlsServerName()` and `getHostName()`.
+- **Blockchain:**
+  - Blocks with binary entries committed by a Merkle root, and a fixed 100-byte header.
+  - Full chain validation that reports which block fails and why, with the required difficulty set by the reader.
+  - Mining that can be limited, cancelled or done on another thread.
+  - Thread-safe chains.
+  - Saving to and loading from JSON and binary.
+  - `CMerkleTree`: RFC 6962 hashing with inclusion proofs and RFC 9162 verification.
+- **SHA-256:** binary `Digest()`, `ToHex()`/`FromHex()`, and `updateData()` for inputs of any length. `StringDigest()` now takes a `const CString &`, so it also accepts temporaries.
+- **Sockets:**
+  - `ReadWithTimeout()`, `Accept( timeout )` and `Shutdown()`.
+  - Waiting that works on every platform (`poll`, or `WSAPoll` on Windows).
+  - `ReleaseHandle()`.
+  - `IsSecure()` and `GetTlsServerName()`.
+- **`BaseTypes/Platform.h`:** the operating system headers in the right order for each platform. **`Threading/ThreadPlatform.h`:** pthreads chosen from the platform flag alone.
+- **Tests:** `TestSip`, `TestHttp`, `TestDate`, `TestJson`, `TestTls` and `TestBlockchain`, all run by `ctest`.
+- **Docs:** this changelog, and a README with build, usage and testing sections.
+
+### Fixed
+
+- **`CDate`:**
+  - **Calendar arithmetic:** across the Julian/Gregorian change and for BC years.
+  - **Parsing:** formats that failed or read stale values.
+  - **Time zone and timestamp conversions.**
+  - **Julian Day on Windows:** a 32-bit overflow made it wrong for every modern date there.
+  - **Before AD 1:** the last second of each day was placed in the next day.
+  - **macOS:** the C library gave wrong offsets before 1900.
+  - **Repeated hours:** the hour that happens twice when the clocks go back was resolved wrongly in zones east of UTC.
+  - **Windows parsing:** every date pattern had a copy using `sscanf_s` without its buffer sizes. All 124 copies are gone.
+- **Threading:**
+  - Data races in `CThread` and `CMutex`.
+  - macOS had no threading at all, because pthreads were only chosen for Linux.
+  - `CSemaphore` used unnamed POSIX semaphores, which macOS doesn't support, and printed on every construction.
+- **Memory:**
+  - `CException` copies freed the same memory twice.
+  - Copying an empty `CStringArray` leaked.
+  - `CString::Pad` and `CIntArray` freed arrays with the wrong form of `delete`.
+  - Copying a `CBlockchain` freed every block twice.
+- **Sockets:**
+  - Timed reads and accepts never timed out on Windows, so servers couldn't stop.
+  - `SO_REUSEADDR` let a second server take over a port in use on Windows.
+  - `CUDPSocket` didn't link on Windows.
+  - Address handling bugs.
+- **Structure packing:** `IASLib.h` changed it for every class, so applications and the library laid objects out differently.
+- **Blockchain:**
+  - Ambiguous hash input let data be changed while keeping the hash.
+  - Data after a NUL byte wasn't hashed.
+  - The genesis block was never hashed.
+  - The difficulty wasn't part of the hash.
+- **SHA-256:** messages over 512 MB hashed wrongly (32-bit length counter).
+- **Windows C runtime crashes:** `strncpy_s` ended the program when text filled the buffer, and the time functions did the same for dates outside 1970–3000.
+- **Unbounded formatting** in exceptions, and string stream truncation.
+- **`TestXMLDocument`** crashed in release builds: two test functions never returned a value.
+
+### Removed
+
+- The legacy HTTP classes and `CServer` (see **Breaking changes**).
+- `MerkleNode`, `CPojoNode` and `CJsonDocument`.
+- The committed `build/` directory, a CMake cache from 2022 that stopped CMake configuring anywhere else. `build/` is now ignored.
+
+### Build and CI
+
+- **CMake:**
+  - Threads are enabled properly.
+  - SQLite is found with `find_package` (vcpkg on Windows).
+  - OpenSSL is looked for on every platform; TLS is built when it's found (`IASLIB_TLS__`).
+  - Winsock and `crypt32` are linked on Windows.
+  - New `USE_TIMEZONE_ICU` option.
+- **GitHub Actions:**
+  - One workflow builds and tests on Linux (GCC and Clang), macOS (Apple Clang) and Windows (MSVC), for every push to `master` and `claude/` branches and every pull request.
+  - Failed builds list their errors grouped by file, and hung tests time out.
+  - It replaces two broken workflows: one used a retired GitHub action, and the other was copied from another project.
+- **Sanitizers:** the suites run clean under AddressSanitizer/UndefinedBehaviorSanitizer, ThreadSanitizer and Valgrind.
