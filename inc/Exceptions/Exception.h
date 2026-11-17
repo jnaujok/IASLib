@@ -89,6 +89,11 @@ namespace IASLib
         public:
                                 CException( const char *strExceptionMessage, 
                                     CException::ExceptionSeverity nPriority = CException::NORMAL );
+                                    // Exceptions are thrown by value, so copies must not
+                                    // share the call stack (it is deleted by each copy).
+                                CException( const CException &oSource );
+            CException         &operator =( const CException &oSource );
+
             virtual            ~CException( void );
 
                                 DEFINE_OBJECT( CException )

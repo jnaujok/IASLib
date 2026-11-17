@@ -29,9 +29,41 @@ namespace IASLib
         m_pCallStack->SetMessage( strExceptionMessage );
     }
 
+    static CExceptionCallStack *cloneCallStack( CExceptionCallStack *pSource )
+    {
+        if ( pSource == NULL )
+        {
+            return NULL;
+        }
+        CExceptionCallStack *pCopy = new CExceptionCallStack( pSource->GetFile(), pSource->GetLine(), pSource->GetMessage() );
+        pCopy->SetDownCall( cloneCallStack( pSource->GetDownCall() ) );
+        return pCopy;
+    }
+
+    CException::CException( const CException &oSource ) : CObject()
+    {
+        m_nPriority = oSource.m_nPriority;
+        m_strExceptionMessage = oSource.m_strExceptionMessage;
+        m_pCallStack = cloneCallStack( oSource.m_pCallStack );
+    }
+
+    CException &CException::operator =( const CException &oSource )
+    {
+        if ( this != &oSource )
+        {
+            CExceptionCallStack *pCopy = cloneCallStack( oSource.m_pCallStack );
+            delete m_pCallStack;
+            m_pCallStack = pCopy;
+            m_nPriority = oSource.m_nPriority;
+            m_strExceptionMessage = oSource.m_strExceptionMessage;
+        }
+        return *this;
+    }
+
     CException::~CException( void )
     {
        delete m_pCallStack;
+       m_pCallStack = NULL;
     }
 
     const char *CException::ErrnoToText( int nErrno )

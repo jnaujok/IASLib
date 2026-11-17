@@ -31,7 +31,7 @@ namespace IASLib
     CStringStream::CStringStream( const CString &strSource )
     {
         // Force a deep copy of the string.
-        m_strString = CString((const char *)strSource);
+        m_strString = strSource;     // Keep the full length, including any NUL bytes.
         m_strOutputString = "";
         m_nCurrentPosition = 0;
     }

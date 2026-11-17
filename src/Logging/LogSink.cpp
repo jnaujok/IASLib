@@ -57,7 +57,7 @@ namespace IASLib
     #ifdef IASLIB_WIN32__
             StringCbVPrintf( szBuffer, 4096, strFormat, vaArgList );
     #else
-            vsprintf( szBuffer, strFormat, vaArgList );
+            vsnprintf( szBuffer, sizeof( szBuffer ), strFormat, vaArgList );
     #endif
             va_end( vaArgList );
 
