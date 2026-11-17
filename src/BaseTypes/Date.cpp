@@ -26,6 +26,7 @@
 #include "Date.h"
 #include "StringTokenizer.h"
 #include <cctype>
+#include <cmath>
 #include <ctime>
 #include <cstdlib>
 #include <cstdio>
@@ -70,6 +71,8 @@ namespace IASLib
         const long UNIX_EPOCH_DAY = 719164;
         const long MAX_YEAR = 1000000;
         const long MS_PER_DAY = 86400000L;
+            // Julian Day Number of a CDate day number (JDN 2440588 is 1 Jan 1970).
+        const long JULIAN_DAY_OFFSET = 2440588L - UNIX_EPOCH_DAY;
 
         long floorDiv( long a, long b )
         {
@@ -1497,6 +1500,50 @@ namespace IASLib
         }
 
         CDate dttDate( (long)( llDays + UNIX_EPOCH_DAY ), (long)( llSeconds * 1000 ) );
+        dttDate.m_bIsGMT = true;
+        return dttDate;
+    }
+
+    /***********************************************************************************
+    **  Julian Day
+    **
+    **      The Julian Day Number of a day is the Julian Date at noon UT on that day,
+    ** so a Julian Date is the day number plus the time since noon as a fraction of a
+    ** day (negative before noon).
+    **
+    ***********************************************************************************/
+    double CDate::GetJulianDate( void ) const
+    {
+        return (double)GetJulianDayNumber() + (double)( m_lMilliseconds - MS_PER_DAY / 2 ) / (double)MS_PER_DAY;
+    }
+
+    long CDate::GetJulianDayNumber( void ) const
+    {
+        return m_lEpochDay + JULIAN_DAY_OFFSET;
+    }
+
+    CDate CDate::FromJulianDate( double dJulianDate )
+    {
+            // Civil days start half a day before Julian days.
+        double dCivil = dJulianDate + 0.5;
+        double dDay = floor( dCivil );
+        long long llMs = llround( ( dCivil - dDay ) * (double)MS_PER_DAY );
+        long lDay = (long)dDay;
+        if ( llMs >= MS_PER_DAY )
+        {
+            llMs -= MS_PER_DAY;
+            lDay++;
+        }
+
+        CDate dttDate( lDay - JULIAN_DAY_OFFSET, (long)llMs );
+        dttDate.m_bIsGMT = true;
+        return dttDate;
+    }
+
+    CDate CDate::FromJulianDayNumber( long lJulianDayNumber )
+    {
+            // The day number names the day; its Julian Date is at noon.
+        CDate dttDate( lJulianDayNumber - JULIAN_DAY_OFFSET, MS_PER_DAY / 2 );
         dttDate.m_bIsGMT = true;
         return dttDate;
     }

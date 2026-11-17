@@ -217,6 +217,19 @@ namespace IASLib
             static CDate        ParseGMT( const char *strValue ) { CDate dttTemp; dttTemp=GetSafeDate( strValue ); dttTemp.m_bIsGMT = true; return dttTemp; }
             static CDate        ParseSybase( const char *strValue );
             static CDate        ParseUnix( time_t tValue );
+
+                // Julian Day: the astronomical count of days since noon UT on
+                // 1 January 4713 BC (Julian calendar). GetJulianDate() includes
+                // the time of day as a fraction (days start at noon, so midnight
+                // is .5); GetJulianDayNumber() is the whole number for the day,
+                // the JD at noon. The time is taken as UT. A double gives about a
+                // microsecond of resolution for current dates.
+            double              GetJulianDate( void ) const;
+            long                GetJulianDayNumber( void ) const;
+                // The date and time (UT, rounded to the millisecond) of a Julian
+                // Date or Day Number. The result is marked as UTC.
+            static CDate        FromJulianDate( double dJulianDate );
+            static CDate        FromJulianDayNumber( long lJulianDayNumber );
             static CDate        ParseHTTP( const char *strHTTPDate );
 
                 // Milliseconds and days from oThen to this date (positive when

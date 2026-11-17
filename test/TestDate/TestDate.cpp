@@ -9,6 +9,7 @@
 
 #include "IASLib.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -141,7 +142,8 @@ static void testCalendarSweep( void )
                 date.GetISODate( iy, im, id );
 
                 bool ok = date.IsValid() && date.GetYear() == y && date.GetMonth() == m - 1 && date.GetDay() == d &&
-                          date.GetDOW() == (int)( ( jdn + 1 ) % 7 ) && iy == gy && im == gm && id == gd;
+                          date.GetDOW() == (int)( ( jdn + 1 ) % 7 ) && iy == gy && im == gm && id == gd &&
+                          date.GetJulianDayNumber() == jdn;
                 if ( ! first )
                     ok = ok && ( date.GetEpochDay() - prevDay == jdn - prevJdn );
                 if ( ! ok )
@@ -602,6 +604,64 @@ static void testUnixAndTimestamps( void )
     CHECK( CDate::GetOffsetSeconds() >= -1 && CDate::GetOffsetSeconds() <= 1 );
 }
 
+/***********************************************************************
+ * Julian Day
+ ***********************************************************************/
+
+static bool near( double a, double b, double tolerance ) { return fabs( a - b ) <= tolerance; }
+
+static void testJulianDay( void )
+{
+    printf( "Julian Day\n" );
+    const double ms = 1.0 / 86400000.0;
+
+        // Reference values; the historical ones are from Meeus, Astronomical
+        // Algorithms, chapter 7 (Julian calendar before 1582).
+    CHECK( near( CDate( 1, 0, 2000, 12, 0, 0 ).GetJulianDate(), 2451545.0, ms ) );          // J2000.0
+    CHECK( near( CDate( 1, 0, 1970 ).GetJulianDate(), 2440587.5, ms ) );                     // Unix epoch
+    CHECK( near( CDate( 4, 9, 1957, 19, 26, 24 ).GetJulianDate(), 2436116.31, ms ) );        // Sputnik 1
+    CHECK( near( CDate( 27, 0, 333, 12, 0, 0 ).GetJulianDate(), 1842713.0, ms ) );
+    CHECK( near( CDate( 12, 6, -1001, 12, 0, 0 ).GetJulianDate(), 1356001.0, ms ) );        // -1000 July 12.5
+    CHECK( near( CDate( 1, 0, -4713, 12, 0, 0 ).GetJulianDate(), 0.0, ms ) );                // the zero point
+    CHECK( CDate( 4, 9, 1582 ).GetJulianDayNumber() == 2299160 );
+    CHECK( CDate( 15, 9, 1582 ).GetJulianDayNumber() == 2299161 );
+    CHECK( CDate( 1, 0, -4713 ).GetJulianDayNumber() == 0 );
+    CHECK( CDate( 31, 11, -4714 ).GetJulianDayNumber() == -1 );
+
+        // The day number is the JD at noon: it does not change through the
+        // civil day, while the JD crosses a whole number at noon.
+    CHECK( CDate( 2, 5, 2001, 0, 0, 0 ).GetJulianDayNumber() == CDate( 2, 5, 2001, 23, 59, 59 ).GetJulianDayNumber() );
+    CHECK( near( CDate( 2, 5, 2001, 0, 0, 0 ).GetJulianDate(), 2452062.5, ms ) );
+    CHECK( near( CDate( 2, 5, 2001, 18, 0, 0 ).GetJulianDate(), 2452063.25, ms ) );
+
+        // The other direction.
+    CHECK_EQ_STR( "J2000", iso( CDate::FromJulianDate( 2451545.0 ) ), "2000-01-01T12:00:00.000Z" );
+    CHECK_EQ_STR( "sputnik", iso( CDate::FromJulianDate( 2436116.31 ) ), "1957-10-04T19:26:24.000Z" );
+    CHECK_EQ_STR( "jd 0", hist( CDate::FromJulianDate( 0.0 ) ), "-4713-01-01 12:00:00.000" );
+    CHECK_EQ_STR( "jd -0.5", hist( CDate::FromJulianDate( -0.5 ) ), "-4713-01-01 00:00:00.000" );
+    CHECK_EQ_STR( "jd -0.75", hist( CDate::FromJulianDate( -0.75 ) ), "-4714-12-31 18:00:00.000" );
+    CHECK_EQ_STR( "jdn", hist( CDate::FromJulianDayNumber( 2299161 ) ), "1582-10-15 12:00:00.000" );
+    CHECK( CDate::FromJulianDate( 2451545.0 ).IsGMT() );
+
+        // Round trips at millisecond precision across the supported range.
+    std::mt19937 generator( 4713 );
+    std::uniform_int_distribution<long> dayDist( CDate( 1, 0, -10000 ).GetEpochDay(), CDate( 31, 11, 10000 ).GetEpochDay() );
+    std::uniform_int_distribution<long> msDist( 0, 86399999 );
+    long errors = 0;
+    for ( int n = 0; n < 100000; n++ )
+    {
+        CDate d( dayDist( generator ), msDist( generator ) );
+        CDate back = CDate::FromJulianDate( d.GetJulianDate() );
+        if ( back != d || CDate::FromJulianDayNumber( d.GetJulianDayNumber() ).GetEpochDay() != d.GetEpochDay() )
+        {
+            if ( errors < 5 )
+                printf( "    %s (JD %.8f) came back as %s\n", iso( d ).c_str(), d.GetJulianDate(), iso( back ).c_str() );
+            errors++;
+        }
+    }
+    CHECK( errors == 0 );
+}
+
 int main( int argc, char *argv[] )
 {
 #ifdef IASLIB_HERSCHEL_CORRECTION__
@@ -617,6 +677,7 @@ int main( int argc, char *argv[] )
     testParsing();
     testISO8601();
     testUnixAndTimestamps();
+    testJulianDay();
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );
     return ( g_nFailures == 0 ) ? 0 : 1;
