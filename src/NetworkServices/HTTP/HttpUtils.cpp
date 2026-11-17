@@ -11,10 +11,10 @@
 #ifdef IASLIB_NETWORKING__
 
 #include "NetworkServices/HTTP/HttpUtils.h"
+#include "BaseTypes/Date.h"
 
 #include <cctype>
 #include <cstring>
-#include <ctime>
 #include <vector>
 
 namespace IASLib
@@ -373,21 +373,10 @@ namespace IASLib
 
     CString CHttpUtils::httpDate( void )
     {
-        static const char *days[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-        static const char *months[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-
-        time_t now = time( NULL );
-        struct tm gmt;
-#ifdef IASLIB_WIN32__
-        gmtime_s( &gmt, &now );
-#else
-        gmtime_r( &now, &gmt );
-#endif
-        char buffer[ 64 ];
-        snprintf( buffer, sizeof( buffer ), "%s, %02d %s %04d %02d:%02d:%02d GMT",
-                  days[ gmt.tm_wday ], gmt.tm_mday, months[ gmt.tm_mon ], gmt.tm_year + 1900,
-                  gmt.tm_hour, gmt.tm_min, gmt.tm_sec );
-        return CString( buffer );
+            // CDate takes the current time in GMT, and DF_RFC7231 is the
+            // IMF-fixdate format RFC 9110 requires.
+        CDate now;
+        return now.FormatDate( CDate::DF_RFC7231 );
     }
 
     bool CHttpUtils::isKnownMethod( const CString &method )
