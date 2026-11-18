@@ -32,11 +32,11 @@ namespace IASLib
         // Declares getMethod() and generateHandler() for a handler class.
     #define IASLIB_DEFINE_HTTP_HANDLER( className, methodName )  \
                                                     public: \
-                                                        virtual CString getMethod( void ) \
+                                                        virtual IASLib::CString getMethod( void ) \
                                                         { \
-                                                            return CString( methodName ); \
+                                                            return IASLib::CString( methodName ); \
                                                         } \
-                                                        virtual CHttpHandler *generateHandler( CString uri, CString version ) \
+                                                        virtual IASLib::CHttpHandler *generateHandler( IASLib::CString uri, IASLib::CString version ) \
                                                         { \
                                                             return new className( uri, version ); \
                                                         }

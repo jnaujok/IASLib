@@ -36,8 +36,8 @@ namespace IASLib
         // Declares getMethod() and generateHandler() for a handler class.
     #define IASLIB_SET_SIP_HANDLER( className, methodName )  \
                                                     public: \
-                                                        virtual CString getMethod( void ) { return CString( methodName ); } \
-                                                        CSipHandler *generateHandler( CString uri, CString version ) \
+                                                        virtual IASLib::CString getMethod( void ) { return IASLib::CString( methodName ); } \
+                                                        IASLib::CSipHandler *generateHandler( IASLib::CString uri, IASLib::CString version ) \
                                                         { \
                                                             return new className( uri, version ); \
                                                         }
