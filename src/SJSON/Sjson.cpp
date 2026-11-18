@@ -502,6 +502,15 @@ namespace IASLib
             fail( SJSON_ERROR_VERSION, "unreadable header or unsupported packet version" );
             return NULL;
         }
+        if ( header.nSenderId == m_nSenderId && ( ! header.bSender || header.bSequence ) )
+        {
+                // Filing a peer's packets under our own id would mix its
+                // names into our sending dictionary, and a stream packet of
+                // our own (a broadcast heard back) would reset it.
+            fail( SJSON_ERROR_UNSUPPORTED, header.bSender ? "a stream packet carrying this endpoint's own sender id"
+                                                          : "a packet without a sender id was attributed to this endpoint's own id" );
+            return NULL;
+        }
         size_t nMessage = header.messageLength();
         if ( nLength * 8 < nMessage + 32 )
         {

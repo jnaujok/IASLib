@@ -254,7 +254,10 @@ if(USE_JSON AND USE_SJSON)
     find_library(LZ4_LIBRARY NAMES lz4 liblz4)
     if(LZ4_INCLUDE_DIR AND LZ4_LIBRARY)
         target_include_directories(IASLib PRIVATE ${LZ4_INCLUDE_DIR})
-        target_link_libraries(IASLib PUBLIC ${LZ4_LIBRARY})
+        # The build tree links the library found; an installed IASLib
+        # names it by its link name, so the package does not record this
+        # machine's path.
+        target_link_libraries(IASLib PUBLIC $<BUILD_INTERFACE:${LZ4_LIBRARY}> $<INSTALL_INTERFACE:lz4>)
         target_compile_definitions(IASLib PRIVATE IASLIB_SJSON_LZ4__)
         set(IASLIB_SJSON_LZ4 ON)
     endif()
@@ -262,7 +265,10 @@ if(USE_JSON AND USE_SJSON)
     find_library(ZSTD_LIBRARY NAMES zstd libzstd zstd_static)
     if(ZSTD_INCLUDE_DIR AND ZSTD_LIBRARY)
         target_include_directories(IASLib PRIVATE ${ZSTD_INCLUDE_DIR})
-        target_link_libraries(IASLib PUBLIC ${ZSTD_LIBRARY})
+        # The build tree links the library found; an installed IASLib
+        # names it by its link name, so the package does not record this
+        # machine's path.
+        target_link_libraries(IASLib PUBLIC $<BUILD_INTERFACE:${ZSTD_LIBRARY}> $<INSTALL_INTERFACE:zstd>)
         target_compile_definitions(IASLib PRIVATE IASLIB_SJSON_ZSTD__)
         set(IASLIB_SJSON_ZSTD ON)
     endif()

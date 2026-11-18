@@ -149,7 +149,8 @@ namespace IASLib
                 /// Decodes a packet; the caller owns the result. NULL on error,
                 /// with lastError() saying why. The data may carry padding.
                 /// A packet without a sender id is attributed to nSenderId
-                /// (for example one id per connection).
+                /// (for example one id per connection), which must not be
+                /// this endpoint's own id.
             CJsonNode              *decode( const unsigned char *pData, size_t nLength, unsigned nSenderId = 0 );
 
             SjsonError              lastError( void ) const { return m_eError; }
@@ -165,7 +166,8 @@ namespace IASLib
                 /// Entries of nSenderId's dictionary after the given ids (the
                 /// answer to a NAK). An endpoint that leaves its sender id out
                 /// of packets answers with its own dictionary for any id the
-                /// peer gave the link.
+                /// peer gave the link, so it cannot relay another sender's
+                /// dictionary (turn setIncludeSenderId() on for that).
             std::vector<unsigned char> nakDictionary( unsigned nSenderId, unsigned long long nLastTag, unsigned long long nLastValue = 0 );
                 /// Loads an answer to a NAK. Entries about this endpoint's own
                 /// sender id are ignored.

@@ -16,6 +16,8 @@
 #include "JsonNode.h"
 #include "Stream.h"
 
+#include <random>
+
 namespace IASLib
 {
     namespace
@@ -40,6 +42,10 @@ namespace IASLib
           m_nNumber( 0 ), m_bDelivered( false ), m_nLastDelivered( 0 ), m_eError( LINK_OK )
     {
         m_stats.nSent = m_stats.nResent = m_stats.nNaks = m_stats.nDictionaryBytes = 0;
+            // Start numbering at random, so a restarted sender's first
+            // message is not mistaken for a resend of the last one delivered.
+        std::random_device random;
+        m_nNumber = (unsigned)random() & 0xFFFF;
     }
 
     CSjsonLink::~CSjsonLink( void )
@@ -84,6 +90,8 @@ namespace IASLib
         nType = (unsigned)getUInt( header, 0, 1 );
         nNumber = (unsigned)getUInt( header, 1, 2 );
         size_t nLength = (size_t)getUInt( header, 3, 4 );
+        if ( nType < FRAME_DATA || nType > FRAME_NAK_FATAL )
+            return fail( LINK_PROTOCOL, "unknown frame type " + std::to_string( nType ) );
             // Check before allocating: a peer must not make us set aside
             // memory for a frame it never sends.
         if ( nLength > m_nMaxFrame )
@@ -146,7 +154,7 @@ namespace IASLib
                 if ( ! writeFrame( FRAME_DICT, nNumber, update ) )
                     return false;
             }
-            else if ( nType == FRAME_NAK_RESET )
+            else if ( nType == FRAME_NAK_RESET && m_pCodec->stateful() )
             {
                     // The peer lost the stream: start again from sequence 0.
                 m_pCodec->resetStream();
@@ -156,7 +164,7 @@ namespace IASLib
                     return false;
                 m_stats.nResent += packet.size();
             }
-            else if ( nType == FRAME_NAK_RESEND )
+            else    // NAK_RESEND (and NAK_RESET to a stateless sender, which has no stream to reset)
             {
                 if ( ! writeFrame( FRAME_DATA, nNumber, packet ) )
                     return false;
@@ -187,9 +195,23 @@ namespace IASLib
     void CSjsonLink::incoming( unsigned nType, unsigned nNumber, const std::vector<unsigned char> &payload )
     {
         if ( nType == FRAME_DATA )
+        {
+                // Stop-and-wait: a new message means the sender gave up on
+                // any earlier one, so only this packet is kept.
+            m_mapHeld.clear();
             m_mapHeld[ nNumber ] = payload;
+        }
         else if ( nType == FRAME_DICT )
-            m_pCodec->loadDictionary( payload.data(), payload.size() );
+        {
+            if ( ! m_pCodec->loadDictionary( payload.data(), payload.size() ) && payload.size() >= 2 )
+            {
+                    // The names contradict what we learnt (the sender
+                    // restarted) or the DICT is damaged: forget what we
+                    // learnt from that sender, and the retry below NAKs for
+                    // everything after the pre-loaded entries.
+                m_pCodec->dictionary( (unsigned)getUInt( payload, 0, 2 ) ).resetToBase();
+            }
+        }
         else
             return;                                         // an answer nobody waits for
         std::map<unsigned, std::vector<unsigned char> >::iterator it = m_mapHeld.find( nNumber );
@@ -236,9 +258,20 @@ namespace IASLib
                 writeFrame( FRAME_NAK_RESET, nNumber, none );
                 break;
             case SJSON_ERROR_UNKNOWN_SCHEMA:
+            case SJSON_ERROR_UNSUPPORTED:       // e.g. needs zstd, or our own id
+            case SJSON_ERROR_VERSION:
             {
                 const std::string &strText = m_pCodec->lastErrorText();
                 writeFrame( FRAME_NAK_FATAL, nNumber, std::vector<unsigned char>( strText.begin(), strText.end() ) );
+                break;
+            }
+            case SJSON_ERROR_MALFORMED:
+            {
+                    // An intact stream packet our stream state does not fit
+                    // (out of sync): start the stream again.
+                CSjson::Header header;
+                bool bStream = CSjson::readHeader( packet.data(), packet.size(), header, m_nPeerId ) && header.bSequence;
+                writeFrame( bStream ? FRAME_NAK_RESET : FRAME_NAK_RESEND, nNumber, none );
                 break;
             }
             default:                                        // CRC, truncation, a mangled header

@@ -790,6 +790,63 @@ static void testReviewFixes( void )
     setlocale( LC_NUMERIC, strSaved.c_str() );
     printf( "    comma-decimal locale %s\n", bComma ? "checked" : "not installed (skipped)" );
 
+        // A packet without a sender id must not be filed under our own id.
+    {
+        CSjson sender( 7, true ), receiver( 0 );
+        CObjectNode doc;
+        doc.put( "a", 1 );
+        CHECK( sender.encode( doc, packet ) );
+        CHECK( receiver.decode( packet.data(), packet.size() ) == NULL && receiver.lastError() == SJSON_ERROR_UNSUPPORTED );
+        std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size(), 1 ) );
+        CHECK( pBack && json( pBack.get() ) == json( &doc ) );
+    }
+
+        // A DICT that cannot be loaded makes the receiver forget what it
+        // learnt from that sender and NAK again from the base.
+    {
+        PipeChannel forward, back;
+        CPipeEnd senderEnd( back, forward ), receiverEnd( forward, back );
+        CSjson sender( 1 ), receiver( 2 );
+        CSjsonLink link( receiverEnd, receiver, 1 );
+        CObjectNode doc;
+        doc.put( "alpha", 1 );
+        CHECK( sender.encode( doc, packet ) );
+        std::vector<unsigned char> frame;
+        frame.push_back( CSjsonLink::FRAME_DATA ); frame.push_back( 0 ); frame.push_back( 0 );
+        frame.push_back( 0 ); frame.push_back( 0 ); frame.push_back( 0 ); frame.push_back( (unsigned char)packet.size() );
+        frame.insert( frame.end(), packet.begin(), packet.end() );
+        const unsigned char achDict[ 8 ] = { CSjsonLink::FRAME_DICT, 0, 0, 0, 0, 0, 1, 0xFF };
+        frame.insert( frame.end(), achDict, achDict + 8 );
+        senderEnd.PutBuffer( (const char *)frame.data(), (int)frame.size() );
+        senderEnd.Close();
+        CHECK( link.receive() == NULL );        // the stream ends after the DICT
+        char achAnswers[ 64 ];
+        int nGot = senderEnd.GetBuffer( achAnswers, sizeof( achAnswers ) );
+        CHECK( nGot >= 24 && achAnswers[ 0 ] == CSjsonLink::FRAME_NAK_DICT && achAnswers[ 17 ] == CSjsonLink::FRAME_NAK_DICT );
+    }
+
+        // A stream packet that carries our own id (our broadcast heard back)
+        // is refused rather than resetting our sending dictionary.
+    {
+        CSjson echo( 1, true );
+        echo.setIncludeSenderId( true );
+        CObjectNode doc;
+        doc.put( "alpha", 1 );
+        CHECK( echo.encode( doc, packet ) );
+        CHECK( echo.decode( packet.data(), packet.size() ) == NULL && echo.lastError() == SJSON_ERROR_UNSUPPORTED );
+    }
+
+        // Unknown frame types end the link; links start numbering at random.
+    {
+        PipeChannel forward, back;
+        CPipeEnd senderEnd( back, forward ), receiverEnd( forward, back );
+        CSjson codec( 2 );
+        CSjsonLink link( receiverEnd, codec, 1 );
+        const char achBad[ 7 ] = { 9, 0, 0, 0, 0, 0, 0 };
+        senderEnd.PutBuffer( achBad, 7 );
+        CHECK( link.receive() == NULL && link.lastError() == CSjsonLink::LINK_PROTOCOL );
+    }
+
         // A frame longer than the link allows ends it before any allocation.
     {
         PipeChannel forward, back;
