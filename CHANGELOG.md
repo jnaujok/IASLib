@@ -117,6 +117,13 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - Arrays and objects store a missing node they are given as a JSON null.
   - `CCollectiveNode` has a pure virtual `detachChildren()`; `CJsonNode::collect()` is no longer virtual.
 - **Blockchain:** difficulty is capped at `MAX_DIFFICULTY` (64): `CBlock::mine()` returns false above it, `setDifficulty()` and the constructor clamp to it, and `FromJson()` and `Deserialize()` refuse a higher one. (256 could never be mined.)
+- **NetworkServices:**
+  - `CGenericClient` no longer derives from `CClientSocket` or connects in its constructor: it holds the host, port and secure flag, and clients open their own connections (`CHttpClient` on its first request).
+  - Setters that take header names, values, URIs, methods or mail addresses return `bool` (false: refused, nothing changed) instead of `void`: `CHeader::setValue`/`addValue`, `CHeaderList::addHeader`/`appendHeader`, `CGenericRequest::setRequestType`/`setUri`/`setVersion`/`setHeaderValue`/`setHeaderValues`, `CGenericResponse::addHeader`/`addHeaders`, `CMail::From`/`AddRecipient`/`Subject`. Overrides need updating.
+  - `CGenericRequest` and `CGenericResponse` (and so every HTTP and SIP message) cannot be copied: a copy deleted their pointers twice.
+  - `CHttpClient::executeRequest()` returns NULL on failure, with the reason in `getLastError()`.
+  - `CMail`'s default server is `localhost` (was `pop.mail.com`); a sender or recipient that is not a plain mailbox is refused, and a refused recipient stops the send.
+  - `CGenericRequest::parse()` fails on a header section with no blank line at its end; header lines whose names are not tokens are skipped as malformed.
 - **Threading:** on Windows, `CThread::Kill()` ends the thread at its next sleep or semaphore wait (an APC) instead of `TerminateThread()`, which could stop it holding the heap lock and hang the process. It returns -1 if the thread has not reached one within two seconds.
 - **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
 
@@ -236,6 +243,11 @@ The base types and collections, reviewed one by one and cleaned up, and template
 - **DynamicLibraries:** `CDynamicLibrary::IsLoaded()`, `GetPath()`, `GetError()`, `FindFunction()` (NULL instead of throwing) and `PlatformName()`.
 - **Exceptions:** `CFileException::GetErrorNumber()`.
 - **JSON:** `CJsonParser::setMaxInputSize()` and `setMaxStringLength()` (off by default); unsigned 64-bit values: `isUnsignedLong()`, `canConvertToUnsignedLong()`, `unsignedLongValue()` and `asUnsignedLong()`.
+- **NetworkServices:**
+  - `CHttpClient`, over `CClientSocket` (or `CSecureClientSocket` for https): Host and User-Agent headers; bodies by Content-Length, chunked (decoded) or connection close; 1xx responses skipped and no body for HEAD/204/304; keep-alive reuse with one retry of idempotent requests on a closed connection; timeouts (30 s by default); `get`/`head`/`post`/`put`/`remove`, `setTlsContext`, `setKeepAlive`, `setUseHttp11`, size limits, `getConnectionsOpened()`.
+  - `CHttpUtils::frameResponse()`; `CHttpResponse::parse()` and `getVersion()`; validators `CHeader::isValidName`/`isValidValue` and `CGenericRequest::isValidMethod`/`isValidUri`/`isValidVersion`.
+  - `CMail::GetLastError`, `SetTimeout`, `HeloName`, `ClearRecipients`, `BuildMessage`, `MailboxOf` and `NormalizeBody`; recipients as "Name <addr>" or comma-separated lists.
+  - `TestHttpClient` and `TestMail`; `TestTls` covers `CHttpClient` over https.
 - **Tests:** `TestUtilities` (Configuration, DynamicLibraries, Encryption and Exceptions).
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
@@ -433,6 +445,11 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - The `IASLIB_THROW_*` macros threw a shared `static` exception, which two threads could change at once.
   - JSON: deep trees no longer overflow the stack. The parser keeps its own stack, and writing, cloning, `equals()`, finding and destruction walk the tree without recursion, so a raised `setMaxDepth()` works (100,000 levels are tested); the default of 512 still rejects deeper input cleanly.
   - JSON: the writer emits `null` for a missing child (it wrote `[,1]` and `{"a":}`). Removing a field shifts only the fields after it (the whole name index was rebuilt). Integers from 2^63 to 2^64-1 are exact (they were doubles), so Blockchain nonces round-trip across the full 64-bit range.
+  - `CMail` checks every SMTP reply (multi-line too), sends EHLO (then HELO), connects through `CClientSocket` (IPv6, no leaked sockets), refuses CR/LF/NUL in addresses and the subject, keeps blank lines, sends CRLF line endings with dot-stuffing and no stray blank line before the final ".", and adds Date, Message-ID, MIME-Version and Content-Type headers (an RFC 2047 subject when not ASCII; BODY=8BITMIME when offered).
+  - CR, LF and NUL are refused in HTTP and SIP header names and values, URIs, methods, versions and reason phrases; a lone CR in a header section gets a 400.
+  - `serialize()` adds no Content-Length when Transfer-Encoding is set (and removes one). An empty POST or PUT sends `Content-Length: 0`.
+  - `CGenericRequest::parse()` handles streams of unknown length (it asked for a buffer of (size_t)-1 + 1 bytes), reads bodies in pieces until complete, and keeps zero bytes; `CEntity::getEntity()` too. Bodies with zero bytes were cut short in `CHttpListener` (giving a 400) and in `CBasicSipServer`.
+  - `CGenericServer`'s flags are atomic, and concurrent `Wait()` calls return only once the thread has finished. `HttpHeader.cpp` has its `IASLIB_NETWORKING__` guard.
   - `CCollectionException` named itself `"CCollectionExcetption"`, and `CXMLException` `"CXMLExcetption"`.
   - `CStringException` registered `CObject` as its parent class; its and `CXMLException`'s number constructors left "Unknown Exception" on the call stack.
   - `CFileException`'s `EOVERFLOW` message was behind a misspelt `IASLIB_SUN_` and never compiled.
