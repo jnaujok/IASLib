@@ -6,6 +6,11 @@
  * programming without worrying about the little nagging details of
  * how threads and mutexes and the like work on each platform.
  *
+ *  The mutex is recursive on every platform: the thread that holds it
+ * can lock it again, and it is released when that thread has unlocked
+ * it as many times as it locked it. (A POSIX recursive mutex, or a
+ * critical section on Windows.)
+ *
  *=======================================================================
  *  Please Note: Because of the basic level of this class, and it's use
  * internally in the CObject class, it was decided not to derive a mutex
@@ -27,6 +32,8 @@
 
 #include "ThreadPlatform.h"
 
+#include <atomic>
+
 #ifndef IASLIB_MULTI_THREADED__
     #define MUTEX_T int
 #else
@@ -37,7 +44,7 @@
 
     #ifdef IASLIB_WIN32__
         #include "../BaseTypes/Platform.h"
-        #define MUTEX_T HANDLE
+        #define MUTEX_T CRITICAL_SECTION
     #endif
 #endif
 
@@ -47,7 +54,7 @@ namespace IASLib
     {
         protected:
             MUTEX_T             m_Mutex;
-            int                 m_nLocked;
+            std::atomic<int>    m_nLocked;      // how deeply the owner holds it
 
         public:
                                 CMutex( void );
@@ -55,14 +62,19 @@ namespace IASLib
             virtual            ~CMutex( void );
 
             void                Lock( void );
+                // Locks only if no other thread holds the mutex, returning
+                // whether it did.
+            bool                TryLock( void );
             void                Unlock( void );
-            bool                IsLocked( void );
+                // Whether some thread holds the mutex (only a hint: another
+                // thread may lock or unlock it straight after).
+            bool                IsLocked( void ) const;
 
         private:
+            void                Init( void );
                                 CMutex( const CMutex & );
             CMutex             &operator =( const CMutex & );
     };
-
         // Locks a mutex for as long as it exists:
         //      { CMutexLock oLock( m_mutex ); ... }
     class CMutexLock

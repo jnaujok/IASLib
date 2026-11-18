@@ -908,6 +908,59 @@ static void testVariant( void )
     CHECK( cv.getFloat() == 3.5f && cv.isNumber() );
 }
 
+/***********************************************************************
+**  CMutex (recursive on every platform)
+***********************************************************************/
+
+static void testMutex( void )
+{
+    section( "CMutex" );
+#ifdef IASLIB_MULTI_THREADED__
+    CMutex mutex;
+    CHECK( ! mutex.IsLocked() );
+    mutex.Lock();
+    mutex.Lock();                             // the same thread again: no deadlock
+    CHECK( mutex.TryLock() );                 // and a third time
+    CHECK( mutex.IsLocked() );
+
+        // Another thread is kept out until every lock is undone.
+    bool bGotIt = true;
+    std::thread( [&mutex, &bGotIt]() { bGotIt = mutex.TryLock(); if ( bGotIt ) mutex.Unlock(); } ).join();
+    CHECK( ! bGotIt );
+    mutex.Unlock();
+    mutex.Unlock();
+    std::thread( [&mutex, &bGotIt]() { bGotIt = mutex.TryLock(); if ( bGotIt ) mutex.Unlock(); } ).join();
+    CHECK( ! bGotIt );                        // still held once
+    mutex.Unlock();
+    CHECK( ! mutex.IsLocked() );
+    std::thread( [&mutex, &bGotIt]() { bGotIt = mutex.TryLock(); if ( bGotIt ) mutex.Unlock(); } ).join();
+    CHECK( bGotIt );
+
+        // Mutual exclusion, with nested locks, under contention.
+    long nCounter = 0;
+    std::vector<std::thread> aThreads;
+    for ( int t = 0; t < 4; t++ )
+    {
+        aThreads.push_back( std::thread( [&mutex, &nCounter]() {
+            for ( int n = 0; n < 20000; n++ )
+            {
+                CMutexLock oOuter( mutex );
+                CMutexLock oInner( mutex );
+                nCounter++;
+            }
+        } ) );
+    }
+    for ( size_t t = 0; t < aThreads.size(); t++ )
+        aThreads[t].join();
+    CHECK( nCounter == 80000 );
+    CHECK( ! mutex.IsLocked() );
+
+    CMutex locked( true );
+    CHECK( locked.IsLocked() );
+    locked.Unlock();
+#endif
+}
+
 int main( void )
 {
     testObject();
@@ -924,6 +977,7 @@ int main( void )
     testUuid();
     testRandom();
     testVariant();
+    testMutex();
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );
     return ( g_nFailures == 0 ) ? 0 : 1;

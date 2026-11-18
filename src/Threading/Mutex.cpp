@@ -27,56 +27,36 @@
 
 namespace IASLib
 {
-    CMutex::CMutex( void )
+    void CMutex::Init( void )
     {
         m_nLocked = 0;
-
     #ifndef IASLIB_MULTI_THREADED__
         m_Mutex = 0;
     #else
-    #ifdef IASLIB_SUN__
-        mutex_init( &m_Mutex, USYNC_THREAD, NULL );
-    #endif
-
-    #ifdef IASLIB_DEC__
-        pthread_mutex_init( &m_Mutex, NULL );
-    #endif
-
     #ifdef IASLIB_PTHREAD__
-        pthread_mutex_init( &m_Mutex, NULL );
+        pthread_mutexattr_t attributes;
+        pthread_mutexattr_init( &attributes );
+        pthread_mutexattr_settype( &attributes, PTHREAD_MUTEX_RECURSIVE );
+        pthread_mutex_init( &m_Mutex, &attributes );
+        pthread_mutexattr_destroy( &attributes );
     #endif
 
     #ifdef IASLIB_WIN32__
-        m_Mutex = CreateMutex( NULL, FALSE, NULL );
+        InitializeCriticalSection( &m_Mutex );
     #endif
     #endif
     }
 
+    CMutex::CMutex( void )
+    {
+        Init();
+    }
+
     CMutex::CMutex( bool bLocked )
     {
-        m_nLocked = 0;
-
-    #ifndef IASLIB_MULTI_THREADED__
-        m_Mutex = 0;
-    #else
-    #ifdef IASLIB_SUN__
-        mutex_init( &m_Mutex, USYNC_THREAD, NULL );
-    #endif
-
-    #ifdef IASLIB_DEC__
-        pthread_mutex_init( &m_Mutex, NULL );
-    #endif
-
-    #ifdef IASLIB_PTHREAD__
-        pthread_mutex_init( &m_Mutex, NULL );
-    #endif
-
-    #ifdef IASLIB_WIN32__
-        m_Mutex = CreateMutex( NULL, FALSE, NULL );
-    #endif
+        Init();
         if ( bLocked )
             Lock();
-    #endif
     }
 
     CMutex::~CMutex( void )
@@ -84,20 +64,12 @@ namespace IASLib
     #ifndef IASLIB_MULTI_THREADED__
         m_Mutex = 0;
     #else
-    #ifdef IASLIB_SUN__
-        mutex_destroy( &m_Mutex );
-    #endif
-
-    #ifdef IASLIB_DEC__
-        pthread_mutex_destroy( &m_Mutex );
-    #endif
-
     #ifdef IASLIB_PTHREAD__
         pthread_mutex_destroy( &m_Mutex );
     #endif
 
     #ifdef IASLIB_WIN32__
-        CloseHandle( m_Mutex );
+        DeleteCriticalSection( &m_Mutex );
     #endif
     #endif
     }
@@ -107,25 +79,34 @@ namespace IASLib
     #ifndef IASLIB_MULTI_THREADED__
         m_Mutex = 1;
     #else
-    #ifdef IASLIB_SUN__
-        mutex_lock( &m_Mutex );
-    #endif
-
-    #ifdef IASLIB_DEC__
-        pthread_mutex_lock( &m_Mutex );
-    #endif
-
-    #ifdef IASLIB_WIN32__
-        WaitForSingleObject( m_Mutex, INFINITE );
-    #endif
-
     #ifdef IASLIB_PTHREAD__
         pthread_mutex_lock( &m_Mutex );
     #endif
 
+    #ifdef IASLIB_WIN32__
+        EnterCriticalSection( &m_Mutex );
     #endif
-        ASSERT( 0 == m_nLocked );
+    #endif
         m_nLocked++;
+    }
+
+    bool CMutex::TryLock( void )
+    {
+    #ifndef IASLIB_MULTI_THREADED__
+        m_Mutex = 1;
+    #else
+    #ifdef IASLIB_PTHREAD__
+        if ( pthread_mutex_trylock( &m_Mutex ) != 0 )
+            return false;
+    #endif
+
+    #ifdef IASLIB_WIN32__
+        if ( ! TryEnterCriticalSection( &m_Mutex ) )
+            return false;
+    #endif
+    #endif
+        m_nLocked++;
+        return true;
     }
 
     void CMutex::Unlock( void )
@@ -136,28 +117,20 @@ namespace IASLib
         m_nLocked--;
 
     #ifndef IASLIB_MULTI_THREADED__
-        m_Mutex = 0;
+        if ( m_nLocked == 0 )
+            m_Mutex = 0;
     #else
-    #ifdef IASLIB_SUN__
-        mutex_unlock( &m_Mutex );
-    #endif
-
-    #ifdef IASLIB_DEC__
-        pthread_mutex_unlock( &m_Mutex );
-    #endif
-
     #ifdef IASLIB_PTHREAD__
         pthread_mutex_unlock( &m_Mutex );
     #endif
 
     #ifdef IASLIB_WIN32__
-        //LeaveCriticalSection( &m_Mutex );
-        ReleaseMutex( m_Mutex );
+        LeaveCriticalSection( &m_Mutex );
     #endif
     #endif
     }
 
-    bool CMutex::IsLocked( void )
+    bool CMutex::IsLocked( void ) const
     {
         return m_nLocked > 0;
     }

@@ -41,6 +41,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - It no longer uses `TRandom`.
 - **`CStringTokenizer`:** with every delimiter counting, `"a,"` gives `"a"` and `""` (n delimiters, n + 1 tokens).
 - **`CMutex` can't be copied.** Copying one copied the operating system's mutex.
+- **`CMutex` is recursive on every platform.** The thread that holds it can lock it again, and must unlock it as many times. It was recursive on Windows (a kernel mutex) but not elsewhere, so code that worked on Windows deadlocked on Linux and macOS. On Windows it is now a critical section, which avoids a kernel call when the lock is free.
 
 ### Added
 
@@ -66,6 +67,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
 - **`TRandom`:** `SeedFromSystem()`, and it works with the standard library's random distributions.
 - **`CVariant`:** `isEmpty()` and `isNumber()`. Its number getters convert, and read numbers from strings.
 - **`CMutexLock`:** locks a mutex for a scope.
+- **`CMutex::TryLock()`.**
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
 ### Fixed
