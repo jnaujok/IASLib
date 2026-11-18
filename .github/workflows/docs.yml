@@ -1,0 +1,54 @@
+name: Documentation
+
+# Builds the API documentation from the headers' comments with Doxygen:
+# the HTML site (zipped) and a PDF of the whole reference, published as the
+# run's "IASLib-documentation" artifact, with Doxygen's warnings beside them.
+
+on:
+  push:
+    branches: [ master, 'claude/**' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  docs:
+    name: doxygen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen, Graphviz and LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen graphviz \
+            texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-plain-generic make zip
+
+      - name: Generate HTML and LaTeX
+        run: |
+          doxygen --version
+          doxygen Doxyfile
+          echo "Doxygen warnings: $(wc -l < build/docs/doxygen-warnings.log)"
+
+      - name: Build the PDF
+        run: |
+          make -C build/docs/latex > build/docs/latex-build.log 2>&1 || { tail -60 build/docs/latex-build.log; exit 1; }
+          cp build/docs/latex/refman.pdf build/docs/IASLib-reference.pdf
+          ls -l build/docs/IASLib-reference.pdf
+
+      - name: Zip the HTML
+        run: |
+          cd build/docs
+          zip -q -r IASLib-docs-html.zip html
+          ls -l IASLib-docs-html.zip
+
+      - name: Publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: IASLib-documentation
+          path: |
+            build/docs/IASLib-docs-html.zip
+            build/docs/IASLib-reference.pdf
+            build/docs/doxygen-warnings.log
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,97 @@
+# Doxygen configuration for IASLib.
+#
+#   doxygen Doxyfile          -> build/docs/html (and build/docs/latex)
+#   make -C build/docs/latex  -> build/docs/latex/refman.pdf
+#
+# Settings not listed take Doxygen's defaults. The documentation workflow
+# (.github/workflows/docs.yml) builds both and publishes them as artifacts.
+
+PROJECT_NAME           = "IASLib"
+PROJECT_NUMBER         = "3.0 (in development)"
+PROJECT_BRIEF          = "The Irene Adler Software Group C++ class library"
+OUTPUT_DIRECTORY       = build/docs
+CREATE_SUBDIRS         = NO
+
+# The public headers are the documented interface; the Markdown pages give
+# the overview.
+INPUT                  = README.md docs inc
+FILE_PATTERNS          = *.h *.md
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */IASLibConfig.h.in
+USE_MDFILE_AS_MAINPAGE = README.md
+MARKDOWN_SUPPORT       = YES
+
+# Comments: /** ... */ and /// blocks; the first sentence is the brief.
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MULTILINE_CPP_IS_BRIEF = NO
+INHERIT_DOCS           = YES
+
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_ANON_NSPACES   = NO
+HIDE_UNDOC_MEMBERS     = NO
+SORT_MEMBER_DOCS       = NO
+SORT_BRIEF_DOCS        = NO
+BUILTIN_STL_SUPPORT    = YES
+
+# The library's feature macros, so everything behind them is documented, and
+# its RTTI and memory macros blanked so they do not confuse the parser.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+SEARCH_INCLUDES        = YES
+INCLUDE_PATH           = inc
+PREDEFINED             = IASLIB_NETWORKING__ \
+                         IASLIB_MULTI_THREADED__ \
+                         IASLIB_PTHREAD__ \
+                         IASLIB_RTTI__ \
+                         IASLIB_TLS__ \
+                         IASLIB_DATABASE__ \
+                         IASLIB_DB_SQLITE__ \
+                         IASLIB_MEMORY_DEBUGGING__ \
+                         "DEFINE_OBJECT(x)=" \
+                         "DECLARE_OBJECT(x,y)=" \
+                         "IMPLEMENT_OBJECT(x,y)=" \
+                         "IASLIB_MEMORY_DECLARE__(x)="
+
+# Warnings go to a file the workflow publishes, so missing comments can be
+# found without failing the build.
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = NO
+WARN_LOGFILE           = build/docs/doxygen-warnings.log
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+HTML_COLORSTYLE        = LIGHT
+
+GENERATE_LATEX         = YES
+LATEX_OUTPUT           = latex
+USE_PDFLATEX           = YES
+PDF_HYPERLINKS         = YES
+LATEX_BATCHMODE        = YES
+PAPER_TYPE             = letter
+
+GENERATE_XML           = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+
+# Class and collaboration diagrams through Graphviz.
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = NO
+INCLUDE_GRAPH          = NO
+INCLUDED_BY_GRAPH      = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = NO
+DOT_GRAPH_MAX_NODES    = 60
+DOT_MULTI_TARGETS      = YES
