@@ -498,7 +498,18 @@ namespace IASLib
                             for ( int n = 0; n < object.size(); n++ )
                             {
                                 CString strName = object.fieldName( n );
-                                m_model.extras.push_back( resolve( m_strRootKey, std::string( "/" ) + apszKeys[ k ] + "/" + std::string( (const char *)strName, strName.GetLength() ) ) );
+                                    // JSON Pointer escapes (RFC 6901), plus "%"
+                                    // since pointers are percent-decoded.
+                                std::string strEscaped;
+                                for ( size_t c = 0; c < (size_t)strName.GetLength(); c++ )
+                                {
+                                    char ch = ( (const char *)strName )[ c ];
+                                    if ( ch == '%' ) strEscaped += "%25";
+                                    else if ( ch == '~' ) strEscaped += "~0";
+                                    else if ( ch == '/' ) strEscaped += "~1";
+                                    else strEscaped += ch;
+                                }
+                                m_model.extras.push_back( resolve( m_strRootKey, std::string( "/" ) + apszKeys[ k ] + "/" + strEscaped ) );
                             }
                         }
                     }
