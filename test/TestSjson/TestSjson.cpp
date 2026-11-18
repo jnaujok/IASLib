@@ -10,7 +10,9 @@
 ***********************************************************************/
 
 #include "IASLib.h"
+#include "SJSON/SjsonSchemaNumber.h"
 
+#include <clocale>
 #include <cmath>
 #include <condition_variable>
 #include <deque>
@@ -298,10 +300,11 @@ static void testSchemas( const CJsonNode &vectors )
 
             std::vector<unsigned char> stream = fromHex( streamPackets.path( n ).textString() );
             pValue.reset( streamReceiver.decode( stream.data(), stream.size() ) );
-                // Schema order: compare member sets loosely through JSON with sorted keys.
+                // Schema order: compare member sets loosely through JSON with
+                // sorted keys. (Python's stream packets carry zstd text.)
             if ( pValue && SjsonSchema::pythonJson( pValue.get() ) == SjsonSchema::pythonJson( &doc ) )
                 nStreamDecoded++;
-            else
+            else if ( CSjson::zstdAvailable() )
                 CHECK_EQ_STR( strFile + " stream decode #" + std::to_string( n ) + " (" + streamReceiver.lastErrorText() + ")", json( pValue.get() ), json( &doc ) );
 
             CHECK( streamSender.encode( doc, packet ) );
@@ -361,7 +364,7 @@ static void testCompiledDictionaries( const CJsonNode &vectors )
             std::unique_ptr<CJsonNode> pValue( decodeWithHexNak( receiver, python, entry.path( "nak" ).textString() ) );
             if ( pValue && SjsonSchema::pythonJson( pValue.get() ) == SjsonSchema::pythonJson( &documents.path( n ) ) )
                 nDecoded++;
-            else
+            else if ( ! bText || CSjson::zstdAvailable() )     // a text block needs zstd
                 CHECK_EQ_STR( strLabel + " decode #" + std::to_string( n ) + " (" + receiver.lastErrorText() + ")", json( pValue.get() ), json( &documents.path( n ) ) );
         }
         printf( "    %-26s fingerprint ok, %d documents: %d identical bytes, %d decoded\n", strLabel.c_str(), documents.size(), nSame, nDecoded );
@@ -681,6 +684,128 @@ static void testLink( void )
     }
 }
 
+static void testReviewFixes( void )
+{
+    printf( "Review fixes\n" );
+    std::vector<unsigned char> packet;
+    std::shared_ptr<const CSjsonSchemaModel> pModel( SjsonSchema::loadJsonSchema( "schemas/order.schema.json" ) );
+    std::unique_ptr<CSjsonDictionary> pDictionary( CSjsonDictionary::fromSchema( pModel ) );
+
+        // A stream gap reports the gap and leaves the dictionary alone.
+    {
+        CSjson sender( 1, true ), receiver( 2 );
+        sender.setDictionary( *pDictionary );
+        receiver.registerDictionary( *pDictionary );
+        std::unique_ptr<CJsonNode> pDoc( document( 1 ) );
+        CHECK( sender.encode( *pDoc, packet ) );
+        std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size(), 1 ) );
+        CHECK( pBack != NULL );
+        unsigned long long nKnown = receiver.lastKnownTag( 1 );
+        CHECK( nKnown >= pDictionary->baseSize() );
+        CHECK( sender.encode( *pDoc, packet ) );       // lost
+        CHECK( sender.encode( *pDoc, packet ) );
+        pBack.reset( receiver.decode( packet.data(), packet.size(), 1 ) );
+        CHECK( pBack == NULL && receiver.lastError() == SJSON_ERROR_STREAM_GAP );
+        CHECK( receiver.lastKnownTag( 1 ) == nKnown );
+    }
+
+        // setDictionary with the endpoint's own dictionary, mid-stream: no
+        // use-after-free, and the stream restarts naming the dictionary.
+    {
+        CSjson sender( 1, true );
+        sender.setDictionary( *pDictionary );
+        std::unique_ptr<CJsonNode> pDoc( document( 2 ) );
+        CHECK( sender.encode( *pDoc, packet ) && sender.encode( *pDoc, packet ) );
+        sender.setDictionary( sender.dictionary( 1 ) );
+        CHECK( sender.encode( *pDoc, packet ) );
+        CSjson::Header header;
+        CHECK( CSjson::readHeader( packet.data(), packet.size(), header ) );
+        CHECK( header.nSequence == 0 && header.bFingerprint && header.nFingerprint == pDictionary->fingerprint() );
+    }
+
+        // A far-off dictionary id from a peer does not allocate up to it.
+    {
+        CSjsonBitWriter out;
+        out.writeBits( 5, 16 );
+        out.writeNybble( 1 );
+        out.writeNybble( 0xFFFFFFF0ULL );
+        out.writeNybble( 4 );
+        out.writeBytes( std::string( "far!" ) );
+        out.writeNybble( 0 );
+        CSjson receiver( 2 );
+        CHECK( receiver.loadDictionary( out.bytes().data(), out.bytes().size() ) );
+        CHECK( receiver.dictionary( 5 ).lookup( 0xFFFFFFF0ULL ) == "far!" );
+        CHECK( receiver.lastKnownTag( 5 ) == 0xFFFFFFF0ULL );
+        CHECK( receiver.dictionary( 5 ).entriesAfter( 0 ).size() == 1 );
+        receiver.dictionary( 5 ).set( "near", 1 );
+        CHECK( receiver.dictionary( 5 ).entriesAfter( 0 ).size() == 2 );
+        receiver.dictionary( 5 ).resetToBase();
+        CHECK( ! receiver.dictionary( 5 ).hasId( 0xFFFFFFF0ULL ) && ! receiver.dictionary( 5 ).hasTag( "far!" ) );
+    }
+
+        // Integers and doubles compare exactly, as in Python.
+    CHECK( SjsonNumber::compare( SjsonNumber::integer( "9007199254740993" ), SjsonNumber::real( 9007199254740992.0 ) ) == 1 );
+    CHECK( SjsonNumber::compare( SjsonNumber::real( 9007199254740992.0 ), SjsonNumber::integer( "9007199254740993" ) ) == -1 );
+    CHECK( SjsonNumber::compare( SjsonNumber::integer( "9007199254740992" ), SjsonNumber::real( 9007199254740992.0 ) ) == 0 );
+    CHECK( SjsonNumber::compare( SjsonNumber::integer( "2" ), SjsonNumber::real( 2.5 ) ) == -1 );
+    CHECK( SjsonNumber::compare( SjsonNumber::integer( "3" ), SjsonNumber::real( 2.5 ) ) == 1 );
+    CHECK( SjsonNumber::compare( SjsonNumber::integer( "-3" ), SjsonNumber::real( -2.5 ) ) == -1 );
+    CHECK( SjsonNumber::compare( SjsonNumber::integer( "5" ), SjsonNumber::real( -HUGE_VAL ) ) == 1 );
+    CHECK( SjsonNumber::max( SjsonNumber::real( 9007199254740992.0 ), SjsonNumber::integer( "9007199254740993" ) ).bInt );
+
+        // Arrays of zero-bit items (here nulls) decode.
+    {
+        std::unique_ptr<CJsonNode> pSchema( CJsonParser::parse( "{\"type\":\"array\",\"items\":{\"type\":\"null\"}}" ) );
+        std::shared_ptr<const CSjsonSchemaModel> pNulls( SjsonSchema::loadJsonSchemaDocument( *pSchema ) );
+        std::unique_ptr<CSjsonDictionary> pNullDictionary( CSjsonDictionary::fromSchema( pNulls ) );
+        CSjson sender( 1 ), receiver( 2 );
+        sender.setDictionary( *pNullDictionary );
+        receiver.registerDictionary( *pNullDictionary );
+        std::unique_ptr<CJsonNode> pDoc( CJsonParser::parse( "[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]" ) );
+        CHECK( sender.encode( *pDoc, packet ) );
+        CSjson::Header header;
+        CHECK( CSjson::readHeader( packet.data(), packet.size(), header ) && ( header.nFlags & CSjson::FLAG_SCHEMA_ENCODED ) );
+        std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size() ) );
+        CHECK( pBack && json( pBack.get() ) == json( pDoc.get() ) );
+    }
+
+        // A comma-decimal locale does not change floats or their text.
+    const char *apszLocales[] = { "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "German_Germany.1252", NULL };
+    std::string strSaved = setlocale( LC_NUMERIC, NULL );
+    bool bComma = false;
+    for ( int n = 0; apszLocales[ n ] && ! bComma; n++ )
+        bComma = setlocale( LC_NUMERIC, apszLocales[ n ] ) != NULL && localeconv()->decimal_point[ 0 ] == ',';
+    if ( bComma )
+    {
+        CHECK( SjsonUtil::floatRepr( 1.5 ) == "1.5" && SjsonUtil::floatRepr( 0.1 ) == "0.1" );
+        CHECK( SjsonUtil::parseDouble( "2.25" ) == 2.25 );
+        CSjson sender( 1 ), receiver( 2 );
+        CObjectNode doc;
+        doc.put( "x", 1.5 );
+        doc.put( "y", 0.1 );
+        CHECK( sender.encode( doc, packet ) );
+        std::unique_ptr<CJsonNode> pBack( decodeWithNak( receiver, sender, packet ) );
+        CHECK( pBack && pBack->path( "x" ).doubleValue() == 1.5 && pBack->path( "y" ).doubleValue() == 0.1 );
+    }
+    setlocale( LC_NUMERIC, strSaved.c_str() );
+    printf( "    comma-decimal locale %s\n", bComma ? "checked" : "not installed (skipped)" );
+
+        // A frame longer than the link allows ends it before any allocation.
+    {
+        PipeChannel forward, back;
+        CPipeEnd senderEnd( back, forward ), receiverEnd( forward, back );
+        CSjson codec( 2 );
+        CSjsonLink link( receiverEnd, codec, 1, 4, 1024 );
+        const char achHeader[ 7 ] = { 1, 0, 0, 0x7F, (char)0xFF, (char)0xFF, (char)0xFF };
+        senderEnd.PutBuffer( achHeader, 7 );
+        CHECK( link.receive() == NULL && link.lastError() == CSjsonLink::LINK_PROTOCOL );
+        const char achAck[ 8 ] = { 2, 0, 0, 0, 0, 0, 1, 0 };     // an ACK with a payload
+        CSjsonLink other( receiverEnd, codec );
+        senderEnd.PutBuffer( achAck, 8 );
+        CHECK( other.receive() == NULL && other.lastError() == CSjsonLink::LINK_PROTOCOL );
+    }
+}
+
 static void testFuzz( void )
 {
     printf( "Fuzz\n" );
@@ -766,6 +891,7 @@ int main( void )
     testStreamMode();
     testOptionalSender();
     testLink();
+    testReviewFixes();
     testFuzz();
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );

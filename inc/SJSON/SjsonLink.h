@@ -25,8 +25,16 @@
  *
  *  The link is stop-and-wait: send() returns once the message is ACKed.
  * Both ends may send; a DATA frame that arrives while send() waits is
- * decoded, ACKed and kept for receive(). CStream reads block, so the link
- * does not time out: use it on a reliable stream, which never loses frames.
+ * decoded, ACKed and kept for receive(). CStream reads and writes block, so
+ * the link does not time out: use it on a reliable stream, which never loses
+ * frames. Because writes block, two ends that send() at the same moment can
+ * deadlock if both frames are larger than the transport's buffers (each
+ * waits for the other to read): take turns, or use one link per direction,
+ * when messages can be that large.
+ *
+ *  Frames longer than the limit given to the constructor (16 MiB by default)
+ * end the link before any memory is set aside for them, and so do control
+ * frames of the wrong size.
  *
  * @code
  *     CSocketStream oStream( pSocket );
@@ -93,7 +101,8 @@ namespace IASLib
                 LINK_CLOSED,            ///< The stream ended or failed.
                 LINK_ENCODE,            ///< The codec could not encode the document.
                 LINK_REFUSED,           ///< The peer can never decode it (NAK_FATAL).
-                LINK_TOO_MANY_NAKS      ///< The peer kept refusing the message.
+                LINK_TOO_MANY_NAKS,     ///< The peer kept refusing the message.
+                LINK_PROTOCOL           ///< The peer sent a frame that breaks the protocol (too long, wrong size).
             };
 
                 /// Byte counts, for the curious.
@@ -108,8 +117,9 @@ namespace IASLib
                 /// A link over stream using codec. Packets without a sender
                 /// id (stream mode leaves it out by default) are attributed
                 /// to nPeerId. send() gives up after nMaxNaks NAKs for one
-                /// message.
-                                    CSjsonLink( CStream &stream, CSjson &codec, unsigned nPeerId = 0, unsigned nMaxNaks = 4 );
+                /// message, and ends the link on a frame longer than nMaxFrame
+                /// bytes.
+                                    CSjsonLink( CStream &stream, CSjson &codec, unsigned nPeerId = 0, unsigned nMaxNaks = 4, size_t nMaxFrame = 16 * 1024 * 1024 );
 
                 /// Sends a document and waits until the peer has decoded it.
                 /// False on failure, with lastError() saying why.
@@ -144,6 +154,7 @@ namespace IASLib
             CSjson                 *m_pCodec;       ///< Encodes and decodes.
             unsigned                m_nPeerId;      ///< Id for packets without one.
             unsigned                m_nMaxNaks;     ///< NAKs per message before giving up.
+            size_t                  m_nMaxFrame;    ///< Longest payload accepted.
             unsigned                m_nNumber;      ///< The next message number.
             std::map<unsigned, std::vector<unsigned char> > m_mapHeld; ///< Packets waiting for names, by number.
             bool                    m_bDelivered;   ///< Whether m_nLastDelivered is set.

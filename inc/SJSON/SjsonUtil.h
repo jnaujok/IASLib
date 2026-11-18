@@ -42,6 +42,9 @@ namespace IASLib
             /// The shortest text that reads back as dValue, formatted exactly as
             /// Python's repr(float) ("1.5", "1e-07", "1e+16", "-0.0", "inf", "nan").
         std::string         floatRepr( double dValue );
+            /// strtod for text with a '.' decimal point, whatever the C
+            /// locale says. pnUsed, if given, receives the characters parsed.
+        double              parseDouble( const std::string &strText, size_t *pnUsed = NULL );
 
             /// Decompresses an LZ4 block (no frame, no stored size) into exactly
             /// nOutLength bytes; false if the block is malformed.

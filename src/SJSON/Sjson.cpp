@@ -112,14 +112,20 @@ namespace IASLib
 
     void CSjson::setDictionary( const CSjsonDictionary &dictionary )
     {
-        registerDictionary( dictionary );
+            // Copy first: dictionary may be the one being replaced.
+        CSjsonDictionary *pCopy = dictionary.freshCopy();
+        registerDictionary( *pCopy );
         std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapDictionaries.find( m_nSenderId );
         if ( it != m_mapDictionaries.end() )
         {
             dropCodec( it->second );
             delete it->second;
         }
-        m_mapDictionaries[ m_nSenderId ] = dictionary.freshCopy();
+        m_mapDictionaries[ m_nSenderId ] = pCopy;
+            // A stream started with the old dictionary: start again, so the
+            // next packet names the new one.
+        if ( m_bStateful )
+            resetStream();
     }
 
     unsigned CSjson::registerDictionary( const CSjsonDictionary &dictionary )
@@ -513,11 +519,13 @@ namespace IASLib
         CSjsonStreamState *pStream = NULL;
         std::pair<unsigned long long, unsigned long long> checkpoint;
         CJsonNode *pResult = NULL;
+        bool bCheckpoint = false;
         try
         {
             pDictionary = &dictionaryFor( header );
-            pStream = streamFor( header, pFresh );
+            pStream = streamFor( header, pFresh );      // may throw a stream gap
             checkpoint = pDictionary->checkpoint();
+            bCheckpoint = true;
             CSjsonTextChannel perPacket;
             bool bTextBlock = hasTextBlock( *pDictionary, pStream );
             CSjsonTextChannel *pChannel = bTextBlock ? ( pStream ? &pStream->text() : &perPacket ) : NULL;
@@ -540,10 +548,12 @@ namespace IASLib
         {
                 // Leave no trace, so the same packet can be decoded again (for
                 // example after a NAK brought the missing names).
-            if ( pDictionary )
+            if ( bCheckpoint )
+            {
                 pDictionary->rollback( checkpoint );
-            if ( pStream )
-                pStream->rollback();
+                if ( pStream )
+                    pStream->rollback();
+            }
             fail( e.error(), e.what() );
             return NULL;
         }

@@ -29,6 +29,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <map>
 #include <vector>
 
 namespace IASLib
@@ -80,7 +81,7 @@ namespace IASLib
                 /// True if strTag has an id.
             bool                    hasTag( const std::string &strTag ) const { return m_mapIds.find( strTag ) != m_mapIds.end(); }
                 /// True if nId is assigned.
-            bool                    hasId( unsigned long long nId ) const { return nId >= 1 && nId <= m_aNames.size() && m_aAssigned[ nId - 1 ]; }
+            bool                    hasId( unsigned long long nId ) const { return nId >= 1 && ( nId <= m_aNames.size() ? (bool)m_aAssigned[ nId - 1 ] : m_mapSparse.count( nId ) != 0 ); }
                 /// strTag's id; throws SJSON_ERROR_MALFORMED if it has none.
             unsigned long long      get( const std::string &strTag ) const;
                 /// The text for nId; throws SJSON_ERROR_UNKNOWN_TAG if unknown.
@@ -153,6 +154,10 @@ namespace IASLib
             std::unordered_map<std::string, unsigned long long> m_mapIds;  ///< Text to id.
             std::vector<std::string> m_aNames;          ///< Text by id - 1.
             std::vector<bool>       m_aAssigned;        ///< Whether id - 1 is in use.
+                /// Ids far past the dense range (a peer may name any id up to
+                /// 2^32, so they are not allowed to grow m_aNames); all are
+                /// above m_aNames.size().
+            std::map<unsigned long long, std::string> m_mapSparse;
             unsigned long long      m_nLastIndex;       ///< The highest id.
             unsigned long long      m_nBaseSize;        ///< Pre-loaded ids.
             CSjsonDictionary       *m_pValues;          ///< The value dictionary (owned).

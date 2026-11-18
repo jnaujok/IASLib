@@ -62,7 +62,7 @@ namespace IASLib
             return d < 0 ? "-" + strOut : strOut;
         }
 
-        double value( void ) const { return bInt ? strtod( strInt.c_str(), NULL ) : d; }
+        double value( void ) const { return bInt ? SjsonUtil::parseDouble( strInt ) : d; }
 
         SjsonNumber plus( long lDelta ) const
         {
@@ -79,8 +79,24 @@ namespace IASLib
                 std::string strDiff = SjsonUtil::decimalSubtract( a.strInt, b.strInt );
                 return strDiff == "0" ? 0 : ( strDiff[ 0 ] == '-' ? -1 : 1 );
             }
-            double x = a.value(), y = b.value();
-            return x < y ? -1 : ( x > y ? 1 : 0 );
+            if ( ! a.bInt && ! b.bInt )
+                return a.d < b.d ? -1 : ( a.d > b.d ? 1 : 0 );
+            return a.bInt ? compareExact( a.strInt, b.d ) : -compareExact( b.strInt, a.d );
+        }
+            /// An integer against a double, exactly (no rounding to double).
+        static int compareExact( const std::string &strInt, double d )
+        {
+            if ( std::isnan( d ) )
+                return 0;           // Python: every comparison is False
+            if ( std::isinf( d ) )
+                return d > 0 ? -1 : 1;
+            double dFloor = std::floor( d );
+            std::string strDiff = SjsonUtil::decimalSubtract( strInt, decimalOf( dFloor ) );
+            int nSign = strDiff == "0" ? 0 : ( strDiff[ 0 ] == '-' ? -1 : 1 );
+            if ( dFloor == d )
+                return nSign;
+                // d lies strictly between floor( d ) and floor( d ) + 1.
+            return nSign <= 0 ? -1 : 1;
         }
             /// Python's max( a, b ) and min( a, b ): the first wins a tie.
         static SjsonNumber max( const SjsonNumber &a, const SjsonNumber &b ) { return compare( b, a ) > 0 ? b : a; }

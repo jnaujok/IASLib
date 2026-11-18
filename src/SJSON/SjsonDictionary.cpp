@@ -191,7 +191,9 @@ namespace IASLib
     {
         if ( ! hasId( nId ) )
             throw CSjsonException( SJSON_ERROR_UNKNOWN_TAG, "unknown tag id: " + std::to_string( nId ) );
-        return m_aNames[ (size_t)nId - 1 ];
+        if ( nId <= m_aNames.size() )
+            return m_aNames[ (size_t)nId - 1 ];
+        return m_mapSparse.find( nId )->second;
     }
 
     unsigned long long CSjsonDictionary::add( const std::string &strTag )
@@ -209,13 +211,26 @@ namespace IASLib
             throw CSjsonException( SJSON_ERROR_MALFORMED, "tag/index collision: " + strTag );
         if ( nId > 0xFFFFFFFFULL )
             throw CSjsonException( SJSON_ERROR_MALFORMED, "tag id out of range" );
-        if ( m_aNames.size() < nId )
+        const unsigned long long MAX_DENSE_GAP = 4096;
+        if ( nId > m_aNames.size() + MAX_DENSE_GAP )
+            m_mapSparse[ nId ] = strTag;    // a far-off id: do not allocate up to it
+        else
         {
-            m_aNames.resize( (size_t)nId );
-            m_aAssigned.resize( (size_t)nId, false );
+            if ( m_aNames.size() < nId )
+            {
+                m_aNames.resize( (size_t)nId );
+                m_aAssigned.resize( (size_t)nId, false );
+                    // Sparse ids the dense range now covers move into it.
+                while ( ! m_mapSparse.empty() && m_mapSparse.begin()->first <= m_aNames.size() )
+                {
+                    m_aNames[ (size_t)m_mapSparse.begin()->first - 1 ] = m_mapSparse.begin()->second;
+                    m_aAssigned[ (size_t)m_mapSparse.begin()->first - 1 ] = true;
+                    m_mapSparse.erase( m_mapSparse.begin() );
+                }
+            }
+            m_aNames[ (size_t)nId - 1 ] = strTag;
+            m_aAssigned[ (size_t)nId - 1 ] = true;
         }
-        m_aNames[ (size_t)nId - 1 ] = strTag;
-        m_aAssigned[ (size_t)nId - 1 ] = true;
         m_mapIds[ strTag ] = nId;
         if ( nId > m_nLastIndex )
             m_nLastIndex = nId;
@@ -227,6 +242,8 @@ namespace IASLib
         for ( size_t n = (size_t)nLastId; n < m_aNames.size(); n++ )
             if ( m_aAssigned[ n ] )
                 aOut.push_back( std::make_pair( (unsigned long long)n + 1, m_aNames[ n ] ) );
+        for ( std::map<unsigned long long, std::string>::const_iterator it = m_mapSparse.upper_bound( nLastId ); it != m_mapSparse.end(); ++it )
+            aOut.push_back( *it );
         return aOut;
     }
 
@@ -259,6 +276,12 @@ namespace IASLib
             {
                 pDictionary->m_aNames.resize( (size_t)anLast[ k ] );
                 pDictionary->m_aAssigned.resize( (size_t)anLast[ k ] );
+            }
+            std::map<unsigned long long, std::string> &sparse = pDictionary->m_mapSparse;
+            for ( std::map<unsigned long long, std::string>::iterator it = sparse.upper_bound( anLast[ k ] ); it != sparse.end(); )
+            {
+                pDictionary->m_mapIds.erase( it->second );
+                sparse.erase( it++ );
             }
             pDictionary->m_nLastIndex = anLast[ k ];
         }

@@ -35,8 +35,8 @@ namespace IASLib
         }
     }
 
-    CSjsonLink::CSjsonLink( CStream &stream, CSjson &codec, unsigned nPeerId, unsigned nMaxNaks )
-        : m_pStream( &stream ), m_pCodec( &codec ), m_nPeerId( nPeerId ), m_nMaxNaks( nMaxNaks ),
+    CSjsonLink::CSjsonLink( CStream &stream, CSjson &codec, unsigned nPeerId, unsigned nMaxNaks, size_t nMaxFrame )
+        : m_pStream( &stream ), m_pCodec( &codec ), m_nPeerId( nPeerId ), m_nMaxNaks( nMaxNaks ), m_nMaxFrame( nMaxFrame ),
           m_nNumber( 0 ), m_bDelivered( false ), m_nLastDelivered( 0 ), m_eError( LINK_OK )
     {
         m_stats.nSent = m_stats.nResent = m_stats.nNaks = m_stats.nDictionaryBytes = 0;
@@ -84,8 +84,13 @@ namespace IASLib
         nType = (unsigned)getUInt( header, 0, 1 );
         nNumber = (unsigned)getUInt( header, 1, 2 );
         size_t nLength = (size_t)getUInt( header, 3, 4 );
-        if ( nLength > 0x7FFFFFFF )
-            return fail( LINK_CLOSED, "frame too long" );
+            // Check before allocating: a peer must not make us set aside
+            // memory for a frame it never sends.
+        if ( nLength > m_nMaxFrame )
+            return fail( LINK_PROTOCOL, "frame too long: " + std::to_string( nLength ) + " bytes" );
+        bool bEmpty = nType == FRAME_ACK || nType == FRAME_NAK_RESET || nType == FRAME_NAK_RESEND;
+        if ( ( bEmpty && nLength != 0 ) || ( nType == FRAME_NAK_DICT && nLength != 10 ) )
+            return fail( LINK_PROTOCOL, "control frame of the wrong size" );
         payload.resize( nLength );
         size_t nAt = 0;
         while ( nAt < nLength )

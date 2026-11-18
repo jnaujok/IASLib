@@ -283,9 +283,9 @@ namespace IASLib
             }
             if ( bFloat )
             {
-                char *pEnd = NULL;
-                double dValue = strtod( strText.c_str(), &pEnd );
-                if ( strText.empty() || *pEnd != '\0' )
+                size_t nUsed = 0;
+                double dValue = SjsonUtil::parseDouble( strText, &nUsed );
+                if ( strText.empty() || nUsed != strText.size() )
                     throw CSjsonException( SJSON_ERROR_MALFORMED, "invalid float: " + strText );
                 return new CNumberNode( dValue );
             }

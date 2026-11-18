@@ -593,7 +593,10 @@ namespace IASLib
     CJsonNode *CSjsonSchemaCodec::Impl::decodeArray( CSjsonBitReader &in, const CSjsonSchemaType &schema, const std::string &strKey )
     {
         unsigned long long nCount = in.readNybble();
-        if ( nCount > in.remaining() )
+            // Items usually take at least a bit each, but null, a one-value
+            // enum or a fixed integer take none, so allow some more.
+        const unsigned long long MAX_ZERO_BIT_ITEMS = 1ULL << 20;
+        if ( nCount > in.remaining() && nCount > MAX_ZERO_BIT_ITEMS )
             throw CSjsonException( SJSON_ERROR_MALFORMED, "array longer than the message" );
         std::string strItemKey = strKey + "[]";
         std::unique_ptr<CArrayNode> pArray( new CArrayNode() );

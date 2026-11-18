@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <clocale>
 #include <cstring>
 
 #ifdef IASLIB_SJSON_LZ4__
@@ -92,22 +93,25 @@ namespace IASLib
 
         unsigned crc32( const unsigned char *pData, size_t nLength )
         {
-            static unsigned s_aTable[ 256 ];
-            static bool s_bReady = false;
-            if ( ! s_bReady )
+                // Built once, thread-safely (C++11 static initialization).
+            struct Table
             {
-                for ( unsigned n = 0; n < 256; n++ )
+                unsigned a[ 256 ];
+                Table( void )
                 {
-                    unsigned c = n;
-                    for ( int k = 0; k < 8; k++ )
-                        c = ( c & 1 ) ? 0xEDB88320U ^ ( c >> 1 ) : c >> 1;
-                    s_aTable[ n ] = c;
+                    for ( unsigned n = 0; n < 256; n++ )
+                    {
+                        unsigned c = n;
+                        for ( int k = 0; k < 8; k++ )
+                            c = ( c & 1 ) ? 0xEDB88320U ^ ( c >> 1 ) : c >> 1;
+                        a[ n ] = c;
+                    }
                 }
-                s_bReady = true;
-            }
+            };
+            static const Table s_table;
             unsigned nCrc = 0xFFFFFFFFU;
             for ( size_t n = 0; n < nLength; n++ )
-                nCrc = s_aTable[ ( nCrc ^ pData[ n ] ) & 0xFF ] ^ ( nCrc >> 8 );
+                nCrc = s_table.a[ ( nCrc ^ pData[ n ] ) & 0xFF ] ^ ( nCrc >> 8 );
             return nCrc ^ 0xFFFFFFFFU;
         }
 
@@ -176,6 +180,21 @@ namespace IASLib
             return nPad <= 2;
         }
 
+        double parseDouble( const std::string &strText, size_t *pnUsed )
+        {
+            std::string strLocal( strText );
+            const char *pszPoint = localeconv()->decimal_point;
+            if ( pszPoint && pszPoint[ 0 ] && pszPoint[ 0 ] != '.' && pszPoint[ 1 ] == '\0' )
+                for ( size_t n = 0; n < strLocal.size(); n++ )
+                    if ( strLocal[ n ] == '.' )
+                        strLocal[ n ] = pszPoint[ 0 ];
+            char *pEnd = NULL;
+            double dValue = strtod( strLocal.c_str(), &pEnd );
+            if ( pnUsed )
+                *pnUsed = (size_t)( pEnd - strLocal.c_str() );
+            return dValue;
+        }
+
         std::string floatRepr( double dValue )
         {
             if ( std::isnan( dValue ) )
@@ -187,6 +206,8 @@ namespace IASLib
             char szBuffer[ 64 ];
             for ( int nPrecision = 1; nPrecision <= 17; nPrecision++ )
             {
+                    // snprintf and strtod agree on the C locale's decimal point,
+                    // whatever it is; only the digits are taken below.
                 snprintf( szBuffer, sizeof( szBuffer ), "%.*e", nPrecision - 1, dValue );
                 if ( strtod( szBuffer, NULL ) == dValue )
                     break;
@@ -197,7 +218,7 @@ namespace IASLib
             size_t nE = strText.find( 'e' );
             std::string strDigits;
             for ( size_t n = bNegative ? 1 : 0; n < nE; n++ )
-                if ( strText[ n ] != '.' )
+                if ( strText[ n ] >= '0' && strText[ n ] <= '9' )     // skips the decimal point, '.' or ','
                     strDigits += strText[ n ];
             while ( strDigits.size() > 1 && strDigits[ strDigits.size() - 1 ] == '0' )
                 strDigits.erase( strDigits.size() - 1 );

@@ -292,7 +292,7 @@ namespace IASLib
             }
             if ( ! bAny || nPos != strText.size() )
                 throw CSjsonException( SJSON_ERROR_MALFORMED, "could not convert string to float: '" + strValue + "'" );
-            return strtod( strNumber.c_str(), NULL );
+            return SjsonUtil::parseDouble( strNumber );
         }
 
         // ---- the parsed schema documents ----------------------------------------
@@ -826,7 +826,7 @@ namespace IASLib
                         return dDefault;
                     if ( *pValue == "unbounded" )
                         return std::numeric_limits<double>::infinity();
-                    return strtod( pyInt( *pValue ).c_str(), NULL );
+                    return SjsonUtil::parseDouble( pyInt( *pValue ) );
                 }
 
                     /// A sequence / choice / all / group and the elements in it.
