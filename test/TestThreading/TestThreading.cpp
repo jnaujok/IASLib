@@ -14,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <thread>
 #include <vector>
 
@@ -28,13 +29,51 @@ static int g_nFailures = 0;
         if ( ! ( condition ) ) { \
             g_nFailures++; \
             printf( "  FAILED %s:%d: %s\n", __FILE__, __LINE__, #condition ); \
+            fflush( stdout ); \
         } \
     } while ( 0 )
+
+    // What the test is doing now, for the watchdog to report.
+static std::atomic<const char *> g_pszStep( "starting" );
+static std::atomic<long long> g_llStepStarted( 0 );
+
+static long long nowMs( void )
+{
+    return (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch() ).count();
+}
+
+static void step( const char *pszStep )
+{
+    g_pszStep = pszStep;
+    g_llStepStarted = nowMs();
+}
 
 static void section( const char *pszName )
 {
     printf( "%s\n", pszName );
     fflush( stdout );
+    step( pszName );
+}
+
+    // A step that takes more than a minute is stuck: say which one, and
+    // stop, rather than be killed silently by ctest's timeout. (The Windows
+    // CI run hung once in the CSemaphore section; this says where, next
+    // time.)
+static void startWatchdog( void )
+{
+    std::thread( []() {
+        for ( ;; )
+        {
+            std::this_thread::sleep_for( std::chrono::seconds( 1 ) );
+            if ( nowMs() - g_llStepStarted.load() > 60000 )
+            {
+                printf( "\nWATCHDOG: stuck for 60 s in: %s\n", g_pszStep.load() );
+                fflush( stdout );
+                _Exit( 2 );
+            }
+        }
+    } ).detach();
 }
 
 static long long elapsedMs( std::chrono::steady_clock::time_point tpStart )
@@ -219,6 +258,7 @@ static void testSemaphore( void )
 {
     section( "CSemaphore" );
 
+    step( "CSemaphore: counting and timed waits" );
     CSemaphore oSem( 2 );
     CHECK( oSem.TryWait() && oSem.TryWait() );
     CHECK( ! oSem.TryWait() );
@@ -230,6 +270,7 @@ static void testSemaphore( void )
     CHECK( oSem.TimedWait( 100 ) );
 
         // Woken from another thread.
+    step( "CSemaphore: woken from another thread" );
     std::thread oPoster( [&oSem]() { CThread::Millisleep( 50 ); oSem.Post(); } );
     tpStart = std::chrono::steady_clock::now();
     CHECK( oSem.TimedWait( 5000 ) );
@@ -237,6 +278,7 @@ static void testSemaphore( void )
     oPoster.join();
 
         // A producer and consumers: every item taken exactly once.
+    step( "CSemaphore: starting the consumers" );
     CSemaphore oItems( 0 );
     CMutex oLock;
     std::vector<int> aQueue;
@@ -259,6 +301,7 @@ static void testSemaphore( void )
             }
         } ) );
     }
+    step( "CSemaphore: producing" );
     for ( int n = 1; n <= 1000; n++ )
     {
         {
@@ -267,6 +310,7 @@ static void testSemaphore( void )
         }
         oItems.Post();
     }
+    step( "CSemaphore: waiting for the consumers" );
     CHECK( waitFor( [&nTaken]() { return nTaken == 1000; }, 5000 ) );
     for ( int t = 0; t < 4; t++ )
     {
@@ -276,6 +320,7 @@ static void testSemaphore( void )
         }
         oItems.Post();
     }
+    step( "CSemaphore: joining the consumers" );
     for ( size_t t = 0; t < aConsumers.size(); t++ )
         aConsumers[t].join();
     CHECK( nSum == 500500 );
@@ -447,6 +492,8 @@ static void testServerThread( void )
 
 int main( void )
 {
+    step( "starting" );
+    startWatchdog();
     testThread();
     testSemaphore();
     testPool();
