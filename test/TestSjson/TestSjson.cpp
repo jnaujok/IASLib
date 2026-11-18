@@ -215,6 +215,155 @@ static void testPythonVectors( const CJsonNode &vectors, const char *pszSet, boo
     }
 }
 
+    // Decodes with a NAK answer given as hex (loaded only when needed).
+static CJsonNode *decodeWithHexNak( CSjson &receiver, const std::vector<unsigned char> &packet, const std::string &strNak )
+{
+    CJsonNode *pValue = receiver.decode( packet.data(), packet.size() );
+    if ( pValue == NULL && receiver.lastError() == SJSON_ERROR_UNKNOWN_TAG )
+    {
+        std::vector<unsigned char> nak = fromHex( strNak );
+        receiver.loadDictionary( nak.data(), nak.size() );
+        pValue = receiver.decode( packet.data(), packet.size() );
+    }
+    return pValue;
+}
+
+static std::vector<std::string> strings( const CJsonNode &list )
+{
+    std::vector<std::string> aOut;
+    for ( int n = 0; n < list.size(); n++ )
+        aOut.push_back( list.path( n ).textString() );
+    return aOut;
+}
+
+static void testSchemas( const CJsonNode &vectors )
+{
+    printf( "Schemas (loaded here, compared with Python)\n" );
+    const CJsonNode &entries = vectors.path( "schemas" );
+    for ( int e = 0; e < entries.size(); e++ )
+    {
+        const CJsonNode &entry = entries.path( e );
+        std::string strFile = entry.path( "file" ).textString();
+        std::shared_ptr<const CSjsonSchemaModel> pModel;
+        try
+        {
+            pModel.reset( SjsonSchema::loadSchema( "schemas/" + strFile ) );
+        }
+        catch ( const CSjsonException &error )
+        {
+            CHECK_EQ_STR( strFile + " load", error.what(), "" );
+            continue;
+        }
+        CHECK( pModel->fingerprint() == (unsigned)entry.path( "fingerprint" ).longValue() );
+        CHECK( pModel->fieldNames() == strings( entry.path( "names" ) ) );
+        CHECK( pModel->enumStrings() == strings( entry.path( "enums" ) ) );
+        std::unique_ptr<CSjsonDictionary> pDictionary( CSjsonDictionary::fromSchema( pModel ) );
+        CHECK( pDictionary->fingerprint() == pModel->fingerprint() );
+
+        const CJsonNode &documents = entry.path( "documents" );
+        const CJsonNode &packets = entry.path( "packets" );
+        const CJsonNode &streamPackets = entry.path( "stream_packets" );
+        int nSame = 0, nDecoded = 0, nStreamDecoded = 0, nRoundTrip = 0;
+        CSjson sender( 1 );
+        sender.setDictionary( *pDictionary );
+        sender.setLz4( false );
+        CSjson receiver( 2 ), streamReceiver( 3 ), cppReceiver( 4 );
+        receiver.registerDictionary( *pDictionary );
+        streamReceiver.registerDictionary( *pDictionary );
+        cppReceiver.registerDictionary( *pDictionary );
+        CSjson streamSender( 6, true );
+        streamSender.setDictionary( *pDictionary );
+        for ( int n = 0; n < documents.size(); n++ )
+        {
+            const CJsonNode &doc = documents.path( n );
+            std::vector<unsigned char> packet;
+            CHECK( sender.encode( doc, packet ) );
+            if ( toHex( packet ) == packets.path( n ).textString() )
+                nSame++;
+            else
+                CHECK_EQ_STR( strFile + " #" + std::to_string( n ), toHex( packet ), packets.path( n ).textString() );
+
+            std::vector<unsigned char> python = fromHex( packets.path( n ).textString() );
+            std::unique_ptr<CJsonNode> pValue( decodeWithHexNak( receiver, python, entry.path( "nak" ).textString() ) );
+                // An enumerated object comes back in the schema's member order
+                // (as in Python), so compare with sorted keys.
+            if ( pValue && SjsonSchema::pythonJson( pValue.get() ) == SjsonSchema::pythonJson( &doc ) )
+                nDecoded++;
+            else
+                CHECK_EQ_STR( strFile + " decode #" + std::to_string( n ) + " (" + receiver.lastErrorText() + ")", json( pValue.get() ), json( &doc ) );
+
+            std::vector<unsigned char> stream = fromHex( streamPackets.path( n ).textString() );
+            pValue.reset( streamReceiver.decode( stream.data(), stream.size() ) );
+                // Schema order: compare member sets loosely through JSON with sorted keys.
+            if ( pValue && SjsonSchema::pythonJson( pValue.get() ) == SjsonSchema::pythonJson( &doc ) )
+                nStreamDecoded++;
+            else
+                CHECK_EQ_STR( strFile + " stream decode #" + std::to_string( n ) + " (" + streamReceiver.lastErrorText() + ")", json( pValue.get() ), json( &doc ) );
+
+            CHECK( streamSender.encode( doc, packet ) );
+            pValue.reset( cppReceiver.decode( packet.data(), packet.size() ) );
+            if ( pValue && SjsonSchema::pythonJson( pValue.get() ) == SjsonSchema::pythonJson( &doc ) )
+                nRoundTrip++;
+            else
+                CHECK_EQ_STR( strFile + " stream round trip #" + std::to_string( n ) + " (" + cppReceiver.lastErrorText() + ")", json( pValue.get() ), json( &doc ) );
+        }
+        printf( "    %-20s %2d documents: %d identical bytes, %d decoded, %d stream decoded, %d stream round trips\n", strFile.c_str(),
+                documents.size(), nSame, nDecoded, nStreamDecoded, nRoundTrip );
+    }
+}
+
+static void testCompiledDictionaries( const CJsonNode &vectors )
+{
+    printf( "Compiled dictionaries (written by Python)\n" );
+    const CJsonNode &entries = vectors.path( "compiled" );
+    for ( int e = 0; e < entries.size(); e++ )
+    {
+        const CJsonNode &entry = entries.path( e );
+        std::string strLabel = entry.path( "label" ).textString();
+        std::unique_ptr<CSjsonDictionary> pDictionary;
+        try
+        {
+            pDictionary.reset( CSjsonDictionary::fromJson( entry.path( "dictionary" ) ) );
+        }
+        catch ( const CSjsonException &error )
+        {
+            CHECK_EQ_STR( strLabel + " load", error.what(), "" );
+            continue;
+        }
+        CHECK( pDictionary->fingerprint() == (unsigned)entry.path( "fingerprint" ).longValue() );
+        std::unique_ptr<CJsonNode> pSaved( pDictionary->toJson() );
+        std::unique_ptr<CSjsonDictionary> pReloaded( CSjsonDictionary::fromJson( *pSaved ) );
+        CHECK( pReloaded->fingerprint() == pDictionary->fingerprint() );
+
+        const CJsonNode &documents = entry.path( "documents" );
+        const CJsonNode &packets = entry.path( "packets" );
+        int nSame = 0, nDecoded = 0;
+        CSjson sender( 1 ), receiver( 2 );
+        sender.setDictionary( *pDictionary );
+        sender.setLz4( false );
+        receiver.registerDictionary( *pReloaded );
+        bool bText = ! pDictionary->textDictionary().empty();
+        for ( int n = 0; n < documents.size(); n++ )
+        {
+            std::vector<unsigned char> packet;
+            CHECK( sender.encode( documents.path( n ), packet ) );
+                // A packet with a text block has zstd output inside it, which
+                // may differ between zstd versions; it is checked by decoding.
+            if ( toHex( packet ) == packets.path( n ).textString() )
+                nSame++;
+            else if ( ! bText )
+                CHECK_EQ_STR( strLabel + " #" + std::to_string( n ), toHex( packet ), packets.path( n ).textString() );
+            std::vector<unsigned char> python = fromHex( packets.path( n ).textString() );
+            std::unique_ptr<CJsonNode> pValue( decodeWithHexNak( receiver, python, entry.path( "nak" ).textString() ) );
+            if ( pValue && SjsonSchema::pythonJson( pValue.get() ) == SjsonSchema::pythonJson( &documents.path( n ) ) )
+                nDecoded++;
+            else
+                CHECK_EQ_STR( strLabel + " decode #" + std::to_string( n ) + " (" + receiver.lastErrorText() + ")", json( pValue.get() ), json( &documents.path( n ) ) );
+        }
+        printf( "    %-26s fingerprint ok, %d documents: %d identical bytes, %d decoded\n", strLabel.c_str(), documents.size(), nSame, nDecoded );
+    }
+}
+
 static CJsonNode *document( int n )
 {
     CObjectNode *pObject = new CObjectNode();
@@ -363,6 +512,8 @@ int main( void )
         testPythonVectors( *pVectors, "lz4", false );
         if ( CSjson::zstdAvailable() )
             testPythonVectors( *pVectors, "stream", false );
+        testSchemas( *pVectors );
+        testCompiledDictionaries( *pVectors );
     }
     testStreamMode();
     testFuzz();

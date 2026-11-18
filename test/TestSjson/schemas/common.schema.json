@@ -1,0 +1,22 @@
+{
+  "$defs": {
+    "customer": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "integer"},
+        "email": {"type": "string", "format": "email"},
+        "vip": {"type": "boolean"},
+        "address": {"$ref": "#/$defs/address"}
+      }
+    },
+    "address": {
+      "type": "object",
+      "properties": {
+        "street": {"type": "string"},
+        "city": {"type": "string"},
+        "country": {"type": "string", "enum": ["US", "CA", "MX"]}
+      }
+    }
+  }
+}

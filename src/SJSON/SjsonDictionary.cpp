@@ -13,7 +13,17 @@
 #ifdef IASLIB_SJSON_SUPPORT__
 
 #include "SjsonDictionary.h"
+#include "SjsonSchema.h"
 #include "SjsonStream.h"
+#include "SjsonUtil.h"
+
+#include "ArrayNode.h"
+#include "JsonNode.h"
+#include "JsonParser.h"
+#include "ObjectNode.h"
+
+#include <fstream>
+#include <sstream>
 
 namespace IASLib
 {
@@ -28,7 +38,8 @@ namespace IASLib
         delete m_pValues;
     }
 
-    CSjsonDictionary *CSjsonDictionary::fromNames( const std::vector<std::string> &aNames, const std::vector<std::string> &aValues )
+    CSjsonDictionary *CSjsonDictionary::fromNames( const std::vector<std::string> &aNames, const std::vector<std::string> &aValues,
+                                                   const std::shared_ptr<const CSjsonSchemaModel> &pSchema, const std::string &strTextDictionary )
     {
         CSjsonDictionary *pDictionary = new CSjsonDictionary( true );
         for ( size_t n = 0; n < aNames.size(); n++ )
@@ -37,7 +48,135 @@ namespace IASLib
         for ( size_t n = 0; n < aValues.size(); n++ )
             pDictionary->m_pValues->add( aValues[ n ] );
         pDictionary->m_pValues->m_nBaseSize = pDictionary->m_pValues->m_nLastIndex;
+        pDictionary->m_pSchema = pSchema;
+        pDictionary->m_strTextDictionary = strTextDictionary;
+        pDictionary->setFingerprint( pDictionary->computeFingerprint() );
         return pDictionary;
+    }
+
+    CSjsonDictionary *CSjsonDictionary::fromSchema( const std::shared_ptr<const CSjsonSchemaModel> &pSchema )
+    {
+        return fromNames( pSchema->fieldNames(), pSchema->enumStrings(), pSchema );
+    }
+
+    unsigned CSjsonDictionary::computeFingerprint( void ) const
+    {
+        std::vector<std::string> aNames = baseNames(), aValues = m_pValues ? m_pValues->baseNames() : std::vector<std::string>();
+        if ( m_pSchema && m_strTextDictionary.empty() && aNames == m_pSchema->fieldNames() && aValues == m_pSchema->enumStrings() )
+            return m_pSchema->fingerprint();
+        CObjectNode content;
+        CArrayNode *pTags = content.putArray( "tags" );
+        for ( size_t n = 0; n < aNames.size(); n++ )
+            pTags->add( aNames[ n ] );
+        CArrayNode *pValues = content.putArray( "values" );
+        for ( size_t n = 0; n < aValues.size(); n++ )
+            pValues->add( aValues[ n ] );
+        if ( m_pSchema )
+            content.set( "schema", m_pSchema->canonical() );
+        else
+            content.putNull( "schema" );
+        if ( ! m_strTextDictionary.empty() )
+            content.put( "text", (long long)SjsonUtil::crc32( (const unsigned char *)m_strTextDictionary.data(), m_strTextDictionary.size() ) );
+        std::string strText = SjsonSchema::pythonJson( &content, true );
+        return SjsonUtil::crc32( (const unsigned char *)strText.data(), strText.size() );
+    }
+
+    CJsonNode *CSjsonDictionary::toJson( void ) const
+    {
+        CObjectNode *pOut = new CObjectNode();
+        pOut->put( "format", "sjson-dictionary" );
+        pOut->put( "version", 1 );
+        pOut->put( "fingerprint", (long long)computeFingerprint() );
+        CArrayNode *pTags = pOut->putArray( "tags" );
+        std::vector<std::string> aNames = baseNames();
+        for ( size_t n = 0; n < aNames.size(); n++ )
+            pTags->add( aNames[ n ] );
+        CArrayNode *pValues = pOut->putArray( "values" );
+        std::vector<std::string> aValues = m_pValues ? m_pValues->baseNames() : std::vector<std::string>();
+        for ( size_t n = 0; n < aValues.size(); n++ )
+            pValues->add( aValues[ n ] );
+        if ( m_pSchema )
+            pOut->set( "schema", m_pSchema->toJson() );
+        else
+            pOut->putNull( "schema" );
+        if ( m_strTextDictionary.empty() )
+            pOut->putNull( "text_dictionary" );
+        else
+            pOut->put( "text_dictionary", SjsonUtil::base64Encode( m_strTextDictionary ) );
+        return pOut;
+    }
+
+    CSjsonDictionary *CSjsonDictionary::fromJson( const CJsonNode &data )
+    {
+        std::unique_ptr<CObjectNode> pWrapped;
+        const CJsonNode *pData = &data;
+        if ( data.isArray() )
+        {
+            pWrapped.reset( new CObjectNode() );
+            pWrapped->set( "tags", data.clone() );
+            pData = pWrapped.get();
+        }
+        if ( ! pData->isObject() )
+            throw CSjsonException( SJSON_ERROR_MALFORMED, "a compiled dictionary must be an object or a list" );
+        const CJsonNode &format = pData->path( "format" );
+        if ( ! format.isMissingNode() && ! ( format.isTextual() && format.textString() == "sjson-dictionary" ) )
+            throw CSjsonException( SJSON_ERROR_MALFORMED, "not an SJSON dictionary" );
+        const CJsonNode &version = pData->path( "version" );
+        if ( ! version.isMissingNode() && ! ( version.isIntegralNumber() && version.longValue() == 1 ) )
+            throw CSjsonException( SJSON_ERROR_MALFORMED, "unsupported dictionary version" );
+        std::vector<std::string> aLists[ 2 ];
+        const char *apszKeys[ 2 ] = { "tags", "values" };
+        for ( int k = 0; k < 2; k++ )
+        {
+            const CJsonNode &list = pData->path( apszKeys[ k ] );
+            if ( list.isMissingNode() )
+                continue;
+            if ( ! list.isArray() )
+                throw CSjsonException( SJSON_ERROR_MALFORMED, "dictionary tags and values must be string lists" );
+            std::set<std::string> setSeen;
+            for ( int n = 0; n < list.size(); n++ )
+            {
+                if ( ! list.path( n ).isTextual() )
+                    throw CSjsonException( SJSON_ERROR_MALFORMED, "dictionary tags and values must be string lists" );
+                if ( ! setSeen.insert( list.path( n ).textString() ).second )
+                    throw CSjsonException( SJSON_ERROR_MALFORMED, "dictionary tags and values must be unique" );
+                aLists[ k ].push_back( list.path( n ).textString() );
+            }
+        }
+        std::shared_ptr<const CSjsonSchemaModel> pSchema;
+        const CJsonNode &schema = pData->path( "schema" );
+        if ( ! schema.isMissingNode() && ! schema.isNull() )
+            pSchema.reset( CSjsonSchemaModel::fromJson( schema ) );
+        std::string strText;
+        const CJsonNode &text = pData->path( "text_dictionary" );
+        if ( text.isTextual() && ! SjsonUtil::base64Decode( text.textString(), strText ) )
+            throw CSjsonException( SJSON_ERROR_MALFORMED, "malformed text dictionary" );
+        std::unique_ptr<CSjsonDictionary> pDictionary( fromNames( aLists[ 0 ], aLists[ 1 ], pSchema, strText ) );
+        const CJsonNode &recorded = pData->path( "fingerprint" );
+        if ( recorded.isNumber() && ( ! recorded.isIntegralNumber() || (unsigned long long)recorded.longValue() != pDictionary->fingerprint() ) )
+            throw CSjsonException( SJSON_ERROR_MALFORMED, "dictionary fingerprint mismatch: the file was edited or corrupted" );
+        return pDictionary.release();
+    }
+
+    CSjsonDictionary *CSjsonDictionary::load( const std::string &strPath )
+    {
+        std::ifstream file( strPath.c_str(), std::ios::binary );
+        if ( ! file )
+            throw CSjsonException( SJSON_ERROR_MALFORMED, "cannot read dictionary " + strPath );
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::unique_ptr<CJsonNode> pData( CJsonParser::parse( buffer.str() ) );
+        if ( ! pData )
+            throw CSjsonException( SJSON_ERROR_MALFORMED, "cannot parse dictionary " + strPath );
+        return fromJson( *pData );
+    }
+
+    bool CSjsonDictionary::save( const std::string &strPath ) const
+    {
+        std::unique_ptr<CJsonNode> pData( toJson() );
+        std::ofstream file( strPath.c_str(), std::ios::binary );
+        file << pData->toJson( 1 );
+        return (bool)file;
     }
 
     unsigned long long CSjsonDictionary::get( const std::string &strTag ) const
@@ -193,9 +332,7 @@ namespace IASLib
 
     CSjsonDictionary *CSjsonDictionary::freshCopy( void ) const
     {
-        CSjsonDictionary *pCopy = fromNames( baseNames(), m_pValues ? m_pValues->baseNames() : std::vector<std::string>() );
-        pCopy->m_pSchema = m_pSchema;
-        pCopy->m_strTextDictionary = m_strTextDictionary;
+        CSjsonDictionary *pCopy = fromNames( baseNames(), m_pValues ? m_pValues->baseNames() : std::vector<std::string>(), m_pSchema, m_strTextDictionary );
         pCopy->m_bFingerprint = m_bFingerprint;
         pCopy->m_nFingerprint = m_nFingerprint;
         return pCopy;

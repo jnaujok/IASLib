@@ -5713,6 +5713,2264 @@ null
 ]
 }
 ],
+"schemas": [
+{
+"file": "order.schema.json",
+"fingerprint": 4210166656,
+"names": [
+"orderId",
+"status",
+"items",
+"created",
+"total",
+"customer",
+"notes",
+"id",
+"email",
+"vip",
+"address",
+"sku",
+"count",
+"price",
+"street",
+"city",
+"country",
+"legacyCode"
+],
+"enums": [
+"PENDING",
+"PAID",
+"SHIPPED",
+"CANCELLED",
+"US",
+"CA",
+"MX"
+],
+"documents": [
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "PAID",
+"total": 130.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": "leave at door"
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "LOST",
+"total": 131.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "x",
+"status": "PENDING",
+"items": []
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 133.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null,
+"extra": 1
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 134.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "PAID",
+"total": 135.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": "leave at door"
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "LOST",
+"total": 136.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "x",
+"status": "PENDING",
+"items": []
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 138.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null,
+"extra": 1
+}
+],
+"packets": [
+"000147f5e4170187eff3450d961ea6a5a530a45b81b984a6a6451560b4c4c0c39466a640145592d323030e590a01001c75e2ad9f1742671893794cdfc27cdc03582fcc4416d65730a310a75400",
+"000147f5e4170189a7f3450d961ea6a5a530a45b817984c2a6451560b4c4c0c39466a640145592d323030e590a01001c75e2ad9f1742671893794cdfc27cdc03582fcc4416d657301ad8cac2ecca40c2e840c8dedee583a2c668",
+"000143f5e417018b4a85e68a1b2c3d423d4b4a6148b702273249806f055cc2635323958c5582d31303072e519a996a0205631564b4c8c0c1cb9642805a80418d50875e2aa5d9f1742671893794cdfc27cdc03582fd44bb0831105b595ce117128007007154a983",
+"000147f5e417010c802f001bd6e0ce80",
+"000143f5e417018b3685e68a1b2c3d423d4b4a6148b70227119573099d4c8e5631560b4c4c0c1cb9466a65a808158c5592d32303072e590a016a010635421d78aa9767c5d099c624de5337f09f3700d60bf512ec20c4416d6573845c4a001c4268041663876940",
+"000147f5e4170187eff3450d961ea6a5a530a45b81b984d2a6451560b4c4c0c39466a640145592d323030e590a01001c75e2ad9f1742671893794cdfc27cdc03582fcc4416d65730f8d89e1e00",
+"000147f5e4170189a7f3450d961ea6a5a530a45b817984d6a6451560b4c4c0c39466a640145592d323030e590a01001c75e2ad9f1742671893794cdfc27cdc03582fcc4416d657301ad8cac2ecca40c2e840c8dedee4a618e004",
+"000143f5e417018b4a85e68a1b2c3d423d4b4a6148b702273249806f055cc26d5323958c5582d31303072e519a996a0205631564b4c8c0c1cb9642805a80418d50875e2aa5d9f1742671893794cdfc27cdc03582fd44bb0831105b595ce117128007006ba6329c",
+"000147f5e417010c802f001bd6e0ce80",
+"000143f5e417018b3685e68a1b2c3d423d4b4a6148b7022711957309c54c8e5631560b4c4c0c1cb9466a65a808158c5592d32303072e590a016a010635421d78aa9767c5d099c624de5337f09f3700d60bf512ec20c4416d6573845c4a001c42680412f5a9fde0"
+],
+"nak": "000184c276f726465724964119cdd185d1d5cc656974656d7321d8dc99585d19590a5746f74616c3218dd5cdd1bdb595c8e56e6f746573409a59125656d61696c50dd9a5c1676164647265737360dcdadd5a5636f756e74715c1c9a58d95e67374726565748408c6d2e8f3089d8dbdd5b9d1c9e61253632b3b0b1bca1b7b232c2656578747261384ea08a9c88929c8e222820a4a20cea69092a0a08a8844a1a0a721a2a62622a2144aaa66121a09c49ab0",
+"stream_packets": [
+"00014e00febc82e0318a46e516a5ffa00d0e002008262846486668868006460646c5a62625a6270a86260746460746660b400e0c2e880caf0c2dae0d8ca5cc6deda0079c391cc2535320882ac169898181ca3353200220ab25a64606072c8500a211c1d78aa70304416d65730bc542c2b8",
+"00014c02ec5845c00001b19585d9948185d08191bdbdc800f8850883c40e5147f09b80",
+"00014804f13fad10000021040401f94c24068709045198e3e0f839924c0378173098d4c9283639a31560b4c4c0c05ca33532202b031564b4c8c0c05cb21402887142212a58875e2a8f81141421088c4416d65731c4a072b03560",
+"00014c06e2400002f000fd5449be",
+"00014808ec8498000032bc3a3930805101208a331e13c40e234200f110201668223840",
+"00014c0ae3001f312100331393fcaea0",
+"00014c0ce3401f10a120310806c1caa2",
+"0001480ee3905988941e1ec446ada46930",
+"00014c10d20a129d8265",
+"00014812e3a05988942206222202d4ff78"
+]
+},
+{
+"file": "common.schema.json",
+"fingerprint": 1995662786,
+"names": [
+"id",
+"email",
+"vip",
+"address",
+"street",
+"city",
+"country"
+],
+"enums": [
+"US",
+"CA",
+"MX"
+],
+"documents": [
+{
+"z": "2026-11-18T10:20:30Z",
+"a": "6f9619ff-8b86-4011-b42d-00c04fc964ff",
+"x1": 5,
+"other": "s"
+},
+{
+"kind": "q"
+}
+],
+"packets": [
+"000146ede6cb857c543d4b4a6148b7029709be5867fe2e190046d0b403013f2593fd48156c17302ac329c600",
+"000146ede6cb850f56305c401fa237fe"
+],
+"nak": "00016044d2c822b2b6b0b4b60c6ecd2e043b0b2323932b9b994ce6e8e4cacae86231b4ba3c9cec6deeadce8e4f280bd242c2a13c18acadee8d0cae4c235b4b7320c2255531090d04624d58",
+"stream_packets": [
+"00014e00ddbcd970b11d456516a5ffa00d0200200f400c200f06200dee8d0cae4006460646c5a62625a6270a86260746460746660b40142229aab8f8384df2c33ff170c8023685a01809f92c9fe205182e7748ead840",
+"00014c02e68414000035b4b73200502c8c171e0f780240"
+]
+},
+{
+"file": "order.xsd",
+"fingerprint": 4042089798,
+"names": [
+"order",
+"created",
+"status",
+"item",
+"@id",
+"customer",
+"note",
+"giftMessage",
+"@createdBy",
+"@revision",
+"name",
+"@partyId",
+"email",
+"vip",
+"referrer",
+"sku",
+"count",
+"price",
+"#text",
+"@currency"
+],
+"enums": [
+"PENDING",
+"PAID",
+"SHIPPED"
+],
+"documents": [
+{
+"order": {
+"@id": "A1",
+"created": "2026-11-18T10:20:30Z",
+"status": "PAID",
+"item": [
+{
+"sku": "X",
+"count": 2,
+"price": {
+"#text": 1.5,
+"@currency": "USD"
+}
+}
+],
+"customer": {
+"@partyId": 7,
+"name": "Pat",
+"vip": true
+},
+"@revision": 3
+}
+},
+{
+"order": {
+"@id": "A1",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"item": [
+{
+"sku": "X",
+"count": 2,
+"price": {
+"#text": 1.5,
+"@currency": "USD"
+}
+}
+],
+"customer": {
+"@partyId": 7,
+"name": "Pat",
+"vip": true
+},
+"@revision": 3,
+"note": [
+"a",
+"b"
+]
+}
+},
+{
+"order": {
+"bad": 1
+}
+},
+{
+"order": {
+"@id": "A1",
+"created": "2026-11-18T10:20:30Z",
+"status": "PAID",
+"item": [
+{
+"sku": "X",
+"count": 2,
+"price": {
+"#text": 1.5,
+"@currency": "USD"
+}
+}
+],
+"customer": {
+"@partyId": 7,
+"name": "Pat",
+"vip": true
+},
+"@revision": 3
+}
+},
+{
+"order": {
+"@id": "A1",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"item": [
+{
+"sku": "X",
+"count": 2,
+"price": {
+"#text": 1.5,
+"@currency": "USD"
+}
+}
+],
+"customer": {
+"@partyId": 7,
+"name": "Pat",
+"vip": true
+},
+"@revision": 3,
+"note": [
+"a",
+"b"
+]
+}
+},
+{
+"order": {
+"bad": 1
+}
+}
+],
+"packets": [
+"000147e1daca8d6c63a9694c2916e05082b000f8c694355534441a830ba03f31508001950a252080",
+"000147e1daca8d7cf3a9694c2916e06082b000f8c694355534441a830ba03c40b082c598a84000fb7f08f580",
+"000143e1daca8d1550d855008008e64af4a0",
+"000147e1daca8d6c63a9694c2916e05082b000f8c694355534441a830ba03f31508001950a252080",
+"000147e1daca8d7cf3a9694c2916e06082b000f8c694355534441a830ba03c40b082c598a84000fb7f08f580",
+"000143e1daca8d1550d855008008e64af4a0"
+],
+"nak": "0001854256f7264657211d8dc99585d1959066737461747573211a5d195b4a34069643218dd5cdd1bdb595c8e46e6f746542d9da599d13595cdcd859d952a4063726561746564427952501c995d9a5cda5bdb9646e616d6562101c185c9d1e52591a5656d61696c70dd9a5c1e872656665727265728406e6d6eb08958dbdd5b9d2122b83934b1b2c2652374657874851280c6eae4e4cadcc6f30a8d898590613a822a72224a723888a082928833a9a424a82822a20",
+"stream_packets": [
+"00014e00fc3b5951b0e243c516a5ffa00d15000006460646c5a62625a6270a86260746460746660b400422710200ac000938c6940d554d10406a0c2e803ccc5420001d0ea15780",
+"00014c02e4e010cc510080584058a2285f8cde80",
+"00014804e7039000003130b2005021281856201e6a47f2d0",
+"00014c06d209933f0c1d",
+"00014c08d20999a12117",
+"0001480ae1005889bf7365c0"
+]
+},
+{
+"file": "bounds.json",
+"fingerprint": 1985912921,
+"names": [
+"n",
+"m",
+"f",
+"g",
+"pair",
+"p2",
+"e"
+],
+"enums": [
+"1",
+"ünï",
+"😀",
+"\u0001"
+],
+"documents": [
+{
+"n": 3,
+"m": 7,
+"f": 0.75,
+"g": null,
+"pair": [
+"a",
+1,
+true
+],
+"e": "ünï"
+},
+{
+"n": 11
+},
+{
+"e": {
+"a": [
+2
+],
+"b": 1
+}
+}
+],
+"packets": [
+"000146ecbd40b32bfd207e40a75c60b0a013cc0ae86c9d",
+"000142ecbd40b30c50a0b02d783d3100",
+"000146ecbd40b2c02ac9262ff4"
+],
+"nak": "00013842dc20b68c2cc40b3948e0c2d2e46138191c2ca4084c445c3bc6ec3af193c27e620082017f",
+"stream_packets": [
+"00014e00dd97a816664007d201ce40a75c60b0a013cc0a3da2a2",
+"00014802e2105021105bfc538d68",
+"00014c04e15000156dcaa77900"
+]
+},
+{
+"file": "combinators.json",
+"fingerprint": 3472168963,
+"names": [
+"kind",
+"shape",
+"extra",
+"why",
+"radius",
+"width",
+"height"
+],
+"enums": [],
+"documents": [
+{
+"z": "2026-11-18T10:20:30Z",
+"a": "6f9619ff-8b86-4011-b42d-00c04fc964ff",
+"x1": 5,
+"other": "s"
+},
+{
+"kind": "q"
+}
+],
+"packets": [
+"0001439dea30077c543d4b4a6148b7029709be5867fe2e190046d0b403013f2593fd48156c17307307177600",
+"0001479dea300709005c50cc657340"
+],
+"nak": "00015848d6d2dcc822b9b430b8328cacaf0e8e4c241bbb43c94ce4c2c8d2eae662bbb4b23a341ccd0cad2ced0e880bd242c2a13c18acadee8d0cae40",
+"stream_packets": [
+"00014a00f3bd4600f11d456516a5ffa00d0200200f400c200f06200dee8d0cae4006460646c5a62625a6270a86260746460746660b40142229aab8f8384df2c33ff170c8023685a01809f92c9fe205182e79afa65d80",
+"00014c02e1b00005c41af1f05e"
+]
+},
+{
+"file": "recursive.json",
+"fingerprint": 347725133,
+"names": [
+"value",
+"children"
+],
+"enums": [],
+"documents": [
+{
+"value": 1,
+"children": [
+{
+"value": 2,
+"children": []
+},
+{
+"value": 3
+}
+]
+},
+{
+"value": -5
+},
+{
+"value": 1.5
+}
+],
+"packets": [
+"0001462973ba9b15e022c08080c3340a4cd0",
+"0001462973ba9ab8959538f54e",
+"0001422973ba9b1250ae31a50738528030"
+],
+"nak": "0001104aecc2d8eaca2431b434b6323932b700",
+"stream_packets": [
+"00014e00c52e77536400180208c0200200c8d67aad10",
+"00014c02e140104a039d5ce8",
+"00014804e2d050211718d2b8c74cdf00"
+]
+},
+{
+"file": "misc.json",
+"fingerprint": 1329774376,
+"names": [
+"z",
+"a",
+"dep",
+"tilde~/x",
+"qq",
+"u1"
+],
+"enums": [],
+"documents": [
+{
+"z": "2026-11-18T10:20:30Z",
+"a": "6f9619ff-8b86-4011-b42d-00c04fc964ff",
+"x1": 5,
+"other": "s"
+},
+{
+"kind": "q"
+}
+],
+"packets": [
+"0001469e857e517c50bd4b4a6148b7022709be5867fe2e190046d0b403013f2593fce8150c173060e4b19980",
+"0001469e857e510f54b05c40508b5d04"
+],
+"nak": "00014842f420b08c6c8cae0443a34b63232bf17bc144e2e2613a989c4f06282b7ba3432b9248d6d2dcc800",
+"stream_packets": [
+"00014e00d3d0afca310c44e516a5ffa00d1e00000f06200dee8d0cae4006460646c5a62625a6270a86260746460746660b401420447a23e0e137cb0cffc5c32008da16806027e4b27f881460b9aba7b04000",
+"00014c02e68414000035b4b7320050298c171d72970160"
+]
+}
+],
+"compiled": [
+{
+"label": "schema only",
+"dictionary": {
+"format": "sjson-dictionary",
+"version": 1,
+"fingerprint": 4210166656,
+"tags": [
+"orderId",
+"status",
+"items",
+"created",
+"total",
+"customer",
+"notes",
+"id",
+"email",
+"vip",
+"address",
+"sku",
+"count",
+"price",
+"street",
+"city",
+"country",
+"legacyCode"
+],
+"values": [
+"PENDING",
+"PAID",
+"SHIPPED",
+"CANCELLED",
+"US",
+"CA",
+"MX"
+],
+"schema": {
+"types": [
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"orderId",
+1,
+true
+],
+[
+"created",
+2,
+false
+],
+[
+"status",
+3,
+true
+],
+[
+"total",
+4,
+false
+],
+[
+"items",
+5,
+true
+],
+[
+"customer",
+6,
+false
+],
+[
+"notes",
+7,
+false
+]
+],
+"additional": false,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": "date-time",
+"variants": []
+},
+{
+"kinds": [],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": [
+"PENDING",
+"PAID",
+"SHIPPED",
+"CANCELLED"
+],
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"number"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": 0,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"array"
+],
+"properties": [],
+"additional": true,
+"items": 8,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"id",
+9,
+true
+],
+[
+"email",
+10,
+false
+],
+[
+"vip",
+11,
+false
+],
+[
+"address",
+12,
+false
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"null",
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"sku",
+13,
+true
+],
+[
+"price",
+14,
+false
+],
+[
+"count",
+15,
+true
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"integer"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": "email",
+"variants": []
+},
+{
+"kinds": [
+"boolean"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"street",
+16,
+false
+],
+[
+"city",
+17,
+false
+],
+[
+"country",
+18,
+false
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"number"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"integer"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": 1,
+"maximum": 1000,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": [
+"US",
+"CA",
+"MX"
+],
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"legacyCode",
+20,
+false
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+}
+],
+"extras": [
+8,
+19
+],
+"source": "/home/user/IASLib/test/TestSjson/schemas/order.schema.json"
+},
+"text_dictionary": null
+},
+"fingerprint": 4210166656,
+"documents": [
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "LOST",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"s": "abc"
+},
+{
+"a": 1,
+"b": [
+2,
+"the quick brown fox"
+],
+"z": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+],
+"packets": [
+"000147f5e4170187eff3450d961ea6a5a530a45b81b984a6a6451560b4c4c0c39466a640145592d323030e590a01001c75e2ad9f1742671893794cdfc27cdc03582fcc4416d65730a310a75400",
+"000143f5e417018b4a85e68a1b2c3d423d4b4a6148b702273249806f055cc2535323958c5582d31303072e519a996a0205631564b4c8c0c1cb9642805a80418d50875e2aa5d9f1742671893794cdfc27cdc03582fd44bb0831105b595ce117128007008590086d",
+"000143f5e4170116584de43abc07ab3b2250",
+"000143f5e41701867ec28806158809da13882a488a028d5930e580854a7d79c0234fb1a16738a278000000000000000000000000000000000000000000d8c4d5d0"
+],
+"nak": "000124261738502c30a858a160bd00"
+},
+{
+"label": "schema + samples",
+"dictionary": {
+"format": "sjson-dictionary",
+"version": 1,
+"fingerprint": 3625233212,
+"tags": [
+"sku",
+"count",
+"price",
+"orderId",
+"status",
+"items",
+"created",
+"total",
+"customer",
+"notes",
+"id",
+"email",
+"vip",
+"address",
+"city",
+"country",
+"street",
+"legacyCode"
+],
+"values": [
+"SHIPPED",
+"US",
+"Ames",
+"pat@example.com",
+"Y-200",
+"X-100",
+"2026-11-18T10:20:30Z",
+"A1B2C3D4",
+"PENDING",
+"PAID",
+"CANCELLED",
+"CA",
+"MX"
+],
+"schema": {
+"types": [
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"orderId",
+1,
+true
+],
+[
+"created",
+2,
+false
+],
+[
+"status",
+3,
+true
+],
+[
+"total",
+4,
+false
+],
+[
+"items",
+5,
+true
+],
+[
+"customer",
+6,
+false
+],
+[
+"notes",
+7,
+false
+]
+],
+"additional": false,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": "date-time",
+"variants": []
+},
+{
+"kinds": [],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": [
+"PENDING",
+"PAID",
+"SHIPPED",
+"CANCELLED"
+],
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"number"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": 0,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"array"
+],
+"properties": [],
+"additional": true,
+"items": 8,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"id",
+9,
+true
+],
+[
+"email",
+10,
+false
+],
+[
+"vip",
+11,
+false
+],
+[
+"address",
+12,
+false
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"null",
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"sku",
+13,
+true
+],
+[
+"price",
+14,
+false
+],
+[
+"count",
+15,
+true
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"integer"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": "email",
+"variants": []
+},
+{
+"kinds": [
+"boolean"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"street",
+16,
+false
+],
+[
+"city",
+17,
+false
+],
+[
+"country",
+18,
+false
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"number"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"integer"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": 1,
+"maximum": 1000,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": [
+"US",
+"CA",
+"MX"
+],
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"object"
+],
+"properties": [
+[
+"legacyCode",
+20,
+false
+]
+],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+},
+{
+"kinds": [
+"string"
+],
+"properties": [],
+"additional": true,
+"items": null,
+"prefix_items": [],
+"enum": null,
+"minimum": null,
+"maximum": null,
+"format": null,
+"variants": []
+}
+],
+"extras": [
+8,
+19
+],
+"source": "/home/user/IASLib/test/TestSjson/schemas/order.schema.json"
+},
+"text_dictionary": null
+},
+"fingerprint": 3625233212,
+"documents": [
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "LOST",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"s": "abc"
+},
+{
+"a": 1,
+"b": [
+2,
+"the quick brown fox"
+],
+"z": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+],
+"packets": [
+"000147b02956796d7c5113dcc2535322c4dca3353200b12f2c8500800e3af15624388c37e2622c20",
+"000143b029567986b291c50771395cc92601bc2173094d4c9a50b8986b9466a644808142e251ae590a011201064d5a1d78aac712349d5ee23841c44002800532189b40",
+"000143b029567916584de43abc034b2e4cb8",
+"000143b0295679867ec28806158809da13882a488a028d5930e580854a7d79c0234fb1a16738a2780000000000000000000000000000000000000000041762c9e8"
+],
+"nak": "000124261738502c30a858a160bd00"
+},
+{
+"label": "samples + text dictionary",
+"dictionary": {
+"format": "sjson-dictionary",
+"version": 1,
+"fingerprint": 1061615240,
+"tags": [
+"s",
+"sku",
+"price",
+"count",
+"orderId",
+"created",
+"status",
+"total",
+"qty",
+"items",
+"customer",
+"id",
+"email",
+"vip",
+"k0",
+"k7",
+"k14",
+"k21",
+"k28",
+"k35",
+"k42",
+"k49",
+"k56",
+"k63",
+"k70",
+"k77",
+"k84",
+"k91",
+"k98",
+"k105",
+"k112",
+"k119",
+"k126",
+"k133",
+"k140",
+"k147",
+"k154",
+"k161",
+"k168",
+"k175",
+"k182",
+"k189",
+"k196",
+"k203",
+"k210",
+"k217",
+"k224",
+"k231",
+"k238",
+"k245",
+"k252",
+"k259",
+"k266",
+"k273",
+"k280",
+"k287",
+"k294",
+"link",
+"home",
+"name",
+"nested",
+"deeper",
+"deepest",
+"x",
+"a",
+"b",
+"c",
+"d",
+"",
+"ünïcödé kéy",
+"日本",
+"k1",
+"k2",
+"k3",
+"k4",
+"k5",
+"k6",
+"k8",
+"k9",
+"k10",
+"k11",
+"k12",
+"k13",
+"k15",
+"k16",
+"k17",
+"k18",
+"k19",
+"k20",
+"k22",
+"k23",
+"k24",
+"k25",
+"k26",
+"k27",
+"k29",
+"k30",
+"k31",
+"k32",
+"k33",
+"k34",
+"k36",
+"k37",
+"k38",
+"k39",
+"k40",
+"k41",
+"k43",
+"k44",
+"k45",
+"k46",
+"k47",
+"k48",
+"k50",
+"k51",
+"k52",
+"k53",
+"k54",
+"k55",
+"k57",
+"k58",
+"k59",
+"k60",
+"k61",
+"k62",
+"k64",
+"k65",
+"k66",
+"k67",
+"k68",
+"k69",
+"k71",
+"k72",
+"k73",
+"k74",
+"k75",
+"k76",
+"k78",
+"k79",
+"k80",
+"k81",
+"k82",
+"k83",
+"k85",
+"k86",
+"k87",
+"k88",
+"k89",
+"k90",
+"k92",
+"k93",
+"k94",
+"k95",
+"k96",
+"k97",
+"k99",
+"k100",
+"k101",
+"k102",
+"k103",
+"k104",
+"k106",
+"k107",
+"k108",
+"k109",
+"k110",
+"k111",
+"k113",
+"k114",
+"k115",
+"k116",
+"k117",
+"k118",
+"k120",
+"k121",
+"k122",
+"k123",
+"k124",
+"k125",
+"k127",
+"k128",
+"k129",
+"k130",
+"k131",
+"k132",
+"k134",
+"k135",
+"k136",
+"k137",
+"k138",
+"k139",
+"k141",
+"k142",
+"k143",
+"k144",
+"k145",
+"k146",
+"k148",
+"k149",
+"k150",
+"k151",
+"k152",
+"k153",
+"k155",
+"k156",
+"k157",
+"k158",
+"k159",
+"k160",
+"k162",
+"k163",
+"k164",
+"k165",
+"k166",
+"k167",
+"k169",
+"k170",
+"k171",
+"k172",
+"k173",
+"k174",
+"k176",
+"k177",
+"k178",
+"k179",
+"k180",
+"k181",
+"k183",
+"k184",
+"k185",
+"k186",
+"k187",
+"k188",
+"k190",
+"k191",
+"k192",
+"k193",
+"k194",
+"k195",
+"k197",
+"k198",
+"k199",
+"k200",
+"k201",
+"k202",
+"k204",
+"k205",
+"k206",
+"k207",
+"k208",
+"k209",
+"k211",
+"k212",
+"k213",
+"k214",
+"k215",
+"k216",
+"k218",
+"k219",
+"k220",
+"k221",
+"k222",
+"k223",
+"k225",
+"k226",
+"k227",
+"k228",
+"k229",
+"k230",
+"k232",
+"k233",
+"k234",
+"k235",
+"k236",
+"k237",
+"k239",
+"k240",
+"k241",
+"k242",
+"k243",
+"k244",
+"k246",
+"k247",
+"k248",
+"k249",
+"k250",
+"k251",
+"k253",
+"k254",
+"k255",
+"k256",
+"k257",
+"k258",
+"k260",
+"k261",
+"k262",
+"k263",
+"k264",
+"k265",
+"k267",
+"k268",
+"k269",
+"k270",
+"k271",
+"k272",
+"k274",
+"k275",
+"k276",
+"k277",
+"k278",
+"k279",
+"k281",
+"k282",
+"k283",
+"k284",
+"k285",
+"k286",
+"k288",
+"k289",
+"k290",
+"k291",
+"k292",
+"k293",
+"k295",
+"k296",
+"k297",
+"k298",
+"k299",
+"new",
+"again"
+],
+"values": [
+"2026-11-18T10:20:30Z",
+"https://example.com/a",
+"pat@example.com",
+"Y-200",
+"X-100",
+"SHIPPED",
+"A1B2C3D4",
+"http://example.org/",
+"",
+"x",
+"xyz",
+"abc",
+"hello there",
+"deadbeef00112233",
+"DEADBEEF00112233",
+"0123456789",
+"2026-11-18T10:20:30.123456+05:30",
+"2026-11-18",
+"2026-11-18T23:59:59.5-08:00",
+"aGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQh",
+"550e8400-e29b-41d4-a716-446655440000",
+"550E8400E29B41D4A716446655440000",
+"550e8400-E29B-41d4-a716-446655440000",
+"2026-13-45",
+"QUJD",
+"The quick brown fox jumps over the lazy dog",
+"line\nbreak\ttab \"quoted\" \\",
+"café",
+"日本語のテキスト",
+"emoji 🎉 party",
+"a日",
+"ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ",
+"Ωmega",
+"Standard_test",
+"empty key",
+"https://x.test/1"
+],
+"schema": null,
+"text_dictionary": "N6Qw7OkHMCYWEBjdAQAAAAAAAPD8/+/6X2XlHNgHCoNAQCAQGjGzFI+IiMgDVKBAQUEBwwUSiIILkQKRggKGgg1GgcEoMAqbQoFRKEyKomCKomBKKayUqqoe1LZRKBQKRVEURVEURVEURVEUpZRSSilVVT0BAAAABAAAAAgAAAA4Z2QyOXliR1FnZEdocGN5QnBjeUJpWVhObE5qUWg1NTBlODQwMC1lMjliLTQxZDQtYS4xMjM0NTYrMDU6MzAyMDI2LTExLTE4MjAyNi0xMS0xOFQyMzo1OTo1OS41LTA4OjAww7/Dv8O/w7/Dv8O/w7/Dv8O/w7/Dv8O/w7/Dv1N0YW5kYXJkX3Rlc3RlbXB0eSBrZXlsbyB0aGVyZWRlYWRiZWVmMDAxMTIyMzNERUFEQkVFRjAwMTEyMjMzMDEyMzQ1Njc4OXgganVtcHMgb3ZlciB0aGUgbGF6eSBkb2dsaW5lCmJyZWFrCXRhYiAicXVvdGVkIiBcNTQ0MDAwMDU1MEU4NDAwRTI5QjQxRDRBNzE2NDQ2NjU1NDQwMDAwNTUwZTg0MDAtRTJ4eHh4eHh4VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIHRoZSBsYXp5IGRvZzA6MjA6MzAuMTIzNDU2KzA1OjMwMjAyNi0xMS0xODIwMjYtMTEtMThUMjM6NTk6NTkuLy9leGFtcGxlLmNvbS9haHR0cDovL2V4YW1wbGUub3JnL2h0dHBzOi8veC50ZXN0LzFhR1ZzYkc4Z2QyOXliR1FnZEdocGN5QnBjeUJpWVhObE5qUWg1NTBlODQwMC1lMjliLVzml6XmnKzoqp7jga7jg4bjgq3jgrnjg4hlbW9qaSDwn46JIHBhcnR5w7/Dv8O/w7/DMDoyMDozMFpwYXRAZXhhbXBsZS5jb21oZWxsbyB0aGVyZWRlYWRiZWVmMDAxMTIyMzNodHRwczovL2V4YW1wbGUuY29tL2FBMUIyQzNENDIwMjYtMTEtMThUMTA6MjA6MzBacDg0MDAtRTI5Qi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwMjAyNi0xMy00NXh4eHh4eHh4"
+},
+"fingerprint": 1061615240,
+"documents": [
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "LOST",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"s": "abc"
+},
+{
+"a": 1,
+"b": [
+2,
+"the quick brown fox"
+],
+"z": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+],
+"packets": [
+"0001427e8ded11878814ae2733884ee2642e6129a9954a27128d728cd4c91010289c4835cb2140244020cbac43af155ae2371614bb85318882dacae7853584aaa600614e0034980f5b",
+"0001427e8ded1187f014ae2733884ee649300de10b984a6a655289c4a35ca3353244040a27120d72c85009100832eb10ebc556b88dc5852ee14c6220b6b2b9e14d612aa9801853801822378040",
+"0001427e8ded110f8285c580037dc0b6",
+"0001427e8ded1184c61a28b52ffd23e90730263d6d0000207400780002005c898c1e6503b20a0190a2027cd853df01291824b4"
+],
+"nak": "00012e14b3b0b2323932b9b9e14c231b4ba3ce14d3b1b7bab73a393ce14e2b737ba32b9e14f0bd00"
+},
+{
+"label": "names list",
+"dictionary": {
+"format": "sjson-dictionary",
+"version": 1,
+"fingerprint": 2620712796,
+"tags": [
+"a",
+"b",
+"c"
+],
+"values": [],
+"schema": null,
+"text_dictionary": null
+},
+"fingerprint": 2620712796,
+"documents": [
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "SHIPPED",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"orderId": "A1B2C3D4",
+"created": "2026-11-18T10:20:30Z",
+"status": "LOST",
+"total": 129.99,
+"items": [
+{
+"sku": "X-100",
+"price": 19.99,
+"count": 2
+},
+{
+"sku": "Y-200",
+"price": 90.01,
+"count": 1
+}
+],
+"customer": {
+"id": 48213,
+"email": "pat@example.com",
+"vip": false,
+"address": {
+"city": "Ames",
+"country": "US"
+}
+},
+"notes": null
+},
+{
+"s": "abc"
+},
+{
+"a": 1,
+"b": [
+2,
+"the quick brown fox"
+],
+"z": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+],
+"packets": [
+"0001433869ceb98bd291e68a1b2c3d42bd4b4a6148b7026733c89e8b982075cc2535328952c5582d31303052e519a995a02054b1564b4c8c0c14b964280568041995a875e2ab9d9f1742671893794cdfc27cdc03582fde50858458882dacae709309554c0084c008697ed940",
+"0001433869ceb98ba291e68a1b2c3d42bd4b4a6148b702673249806f075cc2535328952c5582d31303052e519a995a02054b1564b4c8c0c14b964280568041995a875e2ab9d9f1742671893794cdfc27cdc03582fde50858458882dacae709309554c0084c025f1f7c48",
+"0001433869ceb9165851e43abc04a0363bf8",
+"0001433869ceb9865685008a2027684e20a922280a3564c396021529f5e7008d3ec6855ce289e000000000000000000000000000000000000000001baf04c980"
+],
+"nak": "0001848876f72646572496429d8dc99585d19590c6737461747573395d1bdd185b1056974656d7348dcdadd54570726963655958dbdd5b9d188637573746f6d6572689a591c5656d61696c78dd9a5c2103b0b2323932b9b9c22463697479848ec6deeadce8e4f30995b9bdd195ce140b9c2a17a000"
+}
+],
 "float_reprs": [
 [
 "3fb999999999999a",

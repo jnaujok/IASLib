@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:o="urn:example:order"
+           targetNamespace="urn:example:order">
+  <xs:simpleType name="StatusType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="PENDING"/>
+      <xs:enumeration value="PAID"/>
+      <xs:enumeration value="SHIPPED"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="PartyType">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="email" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="partyId" type="xs:long" use="required"/>
+  </xs:complexType>
+</xs:schema>

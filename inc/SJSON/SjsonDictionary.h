@@ -33,6 +33,7 @@
 
 namespace IASLib
 {
+    class CJsonNode;
     class CSjsonStreamState;
     class CSjsonTextChannel;
     class CSjsonSchemaModel;
@@ -47,9 +48,34 @@ namespace IASLib
             explicit                CSjsonDictionary( bool bWithValues = true );
                                    ~CSjsonDictionary( void );
 
-                /// A new dictionary holding names (ids 1, 2, ...) and values.
+                /// A new dictionary holding names (ids 1, 2, ...) and values, with
+                /// an optional schema and text dictionary; its fingerprint is
+                /// computed (see computeFingerprint()).
             static CSjsonDictionary *fromNames( const std::vector<std::string> &aNames,
-                                                const std::vector<std::string> &aValues );
+                                                const std::vector<std::string> &aValues,
+                                                const std::shared_ptr<const CSjsonSchemaModel> &pSchema = std::shared_ptr<const CSjsonSchemaModel>(),
+                                                const std::string &strTextDictionary = std::string() );
+                /// A dictionary pre-loaded with every field name and enumerated
+                /// string of a schema (same ids and fingerprint as Python's
+                /// TagDictionary.from_schema()).
+            static CSjsonDictionary *fromSchema( const std::shared_ptr<const CSjsonSchemaModel> &pSchema );
+                /// Loads a compiled dictionary (as written by Python's
+                /// TagDictionary.save() or toJson()): the full document, a
+                /// {"tags": [...], "values": [...]} object, or a list of names.
+                /// Throws CSjsonException if it is malformed or its recorded
+                /// fingerprint does not match its content.
+            static CSjsonDictionary *fromJson( const CJsonNode &data );
+                /// Reads a compiled dictionary file.
+            static CSjsonDictionary *load( const std::string &strPath );
+                /// The pre-loaded part as a compiled dictionary document (the
+                /// caller owns it).
+            CJsonNode              *toJson( void ) const;
+                /// Writes toJson() to a file; false on failure.
+            bool                    save( const std::string &strPath ) const;
+                /// The fingerprint for the pre-loaded content: the schema's own
+                /// fingerprint if this holds exactly what the schema produces,
+                /// otherwise a CRC of names, values, schema and text dictionary.
+            unsigned                computeFingerprint( void ) const;
 
                 /// True if strTag has an id.
             bool                    hasTag( const std::string &strTag ) const { return m_mapIds.find( strTag ) != m_mapIds.end(); }

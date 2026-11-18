@@ -17,8 +17,15 @@ import random
 import struct
 import sys
 
+from pathlib import Path
+
+from sjson.compile import compile_dictionary
+from sjson.schema import load_schema
 from sjson.sjson import SJSON
 from sjson.string_node import StringNode
+from sjson.tag_dictionary import TagDictionary
+
+SCHEMAS = Path(__file__).resolve().parent / "schemas"
 
 SENDER = 1
 
@@ -87,6 +94,71 @@ def stream_sequences():
         yield name, docs
 
 
+ORDER = {
+    "orderId": "A1B2C3D4", "created": "2026-11-18T10:20:30Z", "status": "SHIPPED", "total": 129.99,
+    "items": [{"sku": "X-100", "price": 19.99, "count": 2}, {"sku": "Y-200", "price": 90.01, "count": 1}],
+    "customer": {"id": 48213, "email": "pat@example.com", "vip": False, "address": {"city": "Ames", "country": "US"}},
+    "notes": None,
+}
+XML_ORDER = {"order": {
+    "@id": "A1", "created": "2026-11-18T10:20:30Z", "status": "PAID",
+    "item": [{"sku": "X", "count": 2, "price": {"#text": 1.5, "@currency": "USD"}}],
+    "customer": {"@partyId": 7, "name": "Pat", "vip": True}, "@revision": 3,
+}}
+
+
+def schema_documents(name):
+    if name == "order.schema.json":
+        docs = [ORDER, dict(ORDER, status="PAID", notes="leave at door"), dict(ORDER, status="LOST"),
+                {"orderId": "x", "status": "PENDING", "items": []}, dict(ORDER, extra=1)]
+        return [dict(d, total=d.get("total", 1.0) + i) if "total" in d else d for i, d in enumerate(docs * 2)]
+    if name == "order.xsd":
+        return [XML_ORDER, {"order": dict(XML_ORDER["order"], status="SHIPPED", note=["a", "b"])}, {"order": {"bad": 1}}] * 2
+    if name == "recursive.json":
+        return [{"value": 1, "children": [{"value": 2, "children": []}, {"value": 3}]}, {"value": -5}, {"value": 1.5}]
+    if name == "bounds.json":
+        return [{"n": 3, "m": 7, "f": 0.75, "g": None, "pair": ["a", 1, True], "e": "ünï"}, {"n": 11}, {"e": {"a": [2], "b": 1}}]
+    return [{"z": "2026-11-18T10:20:30Z", "a": "6f9619ff-8b86-4011-b42d-00c04fc964ff", "x1": 5, "other": "s"}, {"kind": "q"}]
+
+
+def schema_vectors():
+    out = []
+    for name in ["order.schema.json", "common.schema.json", "order.xsd", "bounds.json", "combinators.json", "recursive.json", "misc.json"]:
+        model = load_schema(SCHEMAS / name)
+        docs = schema_documents(name)
+        entry = {"file": name, "fingerprint": model.fingerprint, "names": model.field_names(),
+                 "enums": model.enum_strings(), "documents": docs}
+        StringNode.LZ4_MIN_BYTES = 10**9
+        sender = SJSON(sender_id=SENDER, schema=model)
+        entry["packets"] = [sender.to_binary(d).tobytes().hex() for d in docs]
+        entry["nak"] = sender.nak_dictionary(SENDER, 0, 0).tobytes().hex()
+        StringNode.LZ4_MIN_BYTES = 24
+        stream = SJSON(sender_id=SENDER, schema=model, stateful=True)
+        entry["stream_packets"] = [stream.to_binary(d).tobytes().hex() for d in docs]
+        out.append(entry)
+    return out
+
+
+def compiled_vectors():
+    out = []
+    samples = [d for _, docs in sequences() for d in docs if isinstance(d, dict)]
+    for label, dictionary in [
+        ("schema only", compile_dictionary(SCHEMAS / "order.schema.json")),
+        ("schema + samples", compile_dictionary(SCHEMAS / "order.schema.json", samples=[ORDER] * 5, intern_min_count=2)),
+        ("samples + text dictionary", compile_dictionary(samples=samples * 3, intern_min_count=3, text_dictionary_size=4096)),
+        ("names list", TagDictionary.from_dict(["a", "b", "c"])),
+    ]:
+        docs = [ORDER, dict(ORDER, status="LOST"), samples[3], {"a": 1, "b": [2, "the quick brown fox"], "z": "x" * 40}]
+        StringNode.LZ4_MIN_BYTES = 10**9
+        sender = SJSON(sender_id=SENDER, dictionary=dictionary)
+        packets = [sender.to_binary(d).tobytes().hex() for d in docs]
+        StringNode.LZ4_MIN_BYTES = 24
+        out.append({"label": label, "dictionary": dictionary.to_dict(), "fingerprint": dictionary.fingerprint,
+                    "documents": docs, "packets": packets,
+                    "nak": sender.nak_dictionary(SENDER, dictionary.base_size, dictionary.values.base_size).tobytes().hex()})
+    return out
+
+
 def encode_stream(documents):
     sender = SJSON(sender_id=SENDER, stateful=True)
     return [sender.to_binary(d).tobytes().hex() for d in documents]
@@ -96,6 +168,8 @@ def main():
     out = {"sender_id": SENDER, "version": SJSON.VERSION, "exact": [], "lz4": [], "stream": []}
     for name, docs in stream_sequences():
         out["stream"].append({"name": name, "documents": docs, "packets": encode_stream(docs)})
+    out["schemas"] = schema_vectors()
+    out["compiled"] = compiled_vectors()
     # repr() of doubles (as IEEE-754 bit patterns), for the C++ float formatter.
     rng = random.Random(42)
     floats = [0.1, 1e16, 1e15, 1e-4, 1e-5, 123.456, 1.5e300, 5e-324, 2.2250738585072014e-308,

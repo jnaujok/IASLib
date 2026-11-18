@@ -303,6 +303,8 @@
 #include "SJSON/SjsonDictionary.h"
 #include "SJSON/SjsonCodec.h"
 #include "SJSON/SjsonStream.h"
+#include "SJSON/SjsonSchema.h"
+#include "SJSON/SjsonSchemaCodec.h"
 #include "SJSON/Sjson.h"
 #endif
 #endif
