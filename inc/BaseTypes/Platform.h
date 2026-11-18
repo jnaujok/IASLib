@@ -1,17 +1,21 @@
-/***********************************************************************
-**  Platform
-**
-**  Description:
-**      The operating system headers the library needs, chosen only by the
-**  platform flag (IASLIB_WIN32__, IASLIB_LINUX__, IASLIB_MAC__, ...). On
-**  Windows the order matters: winsock2.h and ws2tcpip.h must come before
-**  windows.h, which is included lean (otherwise it pulls in the old
-**  winsock.h, which conflicts with winsock2.h) and without the min/max
-**  macros. Every library header that needs a Windows header includes this
-**  one instead.
-**
-**  Copyright (c) 2026, The Irene Adler Software Group, all rights reserved.
-***********************************************************************/
+/**
+ * @file Platform.h
+ * @brief The operating system headers the library needs, in the right order.
+ *
+ ***********************************************************************
+ **  Platform
+ **
+ **  Description:
+ **      The operating system headers the library needs, chosen only by the
+ **  platform flag (IASLIB_WIN32__, IASLIB_LINUX__, IASLIB_MAC__, ...). On
+ **  Windows the order matters: winsock2.h and ws2tcpip.h must come before
+ **  windows.h, which is included lean (otherwise it pulls in the old
+ **  winsock.h, which conflicts with winsock2.h) and without the min/max
+ **  macros. Every library header that needs a Windows header includes this
+ **  one instead.
+ **
+ **  Copyright (c) 2026, The Irene Adler Software Group, all rights reserved.
+ ***********************************************************************/
 
 #ifndef IASLIB_PLATFORM_H__
 #define IASLIB_PLATFORM_H__
@@ -44,7 +48,7 @@
         #pragma comment( lib, "ws2_32.lib" )
     #endif
 
-        // POSIX names the socket code uses.
+        /// POSIX names the socket code uses.
     typedef ADDRESS_FAMILY sa_family_t;
 #endif
 
