@@ -122,11 +122,11 @@ namespace IASLib
             CFile oFile( strFilename, CFile::READ | CFile::BINARY );
             if ( ! oFile.IsOpen() )
                 return false;
-            long lSize = oFile.Seek( 0, CFile::END );
-            if ( lSize < 0 || oFile.Seek( 0, CFile::BEGIN ) != 0 )
+            int64_t lSize = oFile.SeekBig( 0, CFile::END );
+            if ( lSize < 0 || (uint64_t)lSize > (uint64_t)(size_t)-1 || oFile.SeekBig( 0, CFile::BEGIN ) != 0 )
                 return false;
             CDataBlock data( (size_t)lSize );
-            if ( lSize > 0 && oFile.Read( (char *)data, (int)lSize ) != (int)lSize )
+            if ( lSize > 0 && oFile.ReadBig( (char *)data, (size_t)lSize ) != lSize )
                 return false;
             m_data = data;
             m_dttLastModified.SetToCurrent();
@@ -148,7 +148,7 @@ namespace IASLib
             if ( ! oFile.IsOpen() )
                 return false;
             bool bOk = ( m_data.GetSize() == 0 ) ||
-                       oFile.Write( (const char *)m_data, (int)m_data.GetSize() ) == (int)m_data.GetSize();
+                       oFile.WriteBig( (const char *)m_data, m_data.GetSize() ) == (int64_t)m_data.GetSize();
             return oFile.Close() && bOk;
         }
         catch ( ... )

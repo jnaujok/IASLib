@@ -17,6 +17,7 @@
 #include "File.h"
 #include "FileException.h"
 #include <errno.h>
+#include <limits.h>
 #ifdef IASLIB_WIN32__
 #include <share.h>
 #endif
@@ -28,6 +29,32 @@
 
 namespace IASLib
 {
+    namespace
+    {
+            // The C library's 64-bit seek and tell.
+        int seek64( FILE *pFile, int64_t nPos, int nWhence )
+        {
+#ifdef IASLIB_WIN32__
+            return _fseeki64( pFile, (__int64)nPos, nWhence );
+#else
+            return fseeko( pFile, (off_t)nPos, nWhence );
+#endif
+        }
+
+        int64_t tell64( FILE *pFile )
+        {
+#ifdef IASLIB_WIN32__
+            return (int64_t)_ftelli64( pFile );
+#else
+            return (int64_t)ftello( pFile );
+#endif
+        }
+
+        long toLong( int64_t n )
+        {
+            return ( n < 0 || n > (int64_t)LONG_MAX ) ? -1L : (long)n;
+        }
+    }
 
     IMPLEMENT_OBJECT( CFile, CObject );
 
@@ -218,7 +245,7 @@ namespace IASLib
             size_t nRetVal = fread( pchBuffer, 1, (size_t)nBufferSize, m_fpFile );
             if ( m_lCurrentPos != -1 )
             {
-                m_lCurrentPos += (long)nRetVal;
+                m_lCurrentPos += (int64_t)nRetVal;
                 if ( ! m_bBinary )
                 {
                         // If we're in text mode, there's no way to know
@@ -231,7 +258,7 @@ namespace IASLib
                     {
                         if ( pchBuffer[ nFind ] == '\n' )
                         {
-                            m_lCurrentPos = ftell( m_fpFile );
+                            m_lCurrentPos = tell64( m_fpFile );
                             break;
                         }
                     }
@@ -254,7 +281,7 @@ namespace IASLib
 
             if ( m_lCurrentPos != -1 )
             {
-                m_lCurrentPos += (long)nWriteSize;
+                m_lCurrentPos += (int64_t)nWriteSize;
                 if ( ( m_lCurrentPos > m_lFileSize ) && ( m_lFileSize != -1 ) )
                 {
                     m_lFileSize = m_lCurrentPos;
@@ -272,11 +299,26 @@ namespace IASLib
 
     long CFile::GetPos( void )
     {
+        return toLong( GetPosBig() );
+    }
+
+    long CFile::GetSize( void )
+    {
+        return toLong( GetSizeBig() );
+    }
+
+    long CFile::Seek( long nPos, int nStart )
+    {
+        return toLong( SeekBig( (int64_t)nPos, nStart ) );
+    }
+
+    int64_t CFile::GetPosBig( void )
+    {
         if ( m_fpFile )
         {
             if ( m_lCurrentPos == -1 )
             {
-                m_lCurrentPos = ftell( m_fpFile );
+                m_lCurrentPos = tell64( m_fpFile );
             }
             return m_lCurrentPos;
         }
@@ -284,50 +326,88 @@ namespace IASLib
         return -1;
     }
 
-    long CFile::GetSize( void )
+    int64_t CFile::GetSizeBig( void )
     {
-        if ( m_lFileSize == - 1 )
+        if ( m_lFileSize == -1 && m_fpFile )
         {
-            if ( m_fpFile )
-            {
-                long lCurrent = GetPos();
-                Seek( 0, END );
-			    m_lFileSize = GetPos();
-                Seek( lCurrent, BEGIN );
-            }
+            int64_t lCurrent = GetPosBig();
+            if ( SeekBig( 0, END ) >= 0 )
+                m_lFileSize = GetPosBig();
+            if ( lCurrent >= 0 )
+                SeekBig( lCurrent, BEGIN );
         }
 
         return m_lFileSize;
     }
 
-    long CFile::Seek( long nPos, int nStart )
+        // (Seek() went through fseek() and ftell() with a long, so nothing
+        // past 2 GB could be reached where long is 32 bits; and a failed
+        // seek returned the old position as if it had worked.)
+    int64_t CFile::SeekBig( int64_t nPos, int nStart )
     {
-        long lRetVal = -1;
+        if ( m_fpFile == NULL )
+            return -1;
 
-        if ( m_fpFile )
+        int nWhence;
+        switch ( nStart )
         {
-            switch ( nStart )
-            {
-                case BEGIN:
-                    fseek( m_fpFile, nPos, SEEK_SET );
-                    break;
-
-                case CURRENT:
-                    fseek( m_fpFile, nPos, SEEK_CUR );
-                    break;
-
-                case END:
-                    fseek( m_fpFile, nPos, SEEK_END );
-                    break;
-
-                default:
-                    break;
-            }
-            lRetVal = ftell( m_fpFile );
-            m_lCurrentPos = lRetVal;
+            case BEGIN:     nWhence = SEEK_SET; break;
+            case CURRENT:   nWhence = SEEK_CUR; break;
+            case END:       nWhence = SEEK_END; break;
+            default:        return -1;
         }
 
-        return lRetVal;
+        if ( seek64( m_fpFile, nPos, nWhence ) != 0 )
+        {
+            m_lCurrentPos = -1;
+            return -1;
+        }
+            // (Seeking past the end does not make the file longer: only a
+            // write there does, which Write() records.)
+        m_lCurrentPos = tell64( m_fpFile );
+        return m_lCurrentPos;
+    }
+
+    int64_t CFile::ReadBig( void *pBuffer, size_t nLength )
+    {
+        if ( ! m_fpFile || ! m_bInput )
+            return -1;
+        char *p = (char *)pBuffer;
+        int64_t nDone = 0;
+        while ( nLength > 0 )
+        {
+            int nChunk = ( nLength > (size_t)INT_MAX ) ? INT_MAX : (int)nLength;
+            int nRead = Read( p, nChunk );
+            if ( nRead <= 0 )
+                break;
+            nDone += nRead;
+            p += nRead;
+            nLength -= (size_t)nRead;
+            if ( nRead < nChunk )
+                break;
+        }
+        return nDone;
+    }
+
+    int64_t CFile::WriteBig( const void *pBuffer, size_t nLength )
+    {
+        if ( ! m_fpFile || ! ( m_bOutput || m_bAppend ) )
+            return -1;
+        const char *p = (const char *)pBuffer;
+        int64_t nDone = 0;
+        while ( nLength > 0 )
+        {
+            int nChunk = ( nLength > (size_t)INT_MAX ) ? INT_MAX : (int)nLength;
+            int nWritten = Write( p, nChunk );
+            if ( nWritten <= 0 )
+                break;
+            nDone += nWritten;
+            p += nWritten;
+            nLength -= (size_t)nWritten;
+            if ( nWritten < nChunk )
+                break;
+        }
+        return nDone;
     }
 
     bool CFile::IsEOF( void )
@@ -357,10 +437,10 @@ namespace IASLib
                 size_t nTemp = strRetVal.GetLength();
                 if ( m_lCurrentPos != -1 )
                 {
-                    m_lCurrentPos += (long)nTemp;
+                    m_lCurrentPos += (int64_t)nTemp;
                     if ( ! m_bBinary )
                     {
-                        m_lCurrentPos = ftell( m_fpFile );
+                        m_lCurrentPos = tell64( m_fpFile );
                     }
                 }
                 strRetVal += Buffer;

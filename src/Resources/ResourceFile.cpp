@@ -32,6 +32,7 @@
 #include "../../inc/Exceptions/StreamException.h"
 
 #include <limits.h>
+#include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -47,40 +48,18 @@ namespace IASLib
         const size_t COPY_CHUNK = 64 * 1024;
         const size_t DIGEST_SIZE = sizeof( CSha256Digest );
 
-            // CFile works in longs and ints.
-        bool fitsLong( uint64_t n ) { return n <= (uint64_t)LONG_MAX; }
-
         bool readAt( CFile &oFile, uint64_t nOffset, void *pBuffer, size_t nLength )
         {
-            if ( ! fitsLong( nOffset ) || oFile.Seek( (long)nOffset, CFile::BEGIN ) != (long)nOffset )
+            if ( nOffset > (uint64_t)INT64_MAX || oFile.SeekBig( (int64_t)nOffset, CFile::BEGIN ) != (int64_t)nOffset )
                 return false;
-            char *p = (char *)pBuffer;
-            while ( nLength > 0 )
-            {
-                int nChunk = ( nLength > (size_t)INT_MAX ) ? INT_MAX : (int)nLength;
-                if ( oFile.Read( p, nChunk ) != nChunk )
-                    return false;
-                p += nChunk;
-                nLength -= (size_t)nChunk;
-            }
-            return true;
+            return nLength == 0 || oFile.ReadBig( pBuffer, nLength ) == (int64_t)nLength;
         }
 
         bool writeAt( CFile &oFile, uint64_t nOffset, const void *pBuffer, size_t nLength )
         {
-            if ( ! fitsLong( nOffset ) || ! fitsLong( nOffset + nLength ) ||
-                 oFile.Seek( (long)nOffset, CFile::BEGIN ) != (long)nOffset )
+            if ( nOffset > (uint64_t)INT64_MAX || oFile.SeekBig( (int64_t)nOffset, CFile::BEGIN ) != (int64_t)nOffset )
                 return false;
-            const char *p = (const char *)pBuffer;
-            while ( nLength > 0 )
-            {
-                int nChunk = ( nLength > (size_t)INT_MAX ) ? INT_MAX : (int)nLength;
-                if ( oFile.Write( p, nChunk ) != nChunk )
-                    return false;
-                p += nChunk;
-                nLength -= (size_t)nChunk;
-            }
-            return true;
+            return nLength == 0 || oFile.WriteBig( pBuffer, nLength ) == (int64_t)nLength;
         }
 
             // Opens with CFile, which throws when it cannot.
@@ -340,8 +319,8 @@ namespace IASLib
 
     bool CResourceFile::ReadIndex( void )
     {
-        long lSize = m_pFile->Seek( 0, CFile::END );
-        if ( lSize < (long)HEADER_SIZE )
+        int64_t lSize = m_pFile->SeekBig( 0, CFile::END );
+        if ( lSize < (int64_t)HEADER_SIZE )
             return Fail( "%s is not a resource archive (too short)", (const char *)m_strPath );
         uint64_t nFileSize = (uint64_t)lSize;
 

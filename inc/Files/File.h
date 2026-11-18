@@ -18,6 +18,7 @@
 #define IASLIB_FILE_H__
 
 #include <stdio.h>
+#include <stdint.h>
 #include "../BaseTypes/String_.h"
 
 namespace IASLib
@@ -44,8 +45,8 @@ namespace IASLib
             bool            m_bOutput;
             bool            m_bAppend;
             bool            m_bBinary;
-            long            m_lFileSize;
-            long            m_lCurrentPos;
+            int64_t         m_lFileSize;        // -1 until known
+            int64_t         m_lCurrentPos;      // -1 until known
         public:
 	                        CFile();
                             CFile( const char *strFileName, int nMode );
@@ -64,9 +65,24 @@ namespace IASLib
             virtual int     Read( char *pchBuffer, int nBufferSize );
             virtual int     Write( const char *pchBuffer, int nBufferSize );
             virtual int     WriteString( const CString &oString );
+                // Positions and sizes as a long: -1 when the value does not
+                // fit (a file past 2 GB where long is 32 bits, as on
+                // Windows). The Big methods below take any size.
             virtual long    GetPos( void );
             virtual long    GetSize( void );
             virtual long    Seek( long nPos, int nStart );
+
+                // 64-bit positions and sizes, for files of any size (up to
+                // 2^63 bytes). SeekBig() returns the new position, or -1 if
+                // the seek failed.
+            virtual int64_t GetPosBig( void );
+            virtual int64_t GetSizeBig( void );
+            virtual int64_t SeekBig( int64_t nPos, int nStart );
+                // Reads or writes any number of bytes (in pieces where the C
+                // library needs it). Returns the bytes moved, or -1 if the
+                // file is not open for it.
+            virtual int64_t ReadBig( void *pBuffer, size_t nLength );
+            virtual int64_t WriteBig( const void *pBuffer, size_t nLength );
             virtual bool    IsOpen( void ) const { return (m_fpFile != NULL); }
             virtual CString GetLine( void );
 

@@ -122,14 +122,14 @@ namespace IASLib
                 strError = "cannot be opened";
                 return false;
             }
-            long lSize = oFile.Seek( 0, CFile::END );
-            if ( lSize < 0 || lSize > INT_MAX || oFile.Seek( 0, CFile::BEGIN ) != 0 )
+            int64_t lSize = oFile.SeekBig( 0, CFile::END );
+            if ( lSize < 0 || (uint64_t)lSize > (uint64_t)(size_t)-1 || oFile.SeekBig( 0, CFile::BEGIN ) != 0 )
             {
                 strError = "cannot be sized";
                 return false;
             }
             CDataBlock oRead( (size_t)lSize );
-            if ( lSize > 0 && oFile.Read( (char *)oRead, (int)lSize ) != (int)lSize )
+            if ( lSize > 0 && oFile.ReadBig( (char *)oRead, (size_t)lSize ) != lSize )
             {
                 strError = "cannot be read";
                 return false;

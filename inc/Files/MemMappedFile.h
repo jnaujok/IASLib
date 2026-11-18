@@ -65,6 +65,10 @@ namespace IASLib
             virtual long    Seek( long nPos, int nStart );
             virtual long    SeekRead( long nPos, int nStart );
             virtual long    SeekWrite( long nPos, int nStart );
+                // Through its own position methods (not CFile's stream).
+            virtual int64_t GetPosBig( void ) { return GetPos(); }
+            virtual int64_t GetSizeBig( void ) { return GetSize(); }
+            virtual int64_t SeekBig( int64_t nPos, int nStart ) { return Seek( (long)nPos, nStart ); }
             virtual bool    IsOpen( void ) const { return m_bIsOpen; }
             virtual bool    IsEOF( void );
             virtual CString GetLine( void );

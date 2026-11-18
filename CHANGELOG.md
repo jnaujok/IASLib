@@ -86,6 +86,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CLogFile` and `CRotatingLogFile` take an auto-flush argument; lines at ERROR and above are always flushed. A file that cannot be opened leaves the log closed instead of throwing.
   - `CRotatingLogFile` deletes all but the newest `nFilesToKeep` files that match its template. It used to keep everything.
   - `CLogContext::getArrayValue()` returns NULL for a missing name, not a shared empty array.
+- **Files:** `CFile::GetPos()`, `GetSize()` and `Seek()` return -1 when the value does not fit in a `long` (past 2 GB where it is 32 bits, as on Windows). They used to return a wrong value. A failed `Seek()` returns -1 rather than the old position, and seeking past the end no longer changes the size `GetSize()` reports.
 - **Resources:** `CResource::Load()` and `Save()` take the `CResourceFile` to use (they were declared without one and never defined). The compression constants are in `ResourceIndex.h`.
 - **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
 
@@ -160,6 +161,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CMemoryDebugHeap`: fenceposts, double and foreign frees, spoiling freed memory, and optional leak tracking by type, file and line, with `ReportLeaks()` and `CheckAll()`.
   - `IASLIB_NEW`, a `new` that records the file and line.
   - `TestMemory`, and a CI job for the memory manager without the debugging heap.
+- **64-bit files:** `CFile::SeekBig()`, `GetPosBig()`, `GetSizeBig()`, `ReadBig()` and `WriteBig()` take and return 64-bit values, so files of any size (up to 2^63 bytes) can be addressed. The C library's 64-bit calls are used on every platform, and `_FILE_OFFSET_BITS=64` is set outside Windows. `TestFiles` checks past 4 GB, using sparse files.
 - **Resource manager**, for games and other programs with many resources to load (it was an empty skeleton):
   - `CResourceManager` loads resources by path (`"textures/hero.png"`) and keeps them while they are wanted.
     - Sources are searched in priority order, so loose files or a patch can override the main archive: `CArchiveSource` (an archive, by resource name) and `CDirectorySource` (loose files). Programs can add their own.
@@ -173,7 +175,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
     - SHA-256 digests on the data and the index. A crash part-way through a write leaves the archive as it was at the last `Flush()`.
     - `Compact()` reclaims space from replaced or removed resources.
     - A `TCache` with a byte limit, which `CArchiveSource` turns off because the manager caches.
-    - Built on CFile, so on Windows an archive is limited to 2 GB.
+    - 64-bit offsets throughout, so an archive can be any size.
   - `CResource` is a resource in an archive, with its name, type, and when and by whom it was changed. `CResourceDirectoryNode` and `CResourceFileNode` give a folder view.
   - `TestResources` and `TestResourceManager`.
 - **Stats and status:**

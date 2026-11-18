@@ -127,6 +127,11 @@ if(LINUX)
     add_definitions(-DIASLIB_LINUX__)
 endif()
 
+if(NOT WIN32)
+    # 64-bit file offsets for CFile's Big methods on 32-bit systems too.
+    add_definitions(-D_FILE_OFFSET_BITS=64)
+endif()
+
 if(WIN32)
     add_definitions(-DIASLIB_WIN32__)
 endif()

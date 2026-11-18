@@ -12,8 +12,8 @@
  * the file, and Flush() writes a new index after it and then the header,
  * so a crash part-way leaves the archive as it was at the last Flush().
  * Data that has been replaced or removed, and old indexes, are wasted
- * space until Compact() rewrites the file. (CFile seeks with a long, so on
- * Windows an archive is limited to 2 GB.)
+ * space until Compact() rewrites the file. Offsets are 64-bit (CFile's
+ * Big methods), so an archive can be any size.
  *
  *      With auto-flush (the default) every Put() and Remove() is flushed.
  * Read resources are kept in a TCache, least recently used first out, up
