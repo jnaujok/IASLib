@@ -51,7 +51,8 @@ if(USE_JSON AND USE_SJSON)
     configure_file(TestSjson/sjson_vectors.json sjson_vectors.json COPYONLY)
     file(COPY TestSjson/schemas DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
     add_executable(TestSjson TestSjson/TestSjson.cpp)
-    target_link_libraries(TestSjson IASLib)
+    find_package(Threads REQUIRED)     # the link test runs both ends at once
+    target_link_libraries(TestSjson IASLib Threads::Threads)
     add_test(test_sjson TestSjson)
         # The benchmark (not a test): see test/BenchSjson/BenchSjson.cpp.
     add_executable(BenchSjson BenchSjson/BenchSjson.cpp)

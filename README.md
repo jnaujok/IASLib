@@ -88,7 +88,8 @@ It was years later that the movie "Sherlock Holmes", and the TV series of "Sherl
 **SJSON** (compact binary JSON)
 - `CSjson` packs JSON trees into small binary packets: field names become dictionary ids, and numbers and strings get tight encodings (UUIDs, timestamps, hex, base64 and range-coded text among them).
 - A JSON Schema or XSD (or a compiled dictionary file) pre-loads the dictionary, and documents that fit the schema are sent without field tags or type codes.
-- Stream mode remembers recent values per field, so repeats and small changes cost a few bits; longer text goes through a zstd channel.
+- Stream mode remembers recent values per field, so repeats and small changes cost a few bits; longer text goes through a zstd channel (about 3 MB per stream at the default 128 KiB window). Stream packets leave out the sender id, since a connection has one sender.
+- `CSjsonLink` runs SJSON over any `CStream` (a `CSocketStream` over TCP or WinSock, a pipe) with an ACK/NAK protocol: missing names are fetched, a stream that lost its place is reset, and damaged packets are sent again. It talks to the Python library's `examples/acknak.py`.
 - Wire-compatible with the [Python sjson library](https://github.com/jnaujok/sjson): the same document gives the same bytes, and packets decode in either.
 
 **Networking**
@@ -240,6 +241,11 @@ receiver.registerDictionary( *dictionary );
 std::vector<unsigned char> packet;
 sender.encode( *document, packet );
 CJsonNode *copy = receiver.decode( packet.data(), packet.size() );   // NULL: see receiver.lastError()
+
+    // Or let a link handle framing, ACKs and NAKs over a stream:
+CSocketStream stream( new CClientSocket( "10.0.0.5", 7400 ) );
+CSjsonLink link( stream, sender );
+link.send( *document );             // returns once the peer has decoded it
 ```
 
 ### An HTTPS server with virtual hosts

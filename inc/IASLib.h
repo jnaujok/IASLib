@@ -306,6 +306,7 @@
 #include "SJSON/SjsonSchema.h"
 #include "SJSON/SjsonSchemaCodec.h"
 #include "SJSON/Sjson.h"
+#include "SJSON/SjsonLink.h"
 #endif
 #endif
 

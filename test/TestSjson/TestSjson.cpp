@@ -12,6 +12,10 @@
 #include "IASLib.h"
 
 #include <cmath>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -74,13 +78,13 @@ static std::string json( const CJsonNode *pNode )
     // Decodes, answering one NAK if needed.
 static CJsonNode *decodeWithNak( CSjson &receiver, CSjson &sender, const std::vector<unsigned char> &packet )
 {
-    CJsonNode *pValue = receiver.decode( packet.data(), packet.size() );
+    unsigned nSender = sender.senderId();    // for packets that leave it out
+    CJsonNode *pValue = receiver.decode( packet.data(), packet.size(), nSender );
     if ( pValue == NULL && receiver.lastError() == SJSON_ERROR_UNKNOWN_TAG )
     {
-        unsigned nSender = sender.senderId();
         std::vector<unsigned char> update = sender.nakDictionary( nSender, receiver.lastKnownTag( nSender ), receiver.lastKnownValue( nSender ) );
         receiver.loadDictionary( update.data(), update.size() );
-        pValue = receiver.decode( packet.data(), packet.size() );
+        pValue = receiver.decode( packet.data(), packet.size(), nSender );
     }
     return pValue;
 }
@@ -433,6 +437,231 @@ static void testStreamMode( void )
     CHECK( bOk );
 }
 
+static void testOptionalSender( void )
+{
+    printf( "Optional sender id\n" );
+    std::unique_ptr<CJsonNode> pDoc( document( 1 ) );
+    std::vector<unsigned char> packet, other;
+    CSjson::Header header;
+
+        // Stream mode leaves the id out; stateless packets keep it.
+    CSjson stream( 7, true ), plain( 7 );
+    CHECK( ! stream.includeSenderId() && plain.includeSenderId() );
+    CHECK( stream.encode( *pDoc, packet ) );
+    CHECK( CSjson::readHeader( packet.data(), packet.size(), header, 42 ) );
+    CHECK( ! header.bSender && header.nSenderId == 42 && ! ( header.nFlags & CSjson::FLAG_SENDER ) );
+    CHECK( plain.encode( *pDoc, packet ) );
+    CHECK( CSjson::readHeader( packet.data(), packet.size(), header, 42 ) );
+    CHECK( header.bSender && header.nSenderId == 7 );
+
+        // Leaving it out saves exactly 16 bits.
+    CSjson with( 9 ), without( 9 );
+    without.setIncludeSenderId( false );
+    size_t nWith = 0, nWithout = 0;
+    CHECK( with.encode( *pDoc, packet, &nWith ) && without.encode( *pDoc, other, &nWithout ) );
+    CHECK( nWith - nWithout == 16 );
+
+        // One receiver, two links, each attributed to its own id.
+    CSjson a( 1, true ), b( 2, true ), receiver( 99 );
+    for ( int n = 0; n < 10; n++ )
+    {
+        std::unique_ptr<CJsonNode> pIn( document( n ) );
+        CHECK( a.encode( *pIn, packet ) );
+        std::unique_ptr<CJsonNode> pA( receiver.decode( packet.data(), packet.size(), 101 ) );
+        CHECK( b.encode( *pIn, packet ) );
+        std::unique_ptr<CJsonNode> pB( receiver.decode( packet.data(), packet.size(), 102 ) );
+        CHECK( pA && pB && json( pA.get() ) == json( pIn.get() ) && json( pB.get() ) == json( pIn.get() ) );
+    }
+    CHECK( receiver.lastKnownTag( 101 ) > 0 && receiver.lastKnownTag( 101 ) == receiver.lastKnownTag( 102 ) );
+
+        // A NAK under the link's id is answered with the sender's own names.
+    CSjson quiet( 7 ), listener( 8 );
+    quiet.setIncludeSenderId( false );
+    CHECK( quiet.encode( *pDoc, packet ) );
+    CHECK( listener.decode( packet.data(), packet.size(), 55 ) == NULL && listener.lastError() == SJSON_ERROR_UNKNOWN_TAG );
+    std::vector<unsigned char> update = quiet.nakDictionary( 55, 0, 0 );
+    CHECK( listener.loadDictionary( update.data(), update.size() ) );
+    std::unique_ptr<CJsonNode> pBack( listener.decode( packet.data(), packet.size(), 55 ) );
+    CHECK( pBack && json( pBack.get() ) == json( pDoc.get() ) );
+}
+
+    // One direction of an in-memory pipe.
+struct PipeChannel
+{
+    std::mutex              mutex;
+    std::condition_variable ready;
+    std::deque<char>        data;
+    bool                    bClosed = false;
+};
+
+    // One end of a duplex pipe, as a CStream. Writes listed in aCorrupt or
+    // aDrop (counted from 1; each CSjsonLink frame is one write) are damaged
+    // or lost.
+class CPipeEnd : public CStream
+{
+    public:
+        CPipeEnd( PipeChannel &in, PipeChannel &out ) : m_in( in ), m_out( out ), m_nWrites( 0 ) {}
+        std::vector<int>    aCorrupt;
+        virtual int GetBuffer( char *achBuffer, int nLength )
+        {
+            std::unique_lock<std::mutex> lock( m_in.mutex );
+            m_in.ready.wait( lock, [this] { return ! m_in.data.empty() || m_in.bClosed; } );
+            int nRead = 0;
+            while ( nRead < nLength && ! m_in.data.empty() )
+            {
+                achBuffer[ nRead++ ] = m_in.data.front();
+                m_in.data.pop_front();
+            }
+            return nRead;
+        }
+        virtual int PutBuffer( const char *achBuffer, int nLength )
+        {
+            std::string strData( achBuffer, (size_t)nLength );
+            m_nWrites++;
+            for ( size_t n = 0; n < aCorrupt.size(); n++ )
+                if ( aCorrupt[ n ] == m_nWrites && nLength > 12 )
+                    strData[ (size_t)nLength - 6 ] ^= 0x10;
+            std::lock_guard<std::mutex> lock( m_out.mutex );
+            m_out.data.insert( m_out.data.end(), strData.begin(), strData.end() );
+            m_out.ready.notify_all();
+            return nLength;
+        }
+        virtual bool IsEOS( void )
+        {
+            std::lock_guard<std::mutex> lock( m_in.mutex );
+            return m_in.bClosed && m_in.data.empty();
+        }
+        virtual char PeekChar( void )
+        {
+            std::unique_lock<std::mutex> lock( m_in.mutex );
+            m_in.ready.wait( lock, [this] { return ! m_in.data.empty() || m_in.bClosed; } );
+            return m_in.data.empty() ? '\0' : m_in.data.front();
+        }
+        virtual void Close( void )
+        {
+            std::lock_guard<std::mutex> lock( m_out.mutex );
+            m_out.bClosed = true;
+            m_out.ready.notify_all();
+        }
+    private:
+        PipeChannel        &m_in;
+        PipeChannel        &m_out;
+        int                 m_nWrites;
+};
+
+static CJsonNode *report( int n )
+{
+    CObjectNode *pObject = new CObjectNode();
+    pObject->put( "platform", "UAV-7" );
+    pObject->put( "sequence", (long long)n );
+    pObject->put( "lat", 35.0 + n * 1e-4 );
+    pObject->put( "status", n % 5 ? "NOMINAL" : "DEGRADED" );
+    return pObject;
+}
+
+    // Sends count reports from sender to a receiver thread; nRestartAt
+    // swaps in a fresh receiving codec (a restarted process).
+static CSjsonLink::Stats linkRun( CSjson &sender, int nCount, int nRestartAt = -1, std::vector<int> aCorrupt = std::vector<int>() )
+{
+    PipeChannel forward, back;
+    CPipeEnd senderEnd( back, forward ), receiverEnd( forward, back );
+    senderEnd.aCorrupt = aCorrupt;
+    CSjsonLink senderLink( senderEnd, sender );
+    CSjson first( 2 ), second( 2 );
+    CSjsonLink receiverLink( receiverEnd, first, 1 );
+    std::vector<std::string> aGot;
+    std::thread receiver( [&]() {
+        for ( int n = 0; n < nCount; n++ )
+        {
+            if ( n == nRestartAt )
+                receiverLink.setCodec( second );
+            std::unique_ptr<CJsonNode> pDoc( receiverLink.receive() );
+            aGot.push_back( json( pDoc.get() ) );
+        }
+    } );
+    bool bAllSent = true;
+    for ( int n = 0; n < nCount; n++ )
+    {
+        std::unique_ptr<CJsonNode> pDoc( report( n ) );
+        bAllSent = senderLink.send( *pDoc ) && bAllSent;
+    }
+    receiver.join();
+    CHECK( bAllSent );
+    CHECK( (int)aGot.size() == nCount );
+    for ( int n = 0; n < nCount && n < (int)aGot.size(); n++ )
+    {
+        std::unique_ptr<CJsonNode> pDoc( report( n ) );
+        CHECK( aGot[ (size_t)n ] == json( pDoc.get() ) );
+    }
+    return senderLink.stats();
+}
+
+static void testLink( void )
+{
+    printf( "ACK/NAK link\n" );
+    CSjson stateless( 1 );
+    CSjsonLink::Stats stats = linkRun( stateless, 20 );
+    CHECK( stats.nNaks == 1 && stats.nDictionaryBytes > 0 && stats.nResent == 0 );
+    printf( "    stateless: %.1f bytes/msg, %zu NAK, %zu dictionary bytes\n", stats.nSent / 20.0, stats.nNaks, stats.nDictionaryBytes );
+
+    CSjson stream( 1, true );
+    stats = linkRun( stream, 20 );
+    CHECK( stats.nNaks == 0 && stats.nResent == 0 );
+    printf( "    stream mode: %.1f bytes/msg, no NAKs\n", stats.nSent / 20.0 );
+
+    CSjson restarted( 1, true );
+    stats = linkRun( restarted, 20, 10 );
+    CHECK( stats.nNaks == 1 && stats.nResent > 0 );
+
+    CSjson damaged( 1, true );
+    std::vector<int> aCorrupt;
+    aCorrupt.push_back( 3 );
+    aCorrupt.push_back( 9 );
+    stats = linkRun( damaged, 20, -1, aCorrupt );
+    CHECK( stats.nNaks == 2 && stats.nResent > 0 );
+
+        // A dictionary the receiver never registered: refused, not retried.
+    {
+        PipeChannel forward, back;
+        CPipeEnd senderEnd( back, forward ), receiverEnd( forward, back );
+        std::vector<std::string> aNames( 1, "alpha" );
+        std::unique_ptr<CSjsonDictionary> pDictionary( CSjsonDictionary::fromNames( aNames, std::vector<std::string>() ) );
+        CSjson sender( 1 ), receiver( 2 );
+        sender.setDictionary( *pDictionary );
+        CSjsonLink senderLink( senderEnd, sender ), receiverLink( receiverEnd, receiver );
+        std::thread peer( [&]() { std::unique_ptr<CJsonNode> pDoc( receiverLink.receive() ); } );
+        CObjectNode doc;
+        doc.put( "alpha", 1LL );
+        CHECK( ! senderLink.send( doc ) && senderLink.lastError() == CSjsonLink::LINK_REFUSED );
+        senderEnd.Close();
+        peer.join();
+        CHECK( receiverLink.lastError() == CSjsonLink::LINK_CLOSED );
+    }
+
+        // Both ends send.
+    {
+        PipeChannel forward, back;
+        CPipeEnd leftEnd( back, forward ), rightEnd( forward, back );
+        CSjson left( 1 ), right( 2 );
+        CSjsonLink leftLink( leftEnd, left, 2 ), rightLink( rightEnd, right, 1 );
+        std::string strGot;
+        std::thread peer( [&]() {
+            std::unique_ptr<CJsonNode> pDoc( rightLink.receive() );
+            strGot = json( pDoc.get() );
+            CObjectNode pong;
+            pong.put( "pong", 1LL );
+            rightLink.send( pong );
+        } );
+        CObjectNode ping;
+        ping.put( "ping", 1LL );
+        CHECK( leftLink.send( ping ) );
+        std::unique_ptr<CJsonNode> pPong( leftLink.receive() );
+        peer.join();
+        CHECK( strGot == json( &ping ) );
+        CHECK( pPong && json( pPong.get() ) == "{\"pong\":1}" );
+    }
+}
+
 static void testFuzz( void )
 {
     printf( "Fuzz\n" );
@@ -516,6 +745,8 @@ int main( void )
         testCompiledDictionaries( *pVectors );
     }
     testStreamMode();
+    testOptionalSender();
+    testLink();
     testFuzz();
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );

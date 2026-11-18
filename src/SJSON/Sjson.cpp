@@ -28,7 +28,7 @@ namespace IASLib
 {
     namespace
     {
-        const unsigned VERSION_BITS = 4, FLAG_BITS = 3, SEQUENCE_BITS = 8, CACHE_WIDTH_BITS = 3;
+        const unsigned VERSION_BITS = 4, FLAG_BITS = 4, SEQUENCE_BITS = 8, CACHE_WIDTH_BITS = 3;
 
             // The CRC covers the zero-padded bytes of the first nBits bits.
         unsigned packetCrc( const unsigned char *pData, size_t nBits )
@@ -73,7 +73,7 @@ namespace IASLib
     }
 
     CSjson::CSjson( unsigned nSenderId, bool bStateful, unsigned nCacheWidth )
-        : m_nSenderId( nSenderId & 0xFFFF ), m_bStateful( bStateful ), m_nCacheWidth( nCacheWidth ),
+        : m_nSenderId( nSenderId & 0xFFFF ), m_bStateful( bStateful ), m_bIncludeSenderId( ! bStateful ), m_nCacheWidth( nCacheWidth ),
           m_bSchemaEncoding( true ), m_bLz4( true ), m_nTextLevel( TEXT_LEVEL ), m_nTextWindowLog( TEXT_WINDOW_LOG ), m_nSequence( 0 ), m_pTextOut( NULL ), m_eError( SJSON_OK )
     {
         if ( bStateful )
@@ -217,7 +217,7 @@ namespace IASLib
                     // A smaller window, with the match tables to suit it.
                 ZSTD_CCtx_setParameter( pContext, ZSTD_c_windowLog, m_nTextWindowLog );
                 ZSTD_CCtx_setParameter( pContext, ZSTD_c_hashLog, m_nTextWindowLog + 1 < 22 ? m_nTextWindowLog + 1 : 22 );
-                ZSTD_CCtx_setParameter( pContext, ZSTD_c_chainLog, m_nTextWindowLog + 1 );
+                ZSTD_CCtx_setParameter( pContext, ZSTD_c_chainLog, m_nTextWindowLog + 1 < 24 ? m_nTextWindowLog + 1 : 24 );
             }
             if ( ! strDict.empty() )
                 ZSTD_CCtx_loadDictionary( pContext, strDict.data(), strDict.size() );
@@ -395,10 +395,13 @@ namespace IASLib
         bool bFingerprint = dict.hasFingerprint() && ( pStream == NULL || m_nSequence == 0 );
         if ( bFingerprint )
             nFlags |= FLAG_SCHEMA;
+        if ( m_bIncludeSenderId )
+            nFlags |= FLAG_SENDER;
         CSjsonBitWriter out;
-        out.writeBits( m_nSenderId, 16 );
         out.writeBits( VERSION, VERSION_BITS );
         out.writeBits( nFlags, FLAG_BITS );
+        if ( m_bIncludeSenderId )
+            out.writeBits( m_nSenderId, 16 );
         if ( pStream )
         {
             out.writeBits( m_nSequence, SEQUENCE_BITS );
@@ -416,16 +419,17 @@ namespace IASLib
         return true;
     }
 
-    bool CSjson::readHeader( const unsigned char *pData, size_t nLength, Header &header )
+    bool CSjson::readHeader( const unsigned char *pData, size_t nLength, Header &header, unsigned nSenderId )
     {
         try
         {
             CSjsonBitReader in( pData, nLength * 8 );
-            header.nSenderId = (unsigned)in.readBits( 16 );
             header.nVersion = (unsigned)in.readBits( VERSION_BITS );
             if ( header.nVersion != VERSION )
                 return false;
             header.nFlags = (unsigned)in.readBits( FLAG_BITS );
+            header.bSender = ( header.nFlags & FLAG_SENDER ) != 0;
+            header.nSenderId = header.bSender ? (unsigned)in.readBits( 16 ) : ( nSenderId & 0xFFFF );
             header.bSequence = ( header.nFlags & FLAG_STATEFUL ) != 0;
             header.nSequence = header.nCacheWidth = 0;
             if ( header.bSequence )
@@ -482,12 +486,12 @@ namespace IASLib
         return it->second.pState.get();
     }
 
-    CJsonNode *CSjson::decode( const unsigned char *pData, size_t nLength )
+    CJsonNode *CSjson::decode( const unsigned char *pData, size_t nLength, unsigned nSenderId )
     {
         m_eError = SJSON_OK;
         m_strError.clear();
         Header header;
-        if ( ! readHeader( pData, nLength, header ) )
+        if ( ! readHeader( pData, nLength, header, nSenderId ) )
         {
             fail( SJSON_ERROR_VERSION, "unreadable header or unsupported packet version" );
             return NULL;
@@ -560,6 +564,10 @@ namespace IASLib
         out.writeBits( nSenderId & 0xFFFF, 16 );
         std::vector< std::pair<unsigned long long, std::string> > aTags, aValues;
         std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapDictionaries.find( nSenderId );
+        if ( it == m_mapDictionaries.end() && ! m_bIncludeSenderId )
+                // Our packets carry no sender id, so the peer asks under
+                // whatever id it gave this link: answer with our own.
+            it = m_mapDictionaries.find( m_nSenderId );
         if ( it != m_mapDictionaries.end() )
         {
             aTags = it->second->entriesAfter( nLastTag );
