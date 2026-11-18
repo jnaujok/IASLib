@@ -45,6 +45,9 @@ EXPAND_ONLY_PREDEF     = YES
 SEARCH_INCLUDES        = YES
 INCLUDE_PATH           = inc
 PREDEFINED             = IASLIB_NETWORKING__ \
+                         IASLIB_JSON_SUPPORT__ \
+                         IASLIB_DB_ORACLE__ \
+                         IASLIB_DB_MYSQL__ \
                          IASLIB_MULTI_THREADED__ \
                          IASLIB_PTHREAD__ \
                          IASLIB_RTTI__ \
