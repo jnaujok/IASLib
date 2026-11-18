@@ -716,7 +716,7 @@ static void testReviewFixes( void )
         sender.setDictionary( *pDictionary );
         std::unique_ptr<CJsonNode> pDoc( document( 2 ) );
         CHECK( sender.encode( *pDoc, packet ) && sender.encode( *pDoc, packet ) );
-        sender.setDictionary( sender.dictionary( 1 ) );
+        sender.setDictionary( sender.ownDictionary() );
         CHECK( sender.encode( *pDoc, packet ) );
         CSjson::Header header;
         CHECK( CSjson::readHeader( packet.data(), packet.size(), header ) );
@@ -790,15 +790,23 @@ static void testReviewFixes( void )
     setlocale( LC_NUMERIC, strSaved.c_str() );
     printf( "    comma-decimal locale %s\n", bComma ? "checked" : "not installed (skipped)" );
 
-        // A packet without a sender id must not be filed under our own id.
+        // The sending dictionary is kept apart from what is learnt from
+        // peers: a peer's packet filed under our own id cannot touch it.
     {
-        CSjson sender( 7, true ), receiver( 0 );
-        CObjectNode doc;
+        CSjson sender( 7, true ), receiver( 0 ), peer( 9 );
+        CObjectNode doc, mine;
         doc.put( "a", 1 );
-        CHECK( sender.encode( doc, packet ) );
-        CHECK( receiver.decode( packet.data(), packet.size() ) == NULL && receiver.lastError() == SJSON_ERROR_UNSUPPORTED );
-        std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size(), 1 ) );
+        mine.put( "mine", 2 );
+        CHECK( receiver.encode( mine, packet ) );          // receiver's own name: id 1
+        std::vector<unsigned char> theirs;
+        CHECK( sender.encode( doc, theirs ) );
+        std::unique_ptr<CJsonNode> pBack( receiver.decode( theirs.data(), theirs.size() ) );   // filed under 0
         CHECK( pBack && json( pBack.get() ) == json( &doc ) );
+        CHECK( receiver.ownDictionary().lookup( 1 ) == "mine" && ! receiver.ownDictionary().hasTag( "a" ) );
+        std::vector<unsigned char> update = receiver.nakDictionary( 0, 0, 0 );
+        CHECK( peer.loadDictionary( update.data(), update.size() ) );
+        pBack.reset( peer.decode( packet.data(), packet.size() ) );
+        CHECK( pBack && json( pBack.get() ) == json( &mine ) );
     }
 
         // A DICT that cannot be loaded makes the receiver forget what it
@@ -825,15 +833,23 @@ static void testReviewFixes( void )
         CHECK( nGot >= 24 && achAnswers[ 0 ] == CSjsonLink::FRAME_NAK_DICT && achAnswers[ 17 ] == CSjsonLink::FRAME_NAK_DICT );
     }
 
-        // A stream packet that carries our own id (our broadcast heard back)
-        // is refused rather than resetting our sending dictionary.
+        // Hearing our own stream broadcast back (it carries our id) leaves
+        // the sending dictionary alone, so a peer keeps decoding us.
     {
-        CSjson echo( 1, true );
+        CSjson echo( 1, true ), peer( 2 );
         echo.setIncludeSenderId( true );
-        CObjectNode doc;
-        doc.put( "alpha", 1 );
-        CHECK( echo.encode( doc, packet ) );
-        CHECK( echo.decode( packet.data(), packet.size() ) == NULL && echo.lastError() == SJSON_ERROR_UNSUPPORTED );
+        CObjectNode first, second;
+        first.put( "alpha", 1 );
+        second.put( "alpha", 2 );
+        second.put( "beta", 3 );
+        CHECK( echo.encode( first, packet ) );
+        std::unique_ptr<CJsonNode> pBack( peer.decode( packet.data(), packet.size() ) );
+        CHECK( pBack != NULL );
+        std::unique_ptr<CJsonNode> pEcho( echo.decode( packet.data(), packet.size() ) );   // seq 0, heard back
+        CHECK( pEcho && json( pEcho.get() ) == json( &first ) );
+        CHECK( echo.encode( second, packet ) );
+        pBack.reset( peer.decode( packet.data(), packet.size() ) );
+        CHECK( pBack && json( pBack.get() ) == json( &second ) );
     }
 
         // Unknown frame types end the link; links start numbering at random.

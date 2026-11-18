@@ -74,7 +74,7 @@ namespace IASLib
 
     CSjson::CSjson( unsigned nSenderId, bool bStateful, unsigned nCacheWidth )
         : m_nSenderId( nSenderId & 0xFFFF ), m_bStateful( bStateful ), m_bIncludeSenderId( ! bStateful ), m_nCacheWidth( nCacheWidth ),
-          m_bSchemaEncoding( true ), m_bLz4( true ), m_nTextLevel( TEXT_LEVEL ), m_nTextWindowLog( TEXT_WINDOW_LOG ), m_nSequence( 0 ), m_pTextOut( NULL ), m_pFrameOut( NULL ), m_pFrameIn( NULL ), m_eError( SJSON_OK )
+          m_bSchemaEncoding( true ), m_bLz4( true ), m_nTextLevel( TEXT_LEVEL ), m_nTextWindowLog( TEXT_WINDOW_LOG ), m_nSequence( 0 ), m_pTextOut( NULL ), m_pFrameOut( NULL ), m_pFrameIn( NULL ), m_pOwn( new CSjsonDictionary( true ) ), m_eError( SJSON_OK )
     {
         if ( bStateful )
             m_pStream.reset( new CSjsonStreamState( nCacheWidth ) );
@@ -82,6 +82,7 @@ namespace IASLib
 
     CSjson::~CSjson( void )
     {
+        delete m_pOwn;
         for ( std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapDictionaries.begin(); it != m_mapDictionaries.end(); ++it )
             delete it->second;
         for ( std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapKnown.begin(); it != m_mapKnown.end(); ++it )
@@ -117,13 +118,9 @@ namespace IASLib
             // Copy first: dictionary may be the one being replaced.
         CSjsonDictionary *pCopy = dictionary.freshCopy();
         registerDictionary( *pCopy );
-        std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapDictionaries.find( m_nSenderId );
-        if ( it != m_mapDictionaries.end() )
-        {
-            dropCodec( it->second );
-            delete it->second;
-        }
-        m_mapDictionaries[ m_nSenderId ] = pCopy;
+        dropCodec( m_pOwn );
+        delete m_pOwn;
+        m_pOwn = pCopy;
             // A stream started with the old dictionary: start again, so the
             // next packet names the new one.
         if ( m_bStateful )
@@ -164,7 +161,7 @@ namespace IASLib
 
     void CSjson::resetStream( void )
     {
-        dictionary( m_nSenderId ).resetToBase();
+        m_pOwn->resetToBase();
         if ( m_bStateful )
             m_pStream.reset( new CSjsonStreamState( m_nCacheWidth ) );
         m_nSequence = 0;
@@ -340,7 +337,7 @@ namespace IASLib
     {
         m_eError = SJSON_OK;
         m_strError.clear();
-        CSjsonDictionary &dict = dictionary( m_nSenderId );
+        CSjsonDictionary &dict = *m_pOwn;
         CSjsonStreamState *pStream = m_pStream.get();
         unsigned nFlags = pStream ? FLAG_STATEFUL : 0;
         CSjsonTextChannel perPacket;
@@ -509,15 +506,6 @@ namespace IASLib
             fail( SJSON_ERROR_VERSION, "unreadable header or unsupported packet version" );
             return NULL;
         }
-        if ( header.nSenderId == m_nSenderId && ( ! header.bSender || header.bSequence ) )
-        {
-                // Filing a peer's packets under our own id would mix its
-                // names into our sending dictionary, and a stream packet of
-                // our own (a broadcast heard back) would reset it.
-            fail( SJSON_ERROR_UNSUPPORTED, header.bSender ? "a stream packet carrying this endpoint's own sender id"
-                                                          : "a packet without a sender id was attributed to this endpoint's own id" );
-            return NULL;
-        }
         size_t nMessage = header.messageLength();
         if ( nLength * 8 < nMessage + 32 )
         {
@@ -588,17 +576,12 @@ namespace IASLib
     {
         CSjsonBitWriter out;
         out.writeBits( nSenderId & 0xFFFF, 16 );
-        std::vector< std::pair<unsigned long long, std::string> > aTags, aValues;
-            // Our packets carry no sender id, so the peer asks under whatever
-            // id it gave this link (perhaps the id we give the peer's own
-            // packets): then always answer with our own dictionary.
-        std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapDictionaries.find( m_bIncludeSenderId ? nSenderId : m_nSenderId );
-        if ( it != m_mapDictionaries.end() )
-        {
-            aTags = it->second->entriesAfter( nLastTag );
-            if ( it->second->values() )
-                aValues = it->second->values()->entriesAfter( nLastValue );
-        }
+            // A NAK asks the sender for its own names, under whatever id the
+            // peer knows it by (which, without ids on the wire, is the id the
+            // peer gave the link).
+        std::vector< std::pair<unsigned long long, std::string> > aTags = m_pOwn->entriesAfter( nLastTag ), aValues;
+        if ( m_pOwn->values() )
+            aValues = m_pOwn->values()->entriesAfter( nLastValue );
         const std::vector< std::pair<unsigned long long, std::string> > *apLists[ 2 ] = { &aTags, &aValues };
         for ( int k = 0; k < 2; k++ )
         {
@@ -630,7 +613,7 @@ namespace IASLib
                     unsigned long long nId = in.readNybble();
                     std::string strText = in.readBytes( (size_t)in.readNybble() );
                     CSjsonDictionary *pTarget = apTargets[ k ];
-                    if ( nSenderId == m_nSenderId || pTarget == NULL )
+                    if ( pTarget == NULL )
                         continue;
                     if ( pTarget->hasId( nId ) )
                     {

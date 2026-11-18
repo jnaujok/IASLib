@@ -163,21 +163,25 @@ namespace IASLib
 
                 /// @name Dictionary exchange
                 ///@{
-                /// Entries of nSenderId's dictionary after the given ids (the
-                /// answer to a NAK). An endpoint that leaves its sender id out
-                /// of packets answers with its own dictionary for any id the
-                /// peer gave the link, so it cannot relay another sender's
-                /// dictionary (turn setIncludeSenderId() on for that).
+                /// This endpoint's own names after the given ids: the answer
+                /// to a NAK. It is labelled with nSenderId, the id the peer
+                /// knows this endpoint by (the id it gave the link when
+                /// packets carry no sender id).
             std::vector<unsigned char> nakDictionary( unsigned nSenderId, unsigned long long nLastTag, unsigned long long nLastValue = 0 );
-                /// Loads an answer to a NAK. Entries about this endpoint's own
-                /// sender id are ignored.
+                /// Loads an answer to a NAK into the dictionary learnt from
+                /// that sender.
             bool                    loadDictionary( const unsigned char *pData, size_t nLength );
                 /// The highest tag id known for a sender: what to NAK with.
             unsigned long long      lastKnownTag( unsigned nSenderId ) const;
                 /// The highest interned-value id known for a sender.
             unsigned long long      lastKnownValue( unsigned nSenderId ) const;
-                /// The dictionary for a sender (created empty if new).
+                /// The dictionary learnt from a peer (created empty if new).
+                /// This endpoint's own sending dictionary is ownDictionary(),
+                /// kept apart, so no packet or NAK reply from a peer can reach
+                /// it, whatever id it carries.
             CSjsonDictionary       &dictionary( unsigned nSenderId );
+                /// The dictionary this endpoint sends with.
+            CSjsonDictionary       &ownDictionary( void ) { return *m_pOwn; }
                 ///@}
 
                 /// Stream mode: forgets all cached values and everything learnt
@@ -216,7 +220,8 @@ namespace IASLib
             int                     m_nTextWindowLog;   ///< zstd window log in stream mode.
             std::unique_ptr<CSjsonStreamState> m_pStream;   ///< The sending stream state.
             unsigned                m_nSequence;    ///< The next sequence number to send.
-            std::map<unsigned, CSjsonDictionary *> m_mapDictionaries;  ///< Per sender (owned).
+            CSjsonDictionary       *m_pOwn;         ///< The dictionary this endpoint sends with (owned).
+            std::map<unsigned, CSjsonDictionary *> m_mapDictionaries;  ///< Learnt from each peer, by sender id (owned).
             std::map<unsigned, CSjsonDictionary *> m_mapKnown;         ///< By fingerprint (owned).
             std::map<unsigned, ReceiveStream> m_mapStreams;            ///< Receiving stream state per sender.
             std::map<const CSjsonDictionary *, CSjsonSchemaCodec *> m_mapCodecs;  ///< Schema codecs (owned).

@@ -13,6 +13,7 @@ All notable changes to IASLib are recorded here. The format follows
   - Schemas: JSON Schema (drafts 4 to 2020-12, `$ref` across files) and XSD loaders, Python-identical fingerprints, compiled dictionary files, and the schema-driven encoding that drops field tags and type codes.
   - Stream mode: per-field recent-value caches, float / integer / timestamp / prefix deltas, inline name definitions, sequence numbers with gap detection and reset, and a zstd text channel (128 KiB window by default, `setTextWindowLog`).
   - Packet version 5: the sender id is optional (`setIncludeSenderId`), on for stateless packets and off in stream mode; `decode()` and `readHeader()` take the id to give packets without one.
+  - Each endpoint keeps its sending dictionary (`ownDictionary()`) apart from the dictionaries it learns from peers (`dictionary( id )`), so no packet or NAK reply from a peer can change it, whatever id it carries. Stateless packets with a text dictionary reuse one zstd context each way and a dictionary digested once.
   - `CSjsonLink`: SJSON over a `CStream` with an ACK/NAK protocol (dictionary NAKs, stream reset, resend of damaged packets, duplex), frame-compatible with the Python library's `examples/acknak.py`.
   - `TestSjson` checks byte-for-byte agreement with the Python library; `BenchSjson` measures both on the same message streams.
   - New option `USE_SJSON` (default `ON`); LZ4 (liblz4) and zstd (libzstd) are optional dependencies.
