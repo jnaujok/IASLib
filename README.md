@@ -89,7 +89,9 @@ It was years later that the movie "Sherlock Holmes", and the TV series of "Sherl
 - `CSjson` packs JSON trees into small binary packets: field names become dictionary ids, and numbers and strings get tight encodings (UUIDs, timestamps, hex, base64 and range-coded text among them).
 - A JSON Schema or XSD (or a compiled dictionary file) pre-loads the dictionary, and documents that fit the schema are sent without field tags or type codes.
 - Stream mode remembers recent values per field, so repeats and small changes cost a few bits; longer text goes through a zstd channel (about 3 MB per stream at the default 128 KiB window). Stream packets leave out the sender id, since a connection has one sender.
-- `CSjsonLink` runs SJSON over any `CStream` (a `CSocketStream` over TCP or WinSock, a pipe) with an ACK/NAK protocol: missing names are fetched, a stream that lost its place is reset, and damaged packets are sent again. It talks to the Python library's `examples/acknak.py`.
+- Each endpoint sends with its own dictionary (`ownDictionary()`), kept apart from the dictionaries it learns from peers (`dictionary( id )`), so nothing a peer sends can change it.
+- Stateless packets that use a compiled text dictionary reuse their zstd contexts and a dictionary digested once: about 90 µs to encode and 20 µs to decode a UCI message, against 520 and 50 µs when the dictionary was rebuilt for every packet.
+- `CSjsonLink` runs SJSON over any `CStream` (a `CSocketStream` over TCP or WinSock, a pipe) with an ACK/NAK protocol: missing names are fetched, a stream that lost its place is reset, and damaged packets are sent again. It talks to the Python library's `examples/acknak.py`. Writes block, so two ends sending frames larger than the socket buffers at the same moment can deadlock ([#3](https://github.com/jnaujok/IASLib/issues/3)); SJSON packets are normally far smaller.
 - Wire-compatible with the [Python sjson library](https://github.com/jnaujok/sjson): the same document gives the same bytes, and packets decode in either.
 
 **Networking**

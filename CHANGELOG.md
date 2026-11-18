@@ -17,6 +17,8 @@ All notable changes to IASLib are recorded here. The format follows
   - `CSjsonLink`: SJSON over a `CStream` with an ACK/NAK protocol (dictionary NAKs, stream reset, resend of damaged packets, duplex), frame-compatible with the Python library's `examples/acknak.py`.
   - `TestSjson` checks byte-for-byte agreement with the Python library; `BenchSjson` measures both on the same message streams.
   - New option `USE_SJSON` (default `ON`); LZ4 (liblz4) and zstd (libzstd) are optional dependencies.
+- `CLAUDE.md`: README.md and CHANGELOG.md are updated in the same pull request, before every merge.
+- README: the SJSON own dictionary, the zstd frame caching figures and the `CSjsonLink` blocking-write caveat (#3).
 
 ## [3.0.0] — 2026-11-18
 
