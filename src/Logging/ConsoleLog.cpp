@@ -16,20 +16,13 @@
 #include "ConsoleLog.h"
 
 #include <stdio.h>
-#ifndef IASLIB_WIN32__
-#include <stdarg.h>
-#else
-#include <strsafe.h>
-#endif
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CConsoleLog, CLogSink );
 
-    CConsoleLog::CConsoleLog( Level level ) : CLogSink( level )
-#ifdef IASLIB_MULTI_THREADED__
-    , m_mutexProtect()
-#endif        
+    CConsoleLog::CConsoleLog( Level level, bool bStandardError, bool bMakeDefault )
+        : CLogSink( level, bMakeDefault ), m_bStandardError( bStandardError )
     {
     }
 
@@ -39,13 +32,12 @@ namespace IASLib
 
     bool CConsoleLog::writeLine( const char *message )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        printf( "%s\n", message );
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        return true;
+        FILE *pOut = ( m_bStandardError ) ? stderr : stdout;
+        std::lock_guard<std::mutex> lock( m_mutexProtect );
+            // (printf( "%s\n" ) was not flushed, so lines sat in the buffer
+            // when output went to a pipe or file.)
+        bool bOk = fputs( ( message ) ? message : "", pOut ) >= 0 && fputc( '\n', pOut ) != EOF;
+        fflush( pOut );
+        return bOk;
     }
 } // namespace IASLib

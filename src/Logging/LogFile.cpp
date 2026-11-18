@@ -17,56 +17,82 @@
 
 
 #include "LogFile.h"
-#ifndef IASLIB_WIN32__
-#include <stdarg.h>
-#else
-#include <strsafe.h>
-#endif
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CLogFile, CLogSink );
 
-    CLogFile::CLogFile( Level level, const char *strFileName, bool bDeletePrevious ) : CLogSink( level )
-#ifdef IASLIB_MULTI_THREADED__            
-        , m_mutexProtect()
-#endif
+    CLogFile::CLogFile( Level level, const char *strFileName, bool bDeletePrevious, bool bAutoFlush, bool bMakeDefault )
+        : CLogSink( level, bMakeDefault ), m_bAutoFlush( bAutoFlush )
     {
-        m_strFileName = strFileName;
-        if ( ! bDeletePrevious )
+        m_strFileName = ( strFileName ) ? strFileName : "";
+        m_fileOutputFile = NULL;
+            // A file that cannot be opened leaves the log closed (IsOpen()
+            // is false) rather than throwing out of the constructor.
+        try
         {
-            m_fileOutputFile = new CFile( m_strFileName, CFile::APPEND );
+            m_fileOutputFile = new CFile( m_strFileName, ( bDeletePrevious ) ? CFile::WRITE : CFile::APPEND );
         }
-        else
+        catch ( ... )
         {
-            m_fileOutputFile = new CFile( m_strFileName, CFile::WRITE );
+            m_fileOutputFile = NULL;
         }
     }
 
+        // (The file was closed but never deleted.)
     CLogFile::~CLogFile( void )
     {
-        if (m_fileOutputFile)
+        std::lock_guard<std::mutex> lock( m_mutexProtect );
+        if ( m_fileOutputFile )
         {
             m_fileOutputFile->Close();
+            delete m_fileOutputFile;
+            m_fileOutputFile = NULL;
         }
-        m_fileOutputFile = NULL;
+    }
+
+    bool CLogFile::IsOpen( void )
+    {
+        std::lock_guard<std::mutex> lock( m_mutexProtect );
+        return m_fileOutputFile != NULL && m_fileOutputFile->IsOpen();
+    }
+
+    void CLogFile::Flush( void )
+    {
+        std::lock_guard<std::mutex> lock( m_mutexProtect );
+        if ( m_fileOutputFile )
+            m_fileOutputFile->Flush();
+    }
+
+    bool CLogFile::writeLog( Level logLevel, const char *strFilename, int nLineNum, const char *strFormat, ... )
+    {
+        if ( ! isEnabled( logLevel ) )
+            return false;
+        va_list vaArgs;
+        va_start( vaArgs, strFormat );
+        CString strMessage = formatV( strFormat, vaArgs );
+        va_end( vaArgs );
+        return writeLineFlushed( formatLine( logLevel, strFilename, nLineNum, strMessage ), logLevel >= ERROR );
     }
 
     bool CLogFile::writeLine( const char *message )
     {
-        if ( m_fileOutputFile )
-        {
-#ifdef IASLIB_MULTI_THREADED__            
-            m_mutexProtect.Lock();
-#endif
-            m_fileOutputFile->WriteString( message );
-            m_fileOutputFile->WriteString( "\n" );
-#ifdef IASLIB_MULTI_THREADED__            
-            m_mutexProtect.Unlock();
-#endif
-        }
-
-        return true;
+        return writeLineFlushed( message, false );
     }
-   
+
+        // One write per line, so lines from different threads never mix.
+        // (It reported success whatever happened.)
+    bool CLogFile::writeLineFlushed( const char *message, bool bFlush )
+    {
+        CString strLine( ( message ) ? message : "" );
+        strLine += "\n";
+
+        std::lock_guard<std::mutex> lock( m_mutexProtect );
+        if ( m_fileOutputFile == NULL || ! m_fileOutputFile->IsOpen() )
+            return false;
+        bool bOk = m_fileOutputFile->Write( (const char *)strLine, (int)strLine.GetLength() ) == (int)strLine.GetLength();
+        if ( bFlush || m_bAutoFlush )
+            m_fileOutputFile->Flush();
+        return bOk;
+    }
 } // namespace IASLib

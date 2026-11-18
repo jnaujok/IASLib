@@ -80,6 +80,14 @@ The base types and collections, reviewed one by one and cleaned up, and template
 - **Stats:** the Stats classes are always built. They were inside `IASLIB_STATS__`, which the CMake build never defined, so the library shipped them empty. Histogram counts are `long long`.
 - **`CCPUUsage`:** the elapsed-time methods take a `const CCPUUsage &`.
 
+- **Logging:**
+  - The `*_LOG` macros are single statements (`do { } while ( 0 )`) that read the sink once and skip formatting below its level. They were bare `if` statements that captured a following `else`, and read the sink twice.
+  - Destroying a sink clears the default only if it is the default (destroying any sink cleared it). Sinks take a `bMakeDefault` argument; `setInstance()` sets the default.
+  - `CLogFile` and `CRotatingLogFile` take an auto-flush argument; lines at ERROR and above are always flushed. A file that cannot be opened leaves the log closed instead of throwing.
+  - `CRotatingLogFile` deletes all but the newest `nFilesToKeep` files that match its template. It used to keep everything.
+  - `CLogContext::getArrayValue()` returns NULL for a missing name, not a shared empty array.
+- **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
+
 ### Added
 
 - **Template collections** (`Templates/TCollections.h`):
@@ -136,6 +144,21 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CInternetAddress::GetPort()` and `GetAddressLength()`.
   - `CSocketConfigBuilder::setLinger( on, seconds )`.
   - `TestSocketClasses`.
+- **Logging:**
+  - `CLogSink::setLevel()`, `getLevel()`, `isEnabled()`, `writeLogV()`, `formatLine()` and `formatV()`.
+  - `CLogSink::writeContextLog()`, and `CLogContext::expand()`, `has()` and `remove()`, which put context values in place of `${name}` in a message.
+  - `CConsoleLog` can write to stderr.
+  - `CLogFile::Flush()`, `setAutoFlush()` and `GetFileName()`.
+  - `CRotatingLogFile::GetCurrentFileName()`, `PeriodOf()` and `FileNameFor()`.
+  - `TestLogging`.
+- **Memory manager** (it was an empty skeleton):
+  - `CMemoryManager`, the allocator interface with statistics. `Set()` picks the allocator new objects come from, and each object goes back to the one it came from.
+  - `CDefaultMemoryManager` (malloc).
+  - `CMemoryFixedHeap`, a thread-safe pool of fixed-size blocks with constant-time allocate and free, and `Compact()`.
+  - `CMemoryHeap`, pools for 16 to 512 bytes.
+  - `CMemoryDebugHeap`: fenceposts, double and foreign frees, spoiling freed memory, and optional leak tracking by type, file and line, with `ReportLeaks()` and `CheckAll()`.
+  - `IASLIB_NEW`, a `new` that records the file and line.
+  - `TestMemory`, and a CI job for the memory manager without the debugging heap.
 - **Stats and status:**
   - `CHistogram::GetCount()` and `GetCategoryCount()`.
   - `CCoverageMap::IsUsed()`, `GetRunCount()` and `GetFragmentation()`.
@@ -286,6 +309,17 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CSocketConfig` left every field uninitialised.
   - `CSocketException`'s unknown-error message is formatted properly, and covers the connection errors.
   - Mail and the thread monitor caught exceptions by pointer, so those catches never ran.
+- **Logging:**
+  - `CRotatingLogFile`:
+    - It read its file pointer before setting it.
+    - It checked for rotation outside the lock that guarded the file, so two threads could rotate at once, or write to a file another had just deleted.
+    - `setAutoFlush()` did nothing.
+    - Weekly and monthly rotation could stall.
+  - `CLogFile` leaked its file, and reported success when a write failed.
+  - Log messages were cut at 4096 bytes.
+  - On Windows, the source file kept its whole path.
+  - `CConsoleLog` did not flush its output.
+- **Memory manager:** `MemoryManager.h` defined `new` as a macro for every file that included it, defined an inline replacement `operator delete`, and declared an allocator pointer that was never defined, so `USE_MEMORY_MANAGER` did not compile.
 - **Stats:**
   - `CHistogram`:
     - The CSV header was one column to the left of the data.

@@ -158,8 +158,8 @@ target_link_libraries(my_app PRIVATE IASLib)
 | `USE_SQLITE` | `ON` | SQLite connector. |
 | `USE_MYSQL` / `USE_ORACLE` / `USE_SYBASE` | `OFF` | Other database connectors. |
 | `USE_RTTI` | `ON` | `CObject` run-time type information. |
-| `USE_MEMORY_DEBUGGING` | `ON` | Allocation tracking, overrun detection and leak reports. |
-| `USE_MEMORY_MANAGER` | `OFF` | The extended memory manager. |
+| `USE_MEMORY_DEBUGGING` | `ON` | CObjects come from `CMemoryDebugHeap`: fenceposts, bad-free detection, and leak reports when tracking is switched on. |
+| `USE_MEMORY_MANAGER` | `OFF` | CObjects come from `CMemoryManager::Get()` (malloc unless changed with `Set()`), without the debugging heap. |
 | `USE_DEBUG` | `ON` | Debugging features. |
 | `USE_HERSCHEL_CORRECTION` | `OFF` | `CDate` treats years divisible by 4000 as common years. |
 | `USE_TIMEZONE_ICU` | `OFF` | Use ICU for named time zones off Windows (Windows always uses ICU). |
@@ -276,6 +276,8 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 | `TestStreams` | String, file, buffered, socket and null streams: text that reads back, big-endian binary, lines, the end of a stream, and flushing |
 | `TestSocketClasses` | Addresses, the config builder, TCP clients and servers over loopback (both ends' addresses, data, errors, timeouts, non-blocking), UDP, and IPv6 where available |
 | `TestStats` | CHistogram CSV/XML output, CCoverageMap allocation and release, CCPUUsage times |
+| `TestLogging` | The default sink, levels and macros, long messages, `${name}` context expansion, CLogFile across threads, CRotatingLogFile periods, names, rotation and pruning |
+| `TestMemory` | Fixed-size and pooled heaps, the debugging heap (fenceposts, bad frees, leak tracking), and CObjects returning to the allocator they came from |
 | `TestThreading` | Starting and joining threads from any thread, return codes, `ExitThread()`, `Kill()`, exceptions, the monitor, semaphores, the thread pool and the server thread |
 | `TestXMLDocument` | XML reading and writing, entities and CDATA, well-formedness errors with positions, XXE and entity-expansion protection, the element API, a real file, and fuzzing |
 

@@ -1,80 +1,126 @@
-/*
- * Memory Manager Base Class
+/**
+ *  Memory Manager
  *
- *  This class defines a basic set of functionality for a memory manager
- * class that provides memory allocation based on the derived type. Each
- * different type of memory manager can then provide memory usage based
- * on how it needs to be used rather than one global solution.
- *  For example, global objects with long lifetimes are more sensibly 
- * allocated off a static heap, much like the standard malloc or new
- * commmands. On the other hand, small blocks of memory that are rapidly
- * allocated and deallocated should be taken from a fixed-block heap
- * that maintains different "heaps" for each size of block and allocates
- * memory from these fixed-size heaps rapidly and with quick re-use.
- *  All derived memory managers must supply both a production version,
- * which does not need to do range and bounds checking, and a debugging
- * version which *must* identify leaked memory, overwrites, double-frees, 
- * or out-of-range writes. 
+ *      CMemoryManager is the interface of an allocator, and the hub that
+ * CObject's operator new and delete go through when the library is built
+ * with IASLIB_MEMORY_MANAGER__ (or IASLIB_MEMORY_DEBUGGING__). The
+ * allocators are:
  *
+ *      CDefaultMemoryManager   malloc() and free()
+ *      CMemoryFixedHeap        a pool of blocks of one size
+ *      CMemoryHeap             pools for several sizes, malloc() for larger
+ *      CMemoryDebugHeap        fenceposts, use-after-free spoiling, and
+ *                              (optionally) leak tracking by type, file and
+ *                              line
+ *
+ *      Set() picks the allocator new objects come from. Every object
+ * remembers the allocator it came from, so the allocator can be changed
+ * while objects are alive: each goes back to its own. An allocator must
+ * outlive the objects allocated from it.
+ *
+ *      IASLIB_NEW is new that records the file and line (for the debug
+ * heap's leak report): "CThing *p = IASLIB_NEW CThing( 1 );". It is plain
+ * new when the memory manager is not built in. Nothing redefines new
+ * itself. (The previous header #defined new for every file that included
+ * it, and could not be compiled.)
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 8/19/2004
+ *	Created: 2007
  *	Log:
  *	  $LOG$
  *
- * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
 #ifndef IASLIB_MEMORYMANAGER_H__
 #define IASLIB_MEMORYMANAGER_H__
 
-#ifdef IASLIB_MEMORY_MANAGER__
-
-#include "../BaseTypes/Object.h"
+#include <stddef.h>
+#include <atomic>
 
 namespace IASLib
 {
-
-    class CMemoryManager : public CObject
+        // Not a CObject: CObject's new comes through here.
+    class CMemoryManager
     {
-        protected:
-            static CMemoryManager  *m_pNewAllocator;
         public:
-            virtual void   *Allocate( size_t size ) = 0;
-            virtual void   *Reallocate( void *p, size_t size ) = 0;
-            virtual void    Release( void *p ) = 0; 
+            struct CStatistics
+            {
+                size_t  nAllocations;       // ever made
+                size_t  nReleases;          // ever made
+                size_t  nBytesInUse;        // as asked for
+                size_t  nPeakBytesInUse;
+            };
 
-            virtual void   *AllocateDebug( size_t size, const char *strFile, int nLine ) = 0;
-            virtual void   *ReallocateDebug( void *p, size_t size, const char *strFile, int nLine  ) = 0;
-            virtual void    ReleaseDebug( void *p ) = 0;
+                // Called with each problem found (a damaged fencepost, a bad
+                // pointer); the default prints it to stderr.
+            typedef void ( *ErrorHandler )( const char *strMessage );
 
-            virtual void    Compact( void );
+                                CMemoryManager( void );
+            virtual            ~CMemoryManager( void );
 
-            virtual void    Collect( void );
+                // nSize bytes, aligned for any type, or NULL if there is no
+                // memory. strType, strFile and nLine describe the request
+                // (any may be NULL / 0); most allocators ignore them.
+            virtual void       *Allocate( size_t nSize, const char *strType = NULL, const char *strFile = NULL, int nLine = 0 ) = 0;
+                // Gives back memory from Allocate(), with the size it was
+                // asked for. NULL does nothing.
+            virtual void        Release( void *pMemory, size_t nSize ) = 0;
+            virtual const char *GetName( void ) const = 0;
 
-            static CMemoryManager *GetNewAllocator( void ) { return m_pNewAllocator; }
-            static void            SetNewAllocator( CMemoryManager *pNewAllocator );
+            CStatistics         GetStatistics( void ) const;
+
+                // The allocator CObjects come from (by default
+                // CDefaultMemoryManager, or with IASLIB_MEMORY_DEBUGGING__ a
+                // CMemoryDebugHeap over it).
+            static CMemoryManager  *Get( void );
+                // Makes pManager the allocator for new objects (NULL: the
+                // default), returning the previous one.
+            static CMemoryManager  *Set( CMemoryManager *pManager );
+                // malloc() and free(); lives for the whole program.
+            static CMemoryManager  &Default( void );
+
+                // What CObject's operator new and delete call. Throws
+                // std::bad_alloc when there is no memory.
+            static void        *AllocateObject( size_t nSize, const char *strType, const char *strFile, int nLine );
+            static void         ReleaseObject( void *pObject, const char *strType );
+                // The type an object was allocated as (NULL if unknown).
+            static const char  *AllocatedType( const void *pObject );
+
+            static ErrorHandler SetErrorHandler( ErrorHandler pfnHandler );
+            static void         ReportError( const char *strFormat, ... );
+                // Problems reported since the program started.
+            static size_t       GetErrorCount( void );
+
+        protected:
+                // For allocators to keep the statistics.
+            void                CountAllocation( size_t nSize );
+            void                CountRelease( size_t nSize );
+
+        private:
+            std::atomic<size_t> m_nAllocations;
+            std::atomic<size_t> m_nReleases;
+            std::atomic<size_t> m_nBytesInUse;
+            std::atomic<size_t> m_nPeakBytesInUse;
+
+                                CMemoryManager( const CMemoryManager & );
+            CMemoryManager     &operator =( const CMemoryManager & );
     };
-}
 
-#ifdef IASLIB_DEBUG__
-inline void * __cdecl operator new(size_t size, const char *file, int line)
-{
-    return IASLib::CMemoryManager::GetNewAllocator()->AllocateDebug( size, file, line );
-};
+    class CDefaultMemoryManager : public CMemoryManager
+    {
+        public:
+            virtual void       *Allocate( size_t nSize, const char *strType = NULL, const char *strFile = NULL, int nLine = 0 );
+            virtual void        Release( void *pMemory, size_t nSize );
+            virtual const char *GetName( void ) const { return "malloc"; }
+    };
+} // namespace IASLib
 
-inline void __cdecl operator delete(void *p )
-{
-    IASLib::CMemoryManager::GetNewAllocator()->ReleaseDebug( p );
-};
+#if defined( IASLIB_MEMORY_MANAGER__ ) || defined( IASLIB_MEMORY_DEBUGGING__ )
+    #define IASLIB_NEW new( __FILE__, __LINE__ )
+#else
+    #define IASLIB_NEW new
 #endif
-
-#ifdef IASLIB_DEBUG__
-    #define DEBUG_NEW new(__FILE__, __LINE__)
-    #define new DEBUG_NEW
-#endif
-
-#endif // IASLIB Memory Manager
 
 #endif // IASLIB_MEMORYMANAGER_H__

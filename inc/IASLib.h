@@ -257,8 +257,10 @@
 //******************
 
 #include "MemoryManager/MemoryManager.h"
-#include "MemoryManager/MemoryFixedHeap.h"
 #include "MemoryManager/MemoryBlock.h"
+#include "MemoryManager/MemoryFixedHeap.h"
+#include "MemoryManager/MemoryHeap.h"
+#include "MemoryManager/MemoryDebugHeap.h"
 
 //********************
 //  NETWORK SERVICES

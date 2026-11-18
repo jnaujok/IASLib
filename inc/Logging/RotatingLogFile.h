@@ -17,14 +17,23 @@
 #ifndef IASLIB_ROTATINGLOGFILE_H__
 #define IASLIB_ROTATINGLOGFILE_H__
 
+#include <mutex>
 #include "LogSink.h"
-#include "../Threading/Mutex.h"
 #include "../Files/File.h"
 #include "../BaseTypes/String_.h"
 #include "../BaseTypes/Date.h"
 
 namespace IASLib
 {
+        // A log file that starts a new file every hour, day, week or month.
+        //
+        // The file name comes from the template: {date} (YYYYMMDD), {time}
+        // (HHMMSS) and {datetime} are replaced by the time the file was
+        // started; a template with none of them gets _<date><time> before
+        // its extension ("app.log" -> "app_20261118093000.log"). After each
+        // rotation all but the newest nFilesToKeep files that match the
+        // template are deleted (0 keeps every file). With auto-flush every
+        // line is flushed; lines at ERROR and above always are.
     class CRotatingLogFile : public CLogSink
     {
         public:
@@ -36,35 +45,41 @@ namespace IASLib
                 MONTHLY
             };
 
-
         protected:
-            CDate               m_lastChanged;
-            size_t              m_nInterval;
             CFile              *m_fileOutputFile;
-#ifdef IASLIB_MULTI_THREADED__            
-            CMutex              m_mutexProtect;
-#endif
+            std::mutex          m_mutexProtect;
             CString             m_strFileNameTemplate;
+            CString             m_strCurrentFileName;
             size_t              m_nFilesToKeep;
             bool                m_bAutoFlush;
             Interval            m_rotationInterval;
-            int                 m_nCurrentDOW;
-            int                 m_nCurrentMonth;
-            int                 m_nCurrentDay;
-            int                 m_nCurrentHour;
+            long                m_lCurrentPeriod;
 
         public:
                                 DEFINE_OBJECT( CRotatingLogFile );
-                                CRotatingLogFile( Level level, const char *strFileNameTemplate, Interval rotationInterval = Interval::DAILY, int nFilesToKeep = 3, bool bAutoFlush = false );
+                                CRotatingLogFile( Level level, const char *strFileNameTemplate, Interval rotationInterval = DAILY,
+                                                  int nFilesToKeep = 3, bool bAutoFlush = false, bool bMakeDefault = true );
             virtual            ~CRotatingLogFile( void );
 
+            virtual bool        writeLog( Level logLevel, const char *strFilename, int nLineNum, const char *strFormat, ... );
             virtual bool        writeLine( const char *message );
 
             void                setAutoFlush( bool bAutoFlush );
+                // The file being written now.
+            CString             GetCurrentFileName( void );
+
+                // Which period a time is in (rotation happens when it
+                // changes), and the name a file started then would get.
+            static long         PeriodOf( const CDate &when, Interval interval );
+            CString             FileNameFor( const CDate &when ) const;
+
+        protected:
+                // For tests: writes as if it were this time.
+            bool                writeLineAt( const char *message, const CDate &when, bool bFlush );
 
         private:
-            void                rotateLog( void );
-            bool                isPastRotation( void );
+            void                rotateIfDue( const CDate &now );
+            void                pruneOldFiles( void );
     };
 } // namespace IASLib
 #endif // IASLIB_ROTATINGLOGFILE_H__

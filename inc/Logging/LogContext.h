@@ -32,6 +32,9 @@
 
 namespace IASLib
 {
+        // Named values for log messages: CLogSink::writeContextLog() puts
+        // them in place of ${name}. Adding a name again replaces its value.
+        // Not thread-safe: one context per request or thread.
     class CLogContext : public CObject
     {
         protected:
@@ -64,6 +67,18 @@ namespace IASLib
             virtual CObject *getObjectValue( const char *name );
 
             virtual CContextValue *get( const char *name );
+            bool            has( const char *name ) const;
+                // Removes a value (false if there was none).
+            bool            remove( const char *name );
+
+                // The text with each ${name} replaced by that value's string
+                // form. Names not in the context are left as written; "$${"
+                // gives a literal "${".
+            CString         expand( const char *strText ) const;
+
+        private:
+                            CLogContext( const CLogContext & );
+            CLogContext    &operator =( const CLogContext & );
 
     };
 } // namespace IASLib

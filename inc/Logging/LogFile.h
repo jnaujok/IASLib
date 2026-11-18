@@ -19,32 +19,40 @@
 #ifndef IASLIB_LOGFILE_H__
 #define IASLIB_LOGFILE_H__
 
+#include <mutex>
 #include "LogSink.h"
-#include "../Threading/Mutex.h"
 #include "../Files/File.h"
 #include "../BaseTypes/String_.h"
-#include "../BaseTypes/Date.h"
 
 namespace IASLib
 {
+        // Appends lines to one file (or replaces it, with bDeletePrevious).
+        // With auto-flush, each line is flushed as it is written; lines at
+        // ERROR and above always are.
     class CLogFile : public CLogSink
     {
         protected:
             CFile              *m_fileOutputFile;
-#ifdef IASLIB_MULTI_THREADED__            
-            CMutex              m_mutexProtect;
-#endif
+            std::mutex          m_mutexProtect;
             CString             m_strFileName;
+            bool                m_bAutoFlush;
 
         public:
                                 DEFINE_OBJECT( CLogFile );
-                                CLogFile( Level level, const char *strFileName, bool bDeletePrevious = false );
+                                CLogFile( Level level, const char *strFileName, bool bDeletePrevious = false,
+                                          bool bAutoFlush = false, bool bMakeDefault = true );
             virtual            ~CLogFile( void );
 
+            virtual bool        writeLog( Level logLevel, const char *strFilename, int nLineNum, const char *strFormat, ... );
             virtual bool        writeLine( const char *message );
 
+            void                setAutoFlush( bool bAutoFlush ) { m_bAutoFlush = bAutoFlush; }
+            void                Flush( void );
+            virtual bool        IsOpen( void );
+            const CString      &GetFileName( void ) const { return m_strFileName; }
 
-            virtual bool        IsOpen( void ) { return m_fileOutputFile->IsOpen(); }
+        private:
+            bool                writeLineFlushed( const char *message, bool bFlush );
     };
 } // namespace IASLib
 #endif // IASLIB_LOGFILE_H__

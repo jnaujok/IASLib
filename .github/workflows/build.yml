@@ -20,6 +20,12 @@ jobs:
           - name: linux-clang
             os: ubuntu-latest
             cxx: clang++
+            # The memory manager without the debugging heap (the other jobs
+            # build the default: the debugging heap).
+          - name: linux-gcc-memory-manager
+            os: ubuntu-latest
+            cxx: g++
+            flags: -DUSE_MEMORY_MANAGER=ON -DUSE_MEMORY_DEBUGGING=OFF
           - name: macos-clang
             os: macos-latest
           - name: windows-msvc
@@ -38,7 +44,7 @@ jobs:
 
       - name: Configure (Linux)
         if: runner.os == 'Linux'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} ${{ matrix.flags }}
 
       - name: Configure (macOS)
         if: runner.os == 'macOS'

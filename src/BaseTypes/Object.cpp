@@ -14,6 +14,7 @@
  */
 
 #include "Object.h"
+#include "../../inc/MemoryManager/MemoryManager.h"
 
 #include <atomic>
 #include <new>
@@ -32,31 +33,6 @@ namespace IASLib
 
         std::atomic<CObject::AssertHandler>     g_pfnAssertHandler( &DefaultAssertHandler );
 
-            // The memory-debugging layout:
-            //
-            //      [ header: size, magic, name ][ front fence ] user data [ back fence ]
-            //      |<---------------- FRONT bytes -------------->|        |<-- FENCE -->|
-            //
-            // The user data starts FRONT bytes in (a multiple of 16, so it is
-            // as aligned as malloc's memory), and is followed by FENCE bytes
-            // of zeros, plus the padding up to a multiple of 16.
-        const size_t    ALLOCATION_MAGIC = 1784324;
-        const size_t    FRONT = 32;
-        const size_t    FENCE = 16;
-
-        struct CAllocationHeader
-        {
-            size_t          nSize;
-            size_t          nMagic;
-            const char     *pszName;
-        };
-
-        static_assert( sizeof( CAllocationHeader ) < FRONT, "the header must leave room for a front fencepost" );
-
-        size_t PaddedSize( size_t nSize )
-        {
-            return ( nSize + 15 ) & ~(size_t)15;
-        }
     }
 
     CObject::CObject( void )
@@ -97,81 +73,19 @@ namespace IASLib
         pfnHandler( strFile, nLine, strCondition );
     }
 
+        // (The fencepost allocator that was here is now CMemoryDebugHeap.)
     void *CObject::allocate( size_t size, const char *name )
     {
-        size_t nPadded = PaddedSize( size );
-        if ( nPadded < size || nPadded > (size_t)-1 - FRONT - FENCE )
-        {
-            throw std::bad_alloc();
-        }
+        return CMemoryManager::AllocateObject( size, name, NULL, 0 );
+    }
 
-        size_t nTotal = FRONT + nPadded + FENCE;
-        char *pBase = (char *)malloc( nTotal );
-        if ( pBase == NULL )
-        {
-            throw std::bad_alloc();
-        }
-        memset( pBase, 0, nTotal );
-
-        CAllocationHeader *pHeader = (CAllocationHeader *)pBase;
-        pHeader->nSize = size;
-        pHeader->nMagic = ALLOCATION_MAGIC;
-        pHeader->pszName = name;
-
-        return pBase + FRONT;
+    void *CObject::allocateAt( size_t size, const char *name, const char *strFile, int nLine )
+    {
+        return CMemoryManager::AllocateObject( size, name, strFile, nLine );
     }
 
     void CObject::deallocate( void *p, const char *name )
     {
-        if ( p == NULL )
-        {
-            return;
-        }
-
-        char *pBase = ((char *)p) - FRONT;
-        CAllocationHeader *pHeader = (CAllocationHeader *)pBase;
-
-        if ( pHeader->nMagic != ALLOCATION_MAGIC )
-        {
-                // Not memory from allocate() (or its header was overwritten):
-                // nothing else in it can be trusted.
-            fprintf( stderr, "MAGIC NUMBER MISMATCH! [%s]\n", name );
-            fflush( stderr );
-            free( pBase );
-            return;
-        }
-
-        const char *pszAllocatedAs = ( pHeader->pszName != NULL ) ? pHeader->pszName : "?";
-        if ( name != NULL && strcmp( name, pszAllocatedAs ) != 0 )
-        {
-            fprintf( stderr, "Delete mismatch. Expected [%s], got [%s]\n", name, pszAllocatedAs );
-        }
-
-        const unsigned char *pFront = (const unsigned char *)( pHeader + 1 );
-        for ( size_t nCount = 0; pFront + nCount < (const unsigned char *)p; nCount++ )
-        {
-            if ( pFront[ nCount ] != 0 )
-            {
-                fprintf( stderr, "[%s] Front fencepost byte %u damaged: %02x\n", pszAllocatedAs, (unsigned)nCount, pFront[ nCount ] );
-            }
-        }
-
-            // The padding after the object is checked along with the fence:
-            // the object should not have written there either.
-        size_t nPadded = PaddedSize( pHeader->nSize );
-        const unsigned char *pBack = (const unsigned char *)p + pHeader->nSize;
-        size_t nBack = ( nPadded - pHeader->nSize ) + FENCE;
-        for ( size_t nCount = 0; nCount < nBack; nCount++ )
-        {
-            if ( pBack[ nCount ] != 0 )
-            {
-                fprintf( stderr, "[%s] Back fencepost byte %u damaged: %02x\n", pszAllocatedAs, (unsigned)nCount, pBack[ nCount ] );
-            }
-        }
-        fflush( stderr );
-
-            // Spoil the memory, so use after free shows up.
-        memset( pBase, 'X', FRONT + nPadded + FENCE );
-        free( pBase );
+        CMemoryManager::ReleaseObject( p, name );
     }
 } // End of Namespace

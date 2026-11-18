@@ -15,27 +15,26 @@
 #ifndef IASLIB_CONSOLELOG_H__
 #define IASLIB_CONSOLELOG_H__
 
+#include <mutex>
 #include "LogSink.h"
-#include "../Threading/Mutex.h"
 #include "../BaseTypes/String_.h"
-#include "../BaseTypes/Date.h"
 
 namespace IASLib
 {
+        // Writes each line to standard output (or standard error), whole,
+        // and flushes it.
     class CConsoleLog : public CLogSink
     {
         protected:
-#ifdef IASLIB_MULTI_THREADED__
-            CMutex      m_mutexProtect;
-#endif
+            std::mutex  m_mutexProtect;
+            bool        m_bStandardError;
 
         public:
                                 DEFINE_OBJECT( CConsoleLog );
-                                CConsoleLog( Level level );
+                                CConsoleLog( Level level, bool bStandardError = false, bool bMakeDefault = true );
             virtual            ~CConsoleLog( void );
 
             virtual bool        writeLine( const char *message );
-
     };
 } // namespace IASLib
 #endif // IASLIB_CONSOLELOG_H__

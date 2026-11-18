@@ -15,113 +15,125 @@
 ***********************************************************************/
 
 #include "LogSink.h"
-
-#ifndef IASLIB_WIN32__
-#include <stdarg.h>
-#else
-#include <strsafe.h>
-#endif
+#include <stdio.h>
+#include <string.h>
+#include <vector>
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CLogSink, CObject );
 
-
-    CLogSink *CLogSink::m_instance = NULL;
+    std::atomic<CLogSink *> CLogSink::m_instance( NULL );
 
     CLogSink *CLogSink::getInstance( void )
     {
-        return m_instance;
+        return m_instance.load();
     }
 
-    CLogSink::CLogSink( Level level )
+    CLogSink *CLogSink::setInstance( CLogSink *pSink )
     {
-        m_instance = this;
-        m_level = level;
+        return m_instance.exchange( pSink );
     }
 
+    CLogSink::CLogSink( Level level, bool bMakeDefault ) : m_level( (int)level )
+    {
+        if ( bMakeDefault )
+            m_instance = this;
+    }
+
+        // (Destroying any sink cleared the default, even another one.)
     CLogSink::~CLogSink()
     {
-        m_instance = NULL;
+        CLogSink *pThis = this;
+        m_instance.compare_exchange_strong( pThis, NULL );
+    }
+
+    CString CLogSink::formatV( const char *strFormat, va_list vaArgs )
+    {
+        if ( strFormat == NULL )
+            return CString( "" );
+
+            // (Messages were cut at 4096 bytes.)
+        char achBuffer[ 1024 ];
+        va_list vaCopy;
+        va_copy( vaCopy, vaArgs );
+        int nLength = vsnprintf( achBuffer, sizeof( achBuffer ), strFormat, vaCopy );
+        va_end( vaCopy );
+        if ( nLength < 0 )
+            return CString( "" );
+        if ( (size_t)nLength < sizeof( achBuffer ) )
+            return CString( achBuffer, (size_t)nLength );
+
+        std::vector<char> buffer( (size_t)nLength + 1 );
+        va_copy( vaCopy, vaArgs );
+        vsnprintf( buffer.data(), buffer.size(), strFormat, vaCopy );
+        va_end( vaCopy );
+        return CString( buffer.data(), (size_t)nLength );
+    }
+
+    CString CLogSink::formatLine( Level logLevel, const char *strFilename, int nLineNum, const char *strMessage )
+    {
+            // The file's name without its directory, on either kind of path.
+            // (Only '/' was stripped, so Windows lines carried the full path.)
+        const char *strBase = ( strFilename ) ? strFilename : "";
+        for ( const char *p = strBase; *p; p++ )
+        {
+            if ( *p == '/' || *p == '\\' )
+                strBase = p + 1;
+        }
+
+        CDate now;
+        CString strLine( (const char *)now.FormatDate( CDate::DF_ISO_8601_MS ) );
+        strLine += ": [";
+        strLine += logLevelToString( logLevel );
+        strLine += "] - ";
+        strLine += strBase;
+        strLine += CString::FormatString( ":%d - ", nLineNum );
+        strLine += ( strMessage ) ? strMessage : "";
+        return strLine;
+    }
+
+    bool CLogSink::writeLogV( Level logLevel, const char *strFilename, int nLineNum, const char *strFormat, va_list vaArgs )
+    {
+        if ( ! isEnabled( logLevel ) )
+            return false;
+        CString strMessage = formatV( strFormat, vaArgs );
+        return writeLine( formatLine( logLevel, strFilename, nLineNum, strMessage ) );
     }
 
     bool CLogSink::writeLog( Level logLevel, const char *strFilename, int nLineNum, const char *strFormat, ... )
     {
-        if ( logLevel >= m_level )
-        {
-            va_list       vaArgList;
-            IASLibChar__   szBuffer[4096];
+        if ( ! isEnabled( logLevel ) )
+            return false;
+        va_list vaArgs;
+        va_start( vaArgs, strFormat );
+        bool bRet = writeLogV( logLevel, strFilename, nLineNum, strFormat, vaArgs );
+        va_end( vaArgs );
+        return bRet;
+    }
 
-            /* format buf using fmt and arguments contained in ap */
-            va_start( vaArgList, strFormat );
-    #ifdef IASLIB_WIN32__
-            StringCbVPrintf( szBuffer, 4096, strFormat, vaArgList );
-    #else
-            vsnprintf( szBuffer, sizeof( szBuffer ), strFormat, vaArgList );
-    #endif
-            va_end( vaArgList );
-
-            CString filename = strFilename;
-            if ( filename.Contains( '/' ) )
-                filename = filename.Substring( filename.LastIndexOf( '/' ) + 1 );
-            CDate   now;
-            CString workString;
-            workString.Format( "%s: [%s] - %s:%d - %s", (const char *)now.FormatDate( CDate::DF_ISO_8601_MS ), logLevelToString( logLevel ), (const char *)filename, nLineNum, szBuffer );
-            return writeLine( workString );
-        }
-        return false;
+    bool CLogSink::writeContextLog( Level logLevel, const char *strFilename, int nLineNum, CLogContext &context, const char *strFormat, ... )
+    {
+        if ( ! isEnabled( logLevel ) )
+            return false;
+        va_list vaArgs;
+        va_start( vaArgs, strFormat );
+        CString strMessage = formatV( strFormat, vaArgs );
+        va_end( vaArgs );
+        return writeLine( formatLine( logLevel, strFilename, nLineNum, context.expand( strMessage ) ) );
     }
 
     const char *CLogSink::logLevelToString( Level level )
     {
         switch( level )
         {
-            case TRACE:
-                return "TRACE";
-
-            case DEBUG:
-                return "DEBUG";
-                
-            case INFO:
-                return "INFO";
-                
-            case WARN:
-                return "WARN";
-                
-            case ERROR:
-                return "ERROR";
-                
-            case FATAL:
-                return "FATAL";
-                
-            default:
-                return "UNKNOWN";
+            case TRACE: return "TRACE";
+            case DEBUG: return "DEBUG";
+            case INFO:  return "INFO";
+            case WARN:  return "WARN";
+            case ERROR: return "ERROR";
+            case FATAL: return "FATAL";
+            default:    return "UNKNOWN";
         }
     }
-
-/*
-    CString CLogSink::formatMessage( CLogContext &context, const char *strFormat, ... )
-    {
-        CString output;
-
-        va_list       vaArgList;
-
-        // format buf using fmt and arguments contained in ap 
-        va_start( vaArgList, strFormat );
-
-        output.Format( strFormat, vaArgList );
-
-        va_end( vaArgList );
-
-        // Replace any context variables
-        if ( output.hasDelimitedTokens( "${", "}" ) )
-        {
-            context = context;
-            // output.replaceDelimitedToken( "${", "}", )
-        }
-        return output;   
-    }
-*/
-
-};
-
+} // namespace IASLib

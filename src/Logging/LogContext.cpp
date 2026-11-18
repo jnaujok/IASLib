@@ -22,6 +22,7 @@
  */
 
 #include "LogContext.h"
+#include <string.h>
 
 namespace IASLib
 {
@@ -196,24 +197,12 @@ namespace IASLib
         }
     }
 
+        // NULL when there is no such value. (It returned one shared empty
+        // array, created without a lock and open to changes by any caller.)
     CArray *CLogContext::getArrayValue( const char *name )
     {
-        static CArray *emptyArray = NULL;
-
         CContextValue *value = (CContextValue *)m_hashValues.Get( name );
-        if ( value != NULL )
-        {
-            return value->getArrayValue();
-        }
-        else
-        {
-            if ( emptyArray == NULL )
-            {
-                emptyArray = new CArray();
-            }
-            return emptyArray;
-        }
-
+        return ( value != NULL ) ? value->getArrayValue() : NULL;
     }
 
     CObject *CLogContext::getObjectValue( const char *name )
@@ -231,8 +220,57 @@ namespace IASLib
 
     CContextValue *CLogContext::get( const char *name )
     {
-        return (CContextValue *)m_hashValues.Get( name );        
+        return (CContextValue *)m_hashValues.Get( name );
     }
 
+    bool CLogContext::has( const char *name ) const
+    {
+        return name != NULL && m_hashValues.Get( name ) != NULL;
+    }
+
+    bool CLogContext::remove( const char *name )
+    {
+        if ( ! has( name ) )
+            return false;
+        CObject *pValue = m_hashValues.Remove( name );
+        delete pValue;
+        return true;
+    }
+
+    CString CLogContext::expand( const char *strText ) const
+    {
+        CString strOut;
+        if ( strText == NULL )
+            return strOut;
+
+        const char *p = strText;
+        while ( *p )
+        {
+            if ( p[0] == '$' && p[1] == '$' && p[2] == '{' )
+            {
+                strOut += "${";
+                p += 3;
+                continue;
+            }
+            if ( p[0] == '$' && p[1] == '{' )
+            {
+                const char *pEnd = strchr( p + 2, '}' );
+                if ( pEnd )
+                {
+                    CString strName( p + 2, (size_t)( pEnd - ( p + 2 ) ) );
+                    CContextValue *pValue = (CContextValue *)m_hashValues.Get( (const char *)strName );
+                    if ( pValue )
+                    {
+                        strOut += pValue->getStringValue();
+                        p = pEnd + 1;
+                        continue;
+                    }
+                }
+            }
+            strOut += *p;
+            p++;
+        }
+        return strOut;
+    }
 }; // namespace IASLib
 

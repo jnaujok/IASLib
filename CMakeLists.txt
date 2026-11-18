@@ -77,6 +77,7 @@ file( GLOB EXCEPTIONS "src/Exceptions/*.cpp")
 file( GLOB FILES "src/Files/*.cpp")
 file( GLOB JSON "src/JSON/*.cpp")
 file( GLOB LOGGING "src/Logging/*.cpp")
+file( GLOB MEMORY_MANAGER "src/MemoryManager/*.cpp")
 file( GLOB NETWORK_SERVICES
         "src/NetworkServices/*.cpp"
         "src/NetworkServices/Entities/*.cpp"
@@ -102,6 +103,7 @@ set(
         ${EXCEPTIONS}
         ${FILES}
         ${LOGGING}
+        ${MEMORY_MANAGER}
         ${NETWORK_SERVICES}
         ${SOCKETS}
         ${STATS}

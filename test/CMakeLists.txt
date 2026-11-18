@@ -66,3 +66,11 @@ add_test(test_socket_classes TestSocketClasses)
 add_executable(TestStats TestStats/TestStats.cpp)
 target_link_libraries(TestStats IASLib)
 add_test(test_stats TestStats)
+
+add_executable(TestLogging TestLogging/TestLogging.cpp)
+target_link_libraries(TestLogging IASLib)
+add_test(NAME test_logging COMMAND TestLogging WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+add_executable(TestMemory TestMemory/TestMemory.cpp)
+target_link_libraries(TestMemory IASLib)
+add_test(test_memory TestMemory)
