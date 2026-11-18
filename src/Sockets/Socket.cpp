@@ -89,8 +89,13 @@ namespace IASLib
 
             // The numeric address and port of a sockaddr, and its IPv4 address
             // in host order (0 for IPv6).
-        bool describeAddress( const struct sockaddr *pAddress, CString &strIP, int &nPort, unsigned long &ulIPv4 )
+        bool describeAddress( const struct sockaddr *pSource, CString &strIP, int &nPort, unsigned long &ulIPv4 )
         {
+                // An IPv4 peer of a dual-stack socket reads as ::ffff:a.b.c.d.
+            struct sockaddr_storage unmapped;
+            CInternetAddress::unmapAddress( pSource, unmapped );
+            const struct sockaddr *pAddress = (const struct sockaddr *)&unmapped;
+
             strIP = CInternetAddress::addressToString( pAddress );
             nPort = CInternetAddress::getPort( pAddress );
             ulIPv4 = 0;
@@ -102,6 +107,51 @@ namespace IASLib
             if ( pAddress->sa_family == AF_INET )
                 ulIPv4 = ntohl( ((const struct sockaddr_in *)pAddress)->sin_addr.s_addr );
             return true;
+        }
+
+            // Errors that mean the machine has no IPv6 (so an IPv4 socket
+            // should be tried instead), rather than a real failure.
+        bool isNoIPv6Error( int nError )
+        {
+            return nError == EAFNOSUPPORT || nError == EPROTONOSUPPORT || nError == EADDRNOTAVAIL ||
+                   nError == EINVAL || nError == ENOPROTOOPT || nError == ENOTSUP;
+        }
+
+            // A socket of the address's family bound to it, or INVALID_SOCKET
+            // with the error in nError. An IPv6 socket takes IPv4 too.
+        SOCKET openBound( const struct sockaddr *pAddress, socklen_t nLength, int nType, int nProtocol,
+                          bool bReuseAddress, const CSocketConfig *pConfig, int &nError )
+        {
+            nError = 0;
+            SOCKET hSocket = socket( pAddress->sa_family, nType, nProtocol );
+            if ( hSocket == INVALID_SOCKET )
+            {
+                nError = CSocket::LastError();
+                return INVALID_SOCKET;
+            }
+            CSocket::PrepareHandle( hSocket );
+
+            if ( pAddress->sa_family == AF_INET6 )
+                setIntOption( hSocket, IPPROTO_IPV6, IPV6_V6ONLY, 0 );    // (on by default on Windows)
+            if ( bReuseAddress )
+                setIntOption( hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, 1 );
+            if ( pConfig )
+            {
+                applyConfig( hSocket, *pConfig );
+#if defined( SO_REUSEPORT ) && ! defined( IASLIB_WIN32__ )
+                    // Several listeners sharing the port.
+                if ( pConfig->isReuseSocket() )
+                    setIntOption( hSocket, SOL_SOCKET, SO_REUSEPORT, 1 );
+#endif
+            }
+
+            if ( bind( hSocket, pAddress, nLength ) == SOCKET_ERROR )
+            {
+                nError = CSocket::LastError();
+                CSocket::CloseHandle( hSocket );
+                return INVALID_SOCKET;
+            }
+            return hSocket;
         }
 
         void formatWithPort( CString &strOut, const CString &strIP, int nPort )
@@ -256,67 +306,23 @@ namespace IASLib
             SetNonBlocking( true );
     }
 
-        // Binds a listening address. (The reuse option used to be cleared
-        // again after binding, which is not needed, and errno was thrown on
-        // Windows, where it is not the socket error.)
+        // Binds a listening address. With none, every address: an IPv6
+        // socket that takes IPv4 too, or an IPv4 one where there is no IPv6.
+        // (The reuse option used to be cleared again after binding, which is
+        // not needed, and errno was thrown on Windows.)
     void CSocket::Bind( const char *strBindIP, int nPort, CSocketConfig *pConfig )
     {
-        if ( nPort < 0 || nPort > 65535 )
-            IASLIB_THROW_SOCKET_EXCEPTION( EINVAL );
-
-        struct sockaddr_storage address;
-        socklen_t nAddressLength;
-        memset( &address, 0, sizeof( address ) );
-
-        if ( strBindIP == NULL || *strBindIP == '\0' )
-        {
-            struct sockaddr_in *pAny = (struct sockaddr_in *)&address;
-            pAny->sin_family = AF_INET;
-            pAny->sin_port = htons( (unsigned short)nPort );
-            pAny->sin_addr.s_addr = htonl( INADDR_ANY );
-            nAddressLength = (socklen_t)sizeof( struct sockaddr_in );
-        }
-        else
-        {
-            CInternetAddress bindAddress( strBindIP, nPort, SOCK_STREAM );
-            if ( ! bindAddress.isValid() )
-                IASLIB_THROW_SOCKET_EXCEPTION( EADDRNOTAVAIL );
-            nAddressLength = bindAddress.GetAddressLength();
-            memcpy( &address, bindAddress.GetAddress(), nAddressLength );
-        }
-
-        SOCKET hSocket = socket( address.ss_family, SOCK_STREAM, IPPROTO_TCP );
+        int nError = 0;
+        SOCKET hSocket = BindHandle( strBindIP, nPort, SOCK_STREAM, IPPROTO_TCP, true, pConfig, nError );
         if ( hSocket == INVALID_SOCKET )
-            IASLIB_THROW_SOCKET_EXCEPTION( LastError() );
-        PrepareHandle( hSocket );
-
-            // Restart without waiting out TIME_WAIT (see IASLIB_REUSE_ADDRESS).
-        setIntOption( hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, 1 );
-        if ( pConfig )
-        {
-            applyConfig( hSocket, *pConfig );
-#if defined( SO_REUSEPORT ) && ! defined( IASLIB_WIN32__ )
-                // Several listeners sharing the port.
-            if ( pConfig->isReuseSocket() )
-                setIntOption( hSocket, SOL_SOCKET, SO_REUSEPORT, 1 );
-#endif
-        }
-
-        if ( bind( hSocket, (struct sockaddr *)&address, nAddressLength ) == SOCKET_ERROR )
-        {
-            int nError = LastError();
-            CloseHandle( hSocket );
             IASLIB_THROW_SOCKET_EXCEPTION( nError );
-        }
         m_hSocket = hSocket;
 
-            // The port actually bound (when asked for 0).
+            // The address and port actually bound (when asked for 0).
         struct sockaddr_storage bound;
         socklen_t nBoundLength = sizeof( bound );
         if ( getsockname( m_hSocket, (struct sockaddr *)&bound, &nBoundLength ) == 0 )
             describeAddress( (struct sockaddr *)&bound, m_strLocalIP, m_nLocalPort, m_addrLocalIPAddress );
-        else
-            describeAddress( (struct sockaddr *)&address, m_strLocalIP, m_nLocalPort, m_addrLocalIPAddress );
         formatWithPort( m_strLocalAddress, m_strLocalIP, m_nLocalPort );
 
             // A listening socket has no far end; it reports its own.
@@ -327,6 +333,76 @@ namespace IASLib
 
         if ( pConfig && ! pConfig->isBlocking() )
             SetNonBlocking( true );
+    }
+
+    SOCKET CSocket::BindHandle( const char *strBindIP, int nPort, int nType, int nProtocol, bool bReuseAddress,
+                                const CSocketConfig *pConfig, int &nError )
+    {
+        InitializeNetworking();
+        nError = 0;
+        if ( nPort < 0 || nPort > 65535 )
+        {
+            nError = EINVAL;
+            return INVALID_SOCKET;
+        }
+
+        if ( strBindIP == NULL || *strBindIP == '\0' )
+        {
+            struct sockaddr_in6 any6;
+            memset( &any6, 0, sizeof( any6 ) );
+            any6.sin6_family = AF_INET6;
+            any6.sin6_port = htons( (unsigned short)nPort );
+            any6.sin6_addr = in6addr_any;
+            SOCKET hSocket = openBound( (struct sockaddr *)&any6, sizeof( any6 ), nType, nProtocol, bReuseAddress, pConfig, nError );
+                // A port in use is a real failure; no IPv6 is not.
+            if ( hSocket != INVALID_SOCKET || ! isNoIPv6Error( nError ) )
+                return hSocket;
+
+            struct sockaddr_in any4;
+            memset( &any4, 0, sizeof( any4 ) );
+            any4.sin_family = AF_INET;
+            any4.sin_port = htons( (unsigned short)nPort );
+            any4.sin_addr.s_addr = htonl( INADDR_ANY );
+            return openBound( (struct sockaddr *)&any4, sizeof( any4 ), nType, nProtocol, bReuseAddress, pConfig, nError );
+        }
+
+        CInternetAddress bindAddress( strBindIP, nPort, nType );
+        if ( ! bindAddress.isValid() )
+        {
+            nError = EADDRNOTAVAIL;
+            return INVALID_SOCKET;
+        }
+        struct sockaddr *pAddress = bindAddress.GetAddress();
+        SOCKET hSocket = openBound( pAddress, CInternetAddress::addressLength( pAddress ), nType, nProtocol, bReuseAddress, pConfig, nError );
+            // A name such as "localhost" can give ::1 first on a machine that
+            // cannot bind it; then try its IPv4 address.
+        if ( hSocket == INVALID_SOCKET && pAddress->sa_family == AF_INET6 && isNoIPv6Error( nError ) && bindAddress.GetIPv4() )
+        {
+            int nIPv4Error = 0;
+            hSocket = openBound( (struct sockaddr *)bindAddress.GetIPv4(), sizeof( struct sockaddr_in ), nType, nProtocol,
+                                 bReuseAddress, pConfig, nIPv4Error );
+            if ( hSocket != INVALID_SOCKET )
+                nError = 0;
+        }
+        return hSocket;
+    }
+
+    bool CSocket::IsIPv6Available( void )
+    {
+        static int s_nAvailable = -1;
+        if ( s_nAvailable < 0 )
+        {
+            InitializeNetworking();
+            struct sockaddr_in6 loopback;
+            memset( &loopback, 0, sizeof( loopback ) );
+            loopback.sin6_family = AF_INET6;
+            loopback.sin6_addr = in6addr_loopback;
+            int nError = 0;
+            SOCKET hSocket = openBound( (struct sockaddr *)&loopback, sizeof( loopback ), SOCK_STREAM, IPPROTO_TCP, false, NULL, nError );
+            s_nAvailable = ( hSocket != INVALID_SOCKET ) ? 1 : 0;
+            CloseHandle( hSocket );
+        }
+        return s_nAvailable == 1;
     }
 
     void CSocket::ReadAddresses( const struct sockaddr *pKnownPeer )

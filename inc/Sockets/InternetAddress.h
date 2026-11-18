@@ -63,6 +63,7 @@ namespace IASLib
                             CInternetAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
                             CInternetAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
                             /// Copies of an address (bResolveHost looks up its name).
+                            /// An IPv4-mapped IPv6 address is stored as IPv4.
                             CInternetAddress( const struct sockaddr *address, bool bResolveHost = false );
                             CInternetAddress( const struct sockaddr_in *address, bool bResolveHost = false );
                             CInternetAddress( const struct sockaddr_in6 *address, bool bResolveHost = false );
@@ -112,6 +113,13 @@ namespace IASLib
             static int getPort( const struct sockaddr *address );
                 // The length of an address of this family.
             static socklen_t addressLength( const struct sockaddr *address );
+                // Copies an address into oOut, turning an IPv4-mapped IPv6
+                // address (::ffff:1.2.3.4, how a dual-stack socket sees an
+                // IPv4 peer) back into IPv4. Returns its length (0 if none).
+            static socklen_t unmapAddress( const struct sockaddr *address, struct sockaddr_storage &oOut );
+                // An IPv4 address as an IPv4-mapped IPv6 one, for sending
+                // from a dual-stack socket.
+            static void mapToIPv6( const struct sockaddr_in *address, struct sockaddr_in6 &oOut );
     };
 } // namespace IASLib
 

@@ -129,7 +129,7 @@ namespace IASLib
             // accepts do not mix them up.
         struct CAdopted
         {
-            struct sockaddr_in address;
+            struct sockaddr_storage address;     // (IPv4 only, before)
             bool bHaveAddress;
         };
 
@@ -152,7 +152,7 @@ namespace IASLib
             {
                 socklen_t nLength = sizeof( state.address );
                 state.bHaveAddress = ( getpeername( hSocket, (struct sockaddr *)&state.address, &nLength ) == 0 &&
-                                       state.address.sin_family == AF_INET );
+                                       ( state.address.ss_family == AF_INET || state.address.ss_family == AF_INET6 ) );
             }
             return hSocket;
         }

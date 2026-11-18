@@ -817,6 +817,52 @@ static std::string udpExchange( int port, const std::string &message, int timeou
     return all;
 }
 
+    // A SIP exchange with the server over IPv6, where the machine has it:
+    // the default sockets take both families.
+static void testBasicServerIPv6( void )
+{
+    printf( "CBasicSipServer over IPv6\n" );
+    if ( ! CSocket::IsIPv6Available() )
+    {
+        printf( "  (no IPv6 here; skipped)\n" );
+        return;
+    }
+    CBasicSipServer server( 0, true, true, 2 );
+    server.AddHandlerFactory( new CBaseSipHandlerFactory() );
+    server.Start();
+    CHECK( server.waitUntilReady( 5000 ) );
+
+    CUDPSocket client( 0, "::1" );
+    RequestOptions o;
+    o.viaHost = "[::1]:" + std::to_string( client.GetPort() );
+    o.viaParams = ";rport";
+    o.branch = "z9hG4bKipv6udp";
+    std::string request = buildRequest( o );
+    CInternetAddress target( "::1", server.getUdpPort(), SOCK_DGRAM );
+    CHECK( client.Send( request.data(), (int)request.size(), target ) == (int)request.size() );
+    char buffer[ 65536 ];
+    CInternetAddress from;
+    int n = client.Read( buffer, sizeof( buffer ) - 1, from, 2000 );
+    CHECK( n > 0 );
+    std::string reply = ( n > 0 ) ? std::string( buffer, (size_t)n ) : std::string();
+    CHECK( statusOf( reply ) == 200 );
+    CHECK( headerOf( reply, "Via" ).find( "[::1]" ) != std::string::npos );
+    CHECK( from.GetFamily() == AF_INET6 );
+
+        // TCP over IPv6 too.
+    CClientSocket tcp( "::1", server.getTcpPort() );
+    CHECK( tcp.IsConnected() );
+    RequestOptions t;
+    t.viaHost = "[::1]:5099";
+    t.branch = "z9hG4bKipv6tcp";
+    request = buildRequest( t );
+    tcp.Send( request.data(), (int)request.size() );
+    n = tcp.ReadWithTimeout( buffer, sizeof( buffer ) - 1, 2000 );
+    CHECK( n > 0 && statusOf( std::string( buffer, (size_t)n ) ) == 200 );
+
+    server.Stop();
+}
+
 static void testBasicServer( void )
 {
     printf( "CBasicSipServer over UDP and TCP\n" );
@@ -953,6 +999,7 @@ int main( int argc, char *argv[] )
     testViaHandling();
     testHostileInput();
     testBasicServer();
+    testBasicServerIPv6();
 
     printf( "\n%d checks, %d failures, %d log lines\n", g_nChecks, g_nFailures, (int)log->lines );
     delete log;

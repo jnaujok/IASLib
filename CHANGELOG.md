@@ -73,7 +73,8 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CSocket::Read( void )` and `Send()` throw on an error or a closed connection. `Send( unsigned char )` used to return 0.
   - On a client socket, `GetPort()` and `GetAddress()` are the far end's. They held the near end's; use `GetLocalPort()` and `GetAddressString( false )` for that.
   - The `CSocketConfigBuilder` setters return a reference, so a chain keeps every setting (the copies they returned lost all but the first). `Build()` returns a `CSocketConfig` by value. `CSocketConfig` has a public constructor; it defaults to blocking with no timeout.
-  - CUDPSocket sends to the target's IPv4 address, and no longer sets `SO_REUSEADDR`, which let a second socket bind the same port.
+  - Servers given no address (`CServerSocket( port )`, `CUDPSocket( port )`, and so the SIP and HTTP servers) listen on IPv6 and IPv4 at once, falling back to IPv4 alone on a machine without IPv6. Pass `"0.0.0.0"` for IPv4 only. An IPv4 peer of such a socket is reported as plain IPv4, not `::ffff:a.b.c.d`.
+  - CUDPSocket no longer sets `SO_REUSEADDR`, which let a second socket bind the same port.
   - `CRemoteAddress` is a typedef of `CInternetAddress`. It was an unused copy of it.
   - `FixedConnectionPool.h` and `ClientSocketSource.h` were never implemented, and are removed.
 - **Stats:** the Stats classes are always built. They were inside `IASLIB_STATS__`, which the CMake build never defined, so the library shipped them empty. Histogram counts are `long long`.
@@ -124,7 +125,12 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CThreadPool::WaitUntilIdle()` and `GetTotalThreads()`.
   - `TestThreading`.
 - **Sockets:**
-  - Host names resolve with `getaddrinfo()`, so clients connect to IPv6 hosts, and `CServerSocket` binds an IPv6 address.
+  - **IPv6:**
+    - Host names resolve with `getaddrinfo()`, so clients connect to IPv6 hosts.
+    - Servers listen on both families by default (see above), or bind a given IPv6 address.
+    - UDP sends to IPv6 targets, and to IPv4 ones from a dual-stack socket. `CUDPSocket( port, address )` binds one address; `IsIPv6()` tells which kind the socket is.
+    - SIP works over IPv6, with `[addr]` Via hosts.
+    - `CSocket::IsIPv6Available()`, `CSocket::BindHandle()`, and `CInternetAddress::unmapAddress()` and `mapToIPv6()`.
   - `CSocket::GetLocalPort()`, `IsBlocking()`, `LastError()` and `InitializeNetworking()`.
   - A `CServerSocket( CSocketConfig, port, address )` constructor (it was declared but never defined), and `CClientSocket( CSocketConfig, host, port )`.
   - `CInternetAddress::GetPort()` and `GetAddressLength()`.

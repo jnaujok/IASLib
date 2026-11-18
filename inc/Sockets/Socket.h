@@ -14,7 +14,9 @@
  *      Addresses: GetPort() and GetAddress() are the far end's; the near
  * end's are GetLocalPort() and GetAddressString( false ). Host names are
  * looked up with getaddrinfo(), so IPv6 hosts connect too (GetAddress()
- * is then 0: use getInternetAddress()).
+ * is then 0: use getInternetAddress()). Servers listen on IPv6 and IPv4
+ * at once unless given an address; an IPv4 peer of such a socket is
+ * reported as plain IPv4, not ::ffff:a.b.c.d.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 4/02/1997
@@ -91,16 +93,20 @@ namespace IASLib
             CInternetAddress *m_internetAddress;
 
         public:
-                                // Connects to strConnectTo:nPort with the
+                                // Connects to strConnectTo:nPort (a name, or
+                                // an IPv4 or IPv6 address) with the
                                 // configuration's buffer sizes, timeout,
                                 // keep-alive, linger and no-delay settings.
                             CSocket( CSocketConfig config, const char *strConnectTo, int nPort );
                                 // Binds nBindPort (0: any free port) on
-                                // strBindIP (NULL: every IPv4 address).
+                                // strBindIP. NULL (or "::") is every address,
+                                // IPv6 and IPv4 on one socket (IPv4 alone on a
+                                // machine without IPv6); "0.0.0.0" is every
+                                // IPv4 address only.
                             CSocket( CSocketConfig config, int nBindPort, const char *strBindIP = NULL );
                                 // Wraps a connected handle (as accept() gives).
                             CSocket( SOCKET hSocket, const char *strSockName, void *AddressIn = NULL );
-                                // Binds nPort on every IPv4 address.
+                                // Binds nPort on every address (as above).
 	                        CSocket( int nPort, bool bBlocking = true );
                                 // Connects to strConnectTo:nPort.
                             CSocket( const char *strConnectTo, int nPort );
@@ -175,6 +181,12 @@ namespace IASLib
             static void             CloseHandle( SOCKET hSocket );
                 // Settings every new handle gets (no SIGPIPE on macOS).
             static void             PrepareHandle( SOCKET hSocket );
+                // A handle of nType bound as the constructors bind (see
+                // above), or INVALID_SOCKET with the error in nError.
+            static SOCKET           BindHandle( const char *strBindIP, int nPort, int nType, int nProtocol,
+                                                bool bReuseAddress, const CSocketConfig *pConfig, int &nError );
+                // Whether this machine can use IPv6 (has an IPv6 loopback).
+            static bool             IsIPv6Available( void );
 
         private:
             void                    Init( void );

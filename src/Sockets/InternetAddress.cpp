@@ -84,7 +84,7 @@ namespace IASLib
         m_nSocketType = 0;
         if ( addressInfo && addressInfo->ai_addr )
         {
-            m_sockAddressList = new CSafeAddressInfo( addressInfo );
+            m_sockAddressList = new CSafeAddressInfo( addressInfo );     // (a whole list, as given)
             m_nSocketType = addressInfo->ai_socktype;
             m_strHostname = ( bResolveHost ) ? lookupHost( addressInfo->ai_addr ) : addressToString( addressInfo->ai_addr );
             m_strService.Format( "%d", getPort( addressInfo->ai_addr ) );
@@ -131,12 +131,15 @@ namespace IASLib
         // (The sockaddr constructors used to turn the address into text and
         // resolve that again as SOCK_RAW, which getaddrinfo() refuses with a
         // port on Linux; the address is now just copied.)
-    void CInternetAddress::SetFromSockaddr( const struct sockaddr *address, bool bResolveHost )
+    void CInternetAddress::SetFromSockaddr( const struct sockaddr *source, bool bResolveHost )
     {
+        struct sockaddr_storage unmapped;
+        socklen_t nLength = unmapAddress( source, unmapped );
+        const struct sockaddr *address = (const struct sockaddr *)&unmapped;
+
         Clear();
         m_strHostname = "";
         m_strService = "";
-        socklen_t nLength = addressLength( address );
         if ( nLength == 0 )
             return;
 
@@ -285,6 +288,47 @@ namespace IASLib
             default:
                 return 0;
         }
+    }
+
+    namespace
+    {
+        const unsigned char s_abyMappedPrefix[ 12 ] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff };
+    }
+
+    socklen_t CInternetAddress::unmapAddress( const struct sockaddr *address, struct sockaddr_storage &oOut )
+    {
+        memset( &oOut, 0, sizeof( oOut ) );
+        socklen_t nLength = addressLength( address );
+        if ( nLength == 0 )
+            return 0;
+
+        if ( address->sa_family == AF_INET6 )
+        {
+            const struct sockaddr_in6 *pIn6 = (const struct sockaddr_in6 *)address;
+            const unsigned char *pbyAddress = (const unsigned char *)&pIn6->sin6_addr;
+            if ( memcmp( pbyAddress, s_abyMappedPrefix, sizeof( s_abyMappedPrefix ) ) == 0 )
+            {
+                struct sockaddr_in *pIn4 = (struct sockaddr_in *)&oOut;
+                pIn4->sin_family = AF_INET;
+                pIn4->sin_port = pIn6->sin6_port;
+                memcpy( &pIn4->sin_addr, pbyAddress + 12, 4 );
+                return (socklen_t)sizeof( struct sockaddr_in );
+            }
+        }
+        memcpy( &oOut, address, nLength );
+        return nLength;
+    }
+
+    void CInternetAddress::mapToIPv6( const struct sockaddr_in *address, struct sockaddr_in6 &oOut )
+    {
+        memset( &oOut, 0, sizeof( oOut ) );
+        oOut.sin6_family = AF_INET6;
+        if ( address == NULL )
+            return;
+        oOut.sin6_port = address->sin_port;
+        unsigned char *pbyAddress = (unsigned char *)&oOut.sin6_addr;
+        memcpy( pbyAddress, s_abyMappedPrefix, sizeof( s_abyMappedPrefix ) );
+        memcpy( pbyAddress + 12, &address->sin_addr, 4 );
     }
 
     CString CInternetAddress::addressToString( const struct sockaddr *address )

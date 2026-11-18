@@ -32,42 +32,28 @@ namespace IASLib
         // was on the stack.) The client is bound to port 0 so its port is
         // known straight away. SO_REUSEADDR is not set: on a UDP port it lets
         // a second socket bind the same port and steal datagrams.
-    void CUDPSocket::Open( int nPort )
+    void CUDPSocket::Open( int nPort, const char *strBindAddress )
     {
-        CSocket::InitializeNetworking();
         m_hSocket = NULL_SOCKET;
         m_nPort = 0;
+        m_nFamily = AF_INET;
         m_addrIPAddress = new CInternetAddress();
 
-        if ( nPort < 0 || nPort > 65535 )
-            IASLIB_THROW_SOCKET_EXCEPTION( EINVAL );
-
-        SOCKET hSocket = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+        int nError = 0;
+        SOCKET hSocket = CSocket::BindHandle( strBindAddress, nPort, SOCK_DGRAM, IPPROTO_UDP, false, NULL, nError );
         if ( hSocket == INVALID_SOCKET )
-            IASLIB_THROW_SOCKET_EXCEPTION( CSocket::LastError() );
-        CSocket::PrepareHandle( hSocket );
-
-        struct sockaddr_in listen_addr;
-        memset( &listen_addr, 0, sizeof( listen_addr ) );
-        listen_addr.sin_family = AF_INET;
-        listen_addr.sin_port = htons( (unsigned short)nPort );
-        listen_addr.sin_addr.s_addr = htonl( INADDR_ANY );
-
-        if ( bind( hSocket, (struct sockaddr *)&listen_addr, sizeof( listen_addr ) ) == SOCKET_ERROR )
-        {
-            int nError = CSocket::LastError();
-            CSocket::CloseHandle( hSocket );
             IASLIB_THROW_SOCKET_EXCEPTION( nError );
-        }
         m_hSocket = hSocket;
 
-        socklen_t nBoundLen = sizeof( listen_addr );
-        if ( getsockname( m_hSocket, (struct sockaddr *)&listen_addr, &nBoundLen ) != 0 )
+        struct sockaddr_storage bound;
+        socklen_t nBoundLen = sizeof( bound );
+        memset( &bound, 0, sizeof( bound ) );
+        if ( getsockname( m_hSocket, (struct sockaddr *)&bound, &nBoundLen ) == 0 )
         {
-            listen_addr.sin_port = htons( (unsigned short)nPort );
+            m_nFamily = bound.ss_family;
+            m_addrIPAddress->SetAddress( (struct sockaddr *)&bound );
+            m_nPort = m_addrIPAddress->GetPort();
         }
-        m_nPort = ntohs( listen_addr.sin_port );
-        m_addrIPAddress->SetAddress( (struct sockaddr *)&listen_addr );
         m_strAddress = m_addrIPAddress->toStringWithPort();
     }
 
@@ -76,7 +62,21 @@ namespace IASLib
         m_addrIPAddress = NULL;
         try
         {
-            Open( nPort );
+            Open( nPort, NULL );
+        }
+        catch ( ... )
+        {
+            delete m_addrIPAddress;
+            throw;
+        }
+    }
+
+    CUDPSocket::CUDPSocket( int nPort, const char *strBindAddress )
+    {
+        m_addrIPAddress = NULL;
+        try
+        {
+            Open( nPort, strBindAddress );
         }
         catch ( ... )
         {
@@ -90,7 +90,7 @@ namespace IASLib
         m_addrIPAddress = NULL;
         try
         {
-            Open( 0 );
+            Open( 0, NULL );
         }
         catch ( ... )
         {
@@ -168,10 +168,35 @@ namespace IASLib
             return -1;
         }
 
-            // The socket is IPv4, so use the target's IPv4 address. (A name
-            // such as "localhost" can resolve to ::1 first, which an IPv4
-            // socket cannot send to.)
-        const struct sockaddr_in *pTarget = targetAddress.GetIPv4();
+        const struct sockaddr *pTarget = NULL;
+        socklen_t nTargetLength = 0;
+        struct sockaddr_in6 mapped;
+
+        if ( m_nFamily == AF_INET6 )
+        {
+                // Either family: an IPv4 target goes as ::ffff:a.b.c.d.
+            const struct sockaddr *pFirst = targetAddress.GetAddress();
+            if ( pFirst == NULL )
+                return -1;
+            if ( pFirst->sa_family == AF_INET6 )
+            {
+                pTarget = pFirst;
+                nTargetLength = sizeof( struct sockaddr_in6 );
+            }
+            else if ( pFirst->sa_family == AF_INET )
+            {
+                CInternetAddress::mapToIPv6( (const struct sockaddr_in *)pFirst, mapped );
+                pTarget = (const struct sockaddr *)&mapped;
+                nTargetLength = sizeof( mapped );
+            }
+        }
+        else
+        {
+                // An IPv4 socket can only use the target's IPv4 address. (A
+                // name such as "localhost" can resolve to ::1 first.)
+            pTarget = (const struct sockaddr *)targetAddress.GetIPv4();
+            nTargetLength = sizeof( struct sockaddr_in );
+        }
         if ( pTarget == NULL )
         {
             return -1;
@@ -179,7 +204,7 @@ namespace IASLib
 
         for ( ;; )
         {
-            int nSent = (int)sendto( m_hSocket, pchBuffer, nBufferSize, 0, (const struct sockaddr *)pTarget, sizeof( struct sockaddr_in ) );
+            int nSent = (int)sendto( m_hSocket, pchBuffer, nBufferSize, 0, pTarget, nTargetLength );
             if ( nSent >= 0 || CSocket::LastError() != EINTR )
                 return ( nSent >= 0 ) ? nSent : -1;
         }

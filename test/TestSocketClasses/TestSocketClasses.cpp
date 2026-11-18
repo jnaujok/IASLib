@@ -428,39 +428,129 @@ static void testUdp( void )
     CHECK( server.Send( "x", 1, target ) == -1 );
 }
 
-static void testIPv6( void )
+static void testMappedAddresses( void )
 {
-    section( "IPv6" );
+    section( "IPv4-mapped addresses" );
 
+        // How a dual-stack socket sees an IPv4 peer: kept as IPv4.
+    struct sockaddr_in6 mapped;
+    memset( &mapped, 0, sizeof( mapped ) );
+    mapped.sin6_family = AF_INET6;
+    mapped.sin6_port = htons( 5060 );
+    unsigned char *pby = (unsigned char *)&mapped.sin6_addr;
+    pby[10] = 0xff; pby[11] = 0xff; pby[12] = 10; pby[13] = 1; pby[14] = 2; pby[15] = 3;
+    CInternetAddress fromMapped( &mapped );
+    CHECK( fromMapped.isValid() );
+    CHECK( fromMapped.GetFamily() == AF_INET );
+    CHECK( fromMapped.toStringWithPort() == "10.1.2.3:5060" );
+
+    struct sockaddr_in6 back;
+    CInternetAddress::mapToIPv6( fromMapped.GetIPv4(), back );
+    CHECK( back.sin6_family == AF_INET6 );
+    CHECK( memcmp( &back.sin6_addr, &mapped.sin6_addr, sizeof( back.sin6_addr ) ) == 0 );
+    CHECK( back.sin6_port == mapped.sin6_port );
+
+        // A plain IPv6 address is left alone.
+    struct sockaddr_in6 plain;
+    memset( &plain, 0, sizeof( plain ) );
+    plain.sin6_family = AF_INET6;
+    plain.sin6_port = htons( 1 );
+    ((unsigned char *)&plain.sin6_addr)[15] = 1;
+    CInternetAddress fromPlain( &plain );
+    CHECK( fromPlain.GetFamily() == AF_INET6 );
+    CHECK( fromPlain.toStringWithPort() == "[::1]:1" );
+}
+
+static void testDualStack( void )
+{
+    section( "Dual-stack servers" );
+    bool bIPv6 = CSocket::IsIPv6Available();
+    printf( "  (IPv6 %s)\n", bIPv6 ? "available" : "not available: IPv4 only" );
+
+        // The default server takes IPv4, reported as IPv4.
+    CServerSocket server( 0 );
+    CClientSocket v4( "127.0.0.1", server.GetPort() );
+    CHECK( v4.IsConnected() );
+    CSocket *pPeer = server.Accept( 2000 );
+    CHECK( pPeer != NULL );
+    if ( pPeer )
+    {
+        CHECK( strcmp( pPeer->GetAddressString( true, false ), "127.0.0.1" ) == 0 );
+        CHECK( pPeer->GetAddress() == 0x7F000001UL );
+        CHECK( pPeer->getInternetAddress().GetFamily() == AF_INET );
+        CHECK( strcmp( pPeer->GetAddressString( false, false ), "127.0.0.1" ) == 0 );
+        delete pPeer;
+    }
+
+        // An IPv4-only server.
     CSocketConfig config;
-    CServerSocket *pServer = NULL;
-    try
-    {
-        pServer = new CServerSocket( config, 0, "::1" );
-    }
-    catch ( CSocketException & )
-    {
-        printf( "  (no IPv6 loopback here; skipped)\n" );
-        return;
-    }
+    CServerSocket v4Only( config, 0, "0.0.0.0" );
+    CHECK( strcmp( v4Only.GetAddressString( false, false ), "0.0.0.0" ) == 0 );
 
-    CClientSocket client( "::1", pServer->GetPort() );
-    CHECK( client.IsConnected() );
-    CSocket *pAccepted = pServer->Accept( 2000 );
-    CHECK( pAccepted != NULL );
-    CHECK( client.GetAddress() == 0 );
-    CHECK( client.getInternetAddress().GetFamily() == AF_INET6 );
-    CString strExpected;
-    strExpected.Format( "[::1]:%d", pServer->GetPort() );
-    CHECK( strcmp( client.GetAddressString( true, true ), (const char *)strExpected ) == 0 );
-    if ( pAccepted )
+    CUDPSocket udp( 0 );
+    CUDPSocket udpClient;
+    CHECK( udp.IsIPv6() == bIPv6 );
+    char achBuffer[ 64 ];
+    CInternetAddress from;
+    CInternetAddress udpTarget( "127.0.0.1", udp.GetPort(), SOCK_DGRAM );
+    CHECK( udpClient.Send( "four", 4, udpTarget ) == 4 );
+    CHECK( udp.Read( achBuffer, sizeof( achBuffer ), from, 2000 ) == 4 );
+    CHECK( from.GetFamily() == AF_INET );
+    CHECK( from.toString() == "127.0.0.1" );
+    CHECK( from.GetPort() == udpClient.GetPort() );
+        // Replying to the IPv4 sender from a dual-stack socket.
+    CHECK( udp.Send( "back", 4, from ) == 4 );
+    CHECK( udpClient.Read( achBuffer, sizeof( achBuffer ), from, 2000 ) == 4 );
+
+    CUDPSocket udpV4( 0, "0.0.0.0" );
+    CHECK( ! udpV4.IsIPv6() );
+    CHECK( udpV4.GetAddress().toString() == "0.0.0.0" );
+
+    if ( ! bIPv6 )
+        return;
+
+        // IPv6 on the same default sockets.
+    CClientSocket v6( "::1", server.GetPort() );
+    CHECK( v6.IsConnected() );
+    pPeer = server.Accept( 2000 );
+    CHECK( pPeer != NULL );
+    if ( pPeer )
     {
-        CHECK( client.Send( "six", 3 ) == 3 );
-        char achBuffer[ 8 ];
-        CHECK( pAccepted->ReadWithTimeout( achBuffer, sizeof( achBuffer ), 2000 ) == 3 );
-        delete pAccepted;
+        CHECK( strcmp( pPeer->GetAddressString( true, false ), "::1" ) == 0 );
+        CHECK( pPeer->GetAddress() == 0 );
+        CHECK( pPeer->getInternetAddress().GetFamily() == AF_INET6 );
+        CHECK( v6.Send( "six", 3 ) == 3 );
+        CHECK( pPeer->ReadWithTimeout( achBuffer, sizeof( achBuffer ), 2000 ) == 3 );
+        delete pPeer;
     }
-    delete pServer;
+    CString strExpected;
+    strExpected.Format( "[::1]:%d", server.GetPort() );
+    CHECK( strcmp( v6.GetAddressString( true, true ), (const char *)strExpected ) == 0 );
+
+        // The IPv4-only server does not take IPv6.
+    CClientSocket refused( "::1", v4Only.GetPort() );
+    CHECK( ! refused.IsConnected() );
+
+        // UDP to and from ::1.
+    CUDPSocket udp6Client( 0, "::1" );
+    CHECK( udp6Client.IsIPv6() );
+    CInternetAddress udp6Target( "::1", udp.GetPort(), SOCK_DGRAM );
+    CHECK( udp6Client.Send( "v6", 2, udp6Target ) == 2 );
+    CHECK( udp.Read( achBuffer, sizeof( achBuffer ), from, 2000 ) == 2 );
+    CHECK( from.GetFamily() == AF_INET6 );
+    CHECK( from.GetPort() == udp6Client.GetPort() );
+    CHECK( udp.Send( "ack", 3, from ) == 3 );
+    CHECK( udp6Client.Read( achBuffer, sizeof( achBuffer ), from, 2000 ) == 3 );
+
+        // An IPv4-only socket cannot send to an IPv6-only target.
+    CHECK( udpV4.Send( "x", 1, udp6Target ) == -1 );
+
+        // Binding a specific IPv6 address.
+    CServerSocket v6Only( config, 0, "::1" );
+    CClientSocket v6Client( "::1", v6Only.GetPort() );
+    CHECK( v6Client.IsConnected() );
+    CHECK( v6Client.GetAddress() == 0 );
+    CHECK( v6Client.getInternetAddress().GetFamily() == AF_INET6 );
 }
 
 int main( void )
@@ -471,7 +561,8 @@ int main( void )
     testErrors();
     testOptions();
     testUdp();
-    testIPv6();
+    testMappedAddresses();
+    testDualStack();
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );
     return ( g_nFailures == 0 ) ? 0 : 1;
