@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 #set project name
-project(IASLib VERSION 2.5)
+project(IASLib VERSION 3.0.0)
 
 # specify the C++ standard
 set(CMAKE_CXX_STANDARD 11)
@@ -193,6 +193,18 @@ configure_file(${PROJECT_SOURCE_DIR}/inc/IASLibConfig.h.in ${PROJECT_SOURCE_DIR}
 #add library file
 add_library(IASLib ${SOURCES})
 
+# A project that adds IASLib with add_subdirectory() or FetchContent gets
+# its headers and feature macros by linking to the IASLib target. (They were
+# set for this directory only, so such a project had to repeat them.)
+get_directory_property(IASLIB_INCLUDE_DIRS INCLUDE_DIRECTORIES)
+get_directory_property(IASLIB_DEFINITIONS COMPILE_DEFINITIONS)
+foreach(dir ${IASLIB_INCLUDE_DIRS})
+    if(IS_DIRECTORY "${dir}")
+        target_include_directories(IASLib PUBLIC "$<BUILD_INTERFACE:${dir}>")
+    endif()
+endforeach()
+target_compile_definitions(IASLib PUBLIC ${IASLIB_DEFINITIONS})
+
 if(USE_THREADS AND NOT WIN32)
     find_package(Threads REQUIRED)
     target_link_libraries(IASLib PUBLIC Threads::Threads)
@@ -221,5 +233,15 @@ if(WIN32)
     target_link_libraries(IASLib PUBLIC ws2_32 crypt32)
 endif()
 
-ENABLE_TESTING()
-ADD_SUBDIRECTORY( test )
+# The tests are built when IASLib is the top-level project, and can be
+# turned off (or on) with IASLIB_BUILD_TESTS.
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(IASLIB_TESTS_DEFAULT ON)
+else()
+    set(IASLIB_TESTS_DEFAULT OFF)
+endif()
+option(IASLIB_BUILD_TESTS "Build the IASLib test programs." ${IASLIB_TESTS_DEFAULT})
+if(IASLIB_BUILD_TESTS)
+    ENABLE_TESTING()
+    ADD_SUBDIRECTORY( test )
+endif()

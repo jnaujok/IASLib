@@ -5,7 +5,7 @@ The Irene Adler Software Library (C++)
 [![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](LICENSE)
 [![C++11](https://img.shields.io/badge/C%2B%2B-11-00599C.svg?logo=cplusplus&logoColor=white)](https://en.cppreference.com/w/cpp/11)
 [![CMake](https://img.shields.io/badge/CMake-3.10%2B-064F8C.svg?logo=cmake&logoColor=white)](https://cmake.org/)
-[![Version](https://img.shields.io/badge/version-2.5-brightgreen.svg)](CMakeLists.txt)
+[![Version](https://img.shields.io/badge/version-3.0.0-brightgreen.svg)](CMakeLists.txt)
 [![Since 1994](https://img.shields.io/badge/since-1994-8A2BE2.svg)](#iaslib)
 
 [![Linux](https://img.shields.io/badge/Linux-GCC%20%7C%20Clang-FCC624.svg?logo=linux&logoColor=black)](#platforms)

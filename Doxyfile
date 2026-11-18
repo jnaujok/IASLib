@@ -7,7 +7,7 @@
 # (.github/workflows/docs.yml) builds both and publishes them as artifacts.
 
 PROJECT_NAME           = "IASLib"
-PROJECT_NUMBER         = "3.0 (in development)"
+PROJECT_NUMBER         = 3.0.0
 PROJECT_BRIEF          = "The Irene Adler Software Group C++ class library"
 OUTPUT_DIRECTORY       = build/docs
 CREATE_SUBDIRS         = NO
