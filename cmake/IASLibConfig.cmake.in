@@ -1,0 +1,28 @@
+# IASLib's CMake package: find_package( IASLib 3.0 ) gives the imported
+# target IASLib::IASLib, which carries the include directories, the feature
+# macros the library was built with, and its dependencies.
+#
+#     find_package( IASLib 3.0 REQUIRED )
+#     target_link_libraries( myapp PRIVATE IASLib::IASLib )
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+set(IASLib_WITH_THREADS @IASLIB_PKG_THREADS@)
+set(IASLib_WITH_SQLITE_TARGET @IASLIB_PKG_SQLITE_TARGET@)
+set(IASLib_WITH_TLS @IASLIB_PKG_TLS@)
+
+if(IASLib_WITH_THREADS)
+    find_dependency(Threads)
+endif()
+if(IASLib_WITH_SQLITE_TARGET)
+    find_dependency(SQLite3)
+endif()
+if(IASLib_WITH_TLS)
+    find_dependency(OpenSSL)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/IASLibTargets.cmake")
+
+check_required_components(IASLib)

@@ -460,6 +460,8 @@ Every folder of the library reviewed and brought up to date. The base types and 
   - The version is 3.0.0, and `IASLibConfig.h` gains `IASLib_VERSION_PATCH` and `IASLib_VERSION_STRING`.
   - The `IASLib` target carries its include directories and feature macros as PUBLIC usage requirements, so a project using `add_subdirectory()` or `FetchContent` gets them by linking to it.
   - The tests are built only when IASLib is the top-level project (`IASLIB_BUILD_TESTS`).
+  - `cmake --install` installs the library, its headers (`include/IASLib`) and a CMake package, so `find_package( IASLib 3.0 )` gives `IASLib::IASLib`, with the include directories, feature macros and dependencies the library was built with. `IASLib::IASLib` is also an alias in a build tree.
+  - CPack builds `.deb` (`libiaslib-dev`), `.rpm` (`iaslib-devel`) and `.tar.gz` packages. CI builds them, installs the `.deb` and builds a `find_package` consumer against it, and releases attach them.
 - **Documentation:**
   - A `Doxyfile` documents every public header, with `docs/Architecture.md` (mermaid diagrams) as an extra page.
   - The *Documentation* workflow builds the HTML site and a PDF on every push and publishes them as the `IASLib-documentation` artifact (HTML zip, PDF and the warnings log). Releases attach both.

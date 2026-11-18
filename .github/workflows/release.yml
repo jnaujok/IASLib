@@ -71,6 +71,14 @@ jobs:
           cp build/docs/latex/refman.pdf "IASLib-$VERSION-reference.pdf"
           (cd build/docs && zip -q -r "../../IASLib-$VERSION-docs-html.zip" html)
 
+      - name: Build the Linux packages
+        run: |
+          sudo apt-get install -y libsqlite3-dev libssl-dev rpm
+          cmake -S . -B build/pkg -DCMAKE_BUILD_TYPE=Release -DIASLIB_BUILD_TESTS=OFF
+          cmake --build build/pkg --parallel 4
+          (cd build/pkg && cpack -G "DEB;RPM;TGZ")
+          cp build/pkg/*.deb build/pkg/*.rpm build/pkg/*.tar.gz .
+
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,4 +88,5 @@ jobs:
             --notes-file notes.md \
             --verify-tag \
             "IASLib-$VERSION-docs-html.zip" \
-            "IASLib-$VERSION-reference.pdf"
+            "IASLib-$VERSION-reference.pdf" \
+            *.deb *.rpm *.tar.gz

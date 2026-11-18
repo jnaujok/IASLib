@@ -73,3 +73,43 @@ jobs:
         if: failure()
         shell: bash
         run: python3 .github/scripts/error_summary.py build.log 4 || python .github/scripts/error_summary.py build.log 4
+
+  packages:
+    name: linux-packages (deb, rpm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libssl-dev rpm
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DIASLIB_BUILD_TESTS=OFF
+          cmake --build build --parallel 4
+
+      - name: Package
+        run: |
+          cd build
+          cpack -G "DEB;RPM;TGZ"
+          ls -l *.deb *.rpm *.tar.gz
+          dpkg-deb -I *.deb
+          rpm -qip *.rpm
+
+      - name: Check that the installed package works with find_package
+        run: |
+          sudo dpkg -i build/*.deb
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          printf 'cmake_minimum_required(VERSION 3.14)\nproject(C CXX)\nfind_package(IASLib 3.0 REQUIRED)\nadd_executable(c main.cpp)\ntarget_link_libraries(c PRIVATE IASLib::IASLib)\n' > CMakeLists.txt
+          printf '#include "IASLib.h"\n#include <cstdio>\nint main(){ IASLib::CString s("ok "); s += IASLib_VERSION_STRING; printf("%%s\\n",(const char*)s); return 0; }\n' > main.cpp
+          cmake -S . -B build && cmake --build build && ./build/c
+
+      - name: Publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: IASLib-packages
+          path: |
+            build/*.deb
+            build/*.rpm
+            build/*.tar.gz
+          if-no-files-found: error

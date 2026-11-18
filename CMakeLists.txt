@@ -198,11 +198,22 @@ add_library(IASLib ${SOURCES})
 # set for this directory only, so such a project had to repeat them.)
 get_directory_property(IASLIB_INCLUDE_DIRS INCLUDE_DIRECTORIES)
 get_directory_property(IASLIB_DEFINITIONS COMPILE_DEFINITIONS)
+# Installed, the headers keep their layout under include/IASLib.
+include(GNUInstallDirs)
+set(IASLIB_INSTALL_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}/IASLib")
 foreach(dir ${IASLIB_INCLUDE_DIRS})
     if(IS_DIRECTORY "${dir}")
-        target_include_directories(IASLib PUBLIC "$<BUILD_INTERFACE:${dir}>")
+        file(RELATIVE_PATH rel "${PROJECT_SOURCE_DIR}/inc" "${dir}")
+        if(NOT rel MATCHES "^\\.\\.")
+            target_include_directories(IASLib PUBLIC "$<BUILD_INTERFACE:${dir}>"
+                                                     "$<INSTALL_INTERFACE:${IASLIB_INSTALL_INCLUDEDIR}/${rel}>")
+        else()
+            target_include_directories(IASLib PUBLIC "$<BUILD_INTERFACE:${dir}>")
+        endif()
     endif()
 endforeach()
+# The same name in a build tree as from the installed package.
+add_library(IASLib::IASLib ALIAS IASLib)
 target_compile_definitions(IASLib PUBLIC ${IASLIB_DEFINITIONS})
 
 if(USE_THREADS AND NOT WIN32)
@@ -231,6 +242,67 @@ target_link_libraries(IASLib PUBLIC ${CMAKE_DL_LIBS})
 if(WIN32)
     # Winsock (MSVC also gets it from a #pragma in Platform.h).
     target_link_libraries(IASLib PUBLIC ws2_32 crypt32)
+endif()
+
+# ---- Installing and packaging --------------------------------------------
+#
+#   cmake --install build --prefix /usr/local     the library, headers and CMake package
+#   cpack --config build/CPackConfig.cmake -G DEB  (or -G RPM) a package for Linux
+
+set(IASLIB_PKG_THREADS OFF)
+if(USE_THREADS AND NOT WIN32)
+    set(IASLIB_PKG_THREADS ON)
+endif()
+set(IASLIB_PKG_SQLITE_TARGET OFF)
+if(USE_SQLITE AND SQLite3_FOUND)
+    set(IASLIB_PKG_SQLITE_TARGET ON)
+endif()
+set(IASLIB_PKG_TLS OFF)
+if(USE_NETWORK AND OPENSSL_FOUND)
+    set(IASLIB_PKG_TLS ON)
+endif()
+
+include(CMakePackageConfigHelpers)
+set(IASLIB_CMAKE_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/IASLib")
+install(TARGETS IASLib EXPORT IASLibTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY inc/ DESTINATION ${IASLIB_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
+install(EXPORT IASLibTargets NAMESPACE IASLib:: DESTINATION ${IASLIB_CMAKE_DIR})
+configure_package_config_file(cmake/IASLibConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/IASLibConfig.cmake"
+                              INSTALL_DESTINATION ${IASLIB_CMAKE_DIR})
+write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/IASLibConfigVersion.cmake"
+                                 VERSION ${PROJECT_VERSION} COMPATIBILITY SameMajorVersion)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/IASLibConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/IASLibConfigVersion.cmake"
+        DESTINATION ${IASLIB_CMAKE_DIR})
+install(FILES README.md CHANGELOG.md LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
+
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(CPACK_PACKAGE_NAME "iaslib")
+    set(CPACK_PACKAGE_VENDOR "The Irene Adler Software Group")
+    set(CPACK_PACKAGE_CONTACT "Jeffrey R. Naujok")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "IASLib: a C++ library of base types, collections, threads, sockets, HTTP/SIP servers, JSON, XML, databases and more")
+    set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+    set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/jnaujok/IASLib")
+    set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+    set(CPACK_GENERATOR "DEB;RPM;TGZ")
+
+        # Debian/Ubuntu: a -dev package (a static library and headers).
+    set(CPACK_DEBIAN_PACKAGE_NAME "libiaslib-dev")
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    set(CPACK_DEBIAN_PACKAGE_SECTION "libdevel")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsqlite3-dev, libssl-dev")
+
+        # Fedora/RHEL/SUSE: a -devel package.
+    set(CPACK_RPM_PACKAGE_NAME "iaslib-devel")
+    set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+    set(CPACK_RPM_PACKAGE_GROUP "Development/Libraries")
+    set(CPACK_RPM_PACKAGE_LICENSE "LGPL-3.0-only")
+    set(CPACK_RPM_PACKAGE_REQUIRES "sqlite-devel, openssl-devel")
+    set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/cmake;/usr/lib64/cmake;/usr/include;/usr/share/doc")
+    include(CPack)
 endif()
 
 # The tests are built when IASLib is the top-level project, and can be

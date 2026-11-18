@@ -140,12 +140,39 @@ On macOS, point CMake at Homebrew's OpenSSL with `-DOPENSSL_ROOT_DIR="$(brew --p
 
 ### Use
 
-Link against `IASLib` and include either `IASLib.h` or the individual headers:
+Link against `IASLib::IASLib` and include either `IASLib.h` or the individual headers. The target brings the include directories, the feature macros the library was built with, and its dependencies. It works the same whichever way you get the library:
 
 ```cmake
+# An installed package (see below)...
+find_package(IASLib 3.0 REQUIRED)
+# ...or a source tree inside your project...
 add_subdirectory(IASLib)
-target_link_libraries(my_app PRIVATE IASLib)
+# ...or straight from GitHub.
+include(FetchContent)
+FetchContent_Declare(IASLib GIT_REPOSITORY https://github.com/jnaujok/IASLib.git GIT_TAG v3.0.0)
+FetchContent_MakeAvailable(IASLib)
+
+target_link_libraries(my_app PRIVATE IASLib::IASLib)
 ```
+
+### Install and package
+
+`cmake --install` puts the library, its headers (under `include/IASLib`) and its CMake package files (under `lib/cmake/IASLib`) in place:
+
+```sh
+cmake --install build --prefix /usr/local
+```
+
+CPack builds Linux packages from the same rules: a `.deb` (`libiaslib-dev`, which depends on `libsqlite3-dev` and `libssl-dev`), an `.rpm` (`iaslib-devel`, which depends on `sqlite-devel` and `openssl-devel`) and a `.tar.gz`. Building the `.rpm` needs `rpmbuild` (the `rpm` package on Debian and Ubuntu).
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DIASLIB_BUILD_TESTS=OFF
+cmake --build build -j
+cd build && cpack -G "DEB;RPM;TGZ"
+sudo apt install ./libiaslib-dev_3.0.0_amd64.deb        # or: sudo dnf install ./iaslib-devel-3.0.0-1.x86_64.rpm
+```
+
+CI builds the packages on every push (the `IASLib-packages` artifact), and every release attaches them.
 
 ## Build options
 
