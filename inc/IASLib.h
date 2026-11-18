@@ -30,6 +30,8 @@
  *   defined as well when OpenSSL is found: secure sockets, HTTPS, SIP over
  *   TLS.
  * - IASLIB_JSON_SUPPORT__ [USE_JSON]: the JSON classes.
+ * - IASLIB_SJSON_SUPPORT__ [USE_SJSON]: SJSON, compact binary JSON packets
+ *   (CSjson), wire-compatible with the Python sjson library.
  * - IASLIB_RTTI__ [USE_RTTI]: GetType() and IsType() on every CObject (see
  *   DECLARE_OBJECT()).
  * - IASLIB_DEBUG__ [USE_DEBUG]: ASSERT() checks its condition.
@@ -295,6 +297,17 @@
 #include "JSON/BinaryNode.h"
 #include "JSON/MissingNode.h"
 #include "JSON/JsonParser.h"
+#ifdef IASLIB_SJSON_SUPPORT__
+#include "SJSON/SjsonBits.h"
+#include "SJSON/SjsonUtil.h"
+#include "SJSON/SjsonDictionary.h"
+#include "SJSON/SjsonCodec.h"
+#include "SJSON/SjsonStream.h"
+#include "SJSON/SjsonSchema.h"
+#include "SJSON/SjsonSchemaCodec.h"
+#include "SJSON/Sjson.h"
+#include "SJSON/SjsonLink.h"
+#endif
 #endif
 
 //***********

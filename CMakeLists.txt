@@ -19,6 +19,7 @@ option(USE_DEBUG "Use debugging features of the library." ON)
 option(USE_MEMORY_MANAGER "Use extended memory manager." OFF)
 option(USE_MEMORY_DEBUGGING "Use memory debugging features." ON)
 option(USE_JSON "Enable JSON support." ON)
+option(USE_SJSON "SJSON: compact binary JSON packets (needs USE_JSON; uses liblz4 and libzstd when found)." ON)
 option(USE_HERSCHEL_CORRECTION "CDate treats years divisible by 4000 as common years by default." OFF)
 # Windows always uses ICU (icu.dll) for named time zones; this turns it on
 # elsewhere, where zone files are normally used, mainly for testing.
@@ -51,6 +52,7 @@ include_directories(
         inc/NetworkServices/SIP
         inc/NetworkServices/SIP/Handlers
         inc/Resources
+        inc/SJSON
         inc/Sockets
         inc/Stats
         inc/Status
@@ -86,6 +88,7 @@ file( GLOB NETWORK_SERVICES
         "src/NetworkServices/SIP/*.cpp"
         "src/NetworkServices/SIP/Handlers/*.cpp")
 file( GLOB RESOURCES "src/Resources/*.cpp")
+file( GLOB SJSON "src/SJSON/*.cpp")
 file( GLOB SOCKETS "src/Sockets/*.cpp")
 file( GLOB STATS "src/Stats/*.cpp")
 file( GLOB STATUS "src/Status/*.cpp")
@@ -116,6 +119,9 @@ set(
 
 if(USE_JSON)
     list(APPEND SOURCES ${JSON})
+endif()
+if(USE_JSON AND USE_SJSON)
+    list(APPEND SOURCES ${SJSON})
 endif()
 
 if(UNIX AND NOT APPLE)
@@ -180,6 +186,9 @@ endif()
 if (USE_JSON)
     add_definitions(-DIASLIB_JSON_SUPPORT__)
 endif()
+if (USE_JSON AND USE_SJSON)
+    add_definitions(-DIASLIB_SJSON_SUPPORT__)
+endif()
 if (USE_HERSCHEL_CORRECTION)
     add_definitions(-DIASLIB_HERSCHEL_CORRECTION__)
 endif()
@@ -238,6 +247,33 @@ if(USE_NETWORK)
         target_compile_definitions(IASLib PUBLIC IASLIB_TLS__)
     endif()
 endif()
+if(USE_JSON AND USE_SJSON)
+    # SJSON writes LZ4 blocks with liblz4 (it reads them without it) and
+    # compresses its text channel with libzstd. Both are optional.
+    find_path(LZ4_INCLUDE_DIR lz4.h)
+    find_library(LZ4_LIBRARY NAMES lz4 liblz4)
+    if(LZ4_INCLUDE_DIR AND LZ4_LIBRARY)
+        target_include_directories(IASLib PRIVATE ${LZ4_INCLUDE_DIR})
+        # The build tree links the library found; an installed IASLib
+        # names it by its link name, so the package does not record this
+        # machine's path.
+        target_link_libraries(IASLib PUBLIC $<BUILD_INTERFACE:${LZ4_LIBRARY}> $<INSTALL_INTERFACE:lz4>)
+        target_compile_definitions(IASLib PRIVATE IASLIB_SJSON_LZ4__)
+        set(IASLIB_SJSON_LZ4 ON)
+    endif()
+    find_path(ZSTD_INCLUDE_DIR zstd.h)
+    find_library(ZSTD_LIBRARY NAMES zstd libzstd zstd_static)
+    if(ZSTD_INCLUDE_DIR AND ZSTD_LIBRARY)
+        target_include_directories(IASLib PRIVATE ${ZSTD_INCLUDE_DIR})
+        # The build tree links the library found; an installed IASLib
+        # names it by its link name, so the package does not record this
+        # machine's path.
+        target_link_libraries(IASLib PUBLIC $<BUILD_INTERFACE:${ZSTD_LIBRARY}> $<INSTALL_INTERFACE:zstd>)
+        target_compile_definitions(IASLib PRIVATE IASLIB_SJSON_ZSTD__)
+        set(IASLIB_SJSON_ZSTD ON)
+    endif()
+    message(STATUS "SJSON: LZ4 ${IASLIB_SJSON_LZ4}, zstd ${IASLIB_SJSON_ZSTD}")
+endif()
 target_link_libraries(IASLib PUBLIC ${CMAKE_DL_LIBS})
 if(WIN32)
     # Winsock (MSVC also gets it from a #pragma in Platform.h).
@@ -294,6 +330,12 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
     set(CPACK_DEBIAN_PACKAGE_SECTION "libdevel")
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsqlite3-dev, libssl-dev")
+    if(IASLIB_SJSON_LZ4)
+        string(APPEND CPACK_DEBIAN_PACKAGE_DEPENDS ", liblz4-dev")
+    endif()
+    if(IASLIB_SJSON_ZSTD)
+        string(APPEND CPACK_DEBIAN_PACKAGE_DEPENDS ", libzstd-dev")
+    endif()
 
         # Fedora/RHEL/SUSE: a -devel package.
     set(CPACK_RPM_PACKAGE_NAME "iaslib-devel")
@@ -301,6 +343,12 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     set(CPACK_RPM_PACKAGE_GROUP "Development/Libraries")
     set(CPACK_RPM_PACKAGE_LICENSE "LGPL-3.0-only")
     set(CPACK_RPM_PACKAGE_REQUIRES "sqlite-devel, openssl-devel")
+    if(IASLIB_SJSON_LZ4)
+        string(APPEND CPACK_RPM_PACKAGE_REQUIRES ", lz4-devel")
+    endif()
+    if(IASLIB_SJSON_ZSTD)
+        string(APPEND CPACK_RPM_PACKAGE_REQUIRES ", libzstd-devel")
+    endif()
     set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr/lib/cmake;/usr/lib64/cmake;/usr/include;/usr/share/doc")
     include(CPack)
 endif()

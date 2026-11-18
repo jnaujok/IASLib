@@ -85,6 +85,13 @@ It was years later that the movie "Sherlock Holmes", and the TV series of "Sherl
 - A Jackson-style node tree: `path()` chains, JSON Pointer, find helpers, deep equality and copying.
 - Compact, pretty-printed and ASCII-only output, with doubles written in their shortest exact form.
 
+**SJSON** (compact binary JSON)
+- `CSjson` packs JSON trees into small binary packets: field names become dictionary ids, and numbers and strings get tight encodings (UUIDs, timestamps, hex, base64 and range-coded text among them).
+- A JSON Schema or XSD (or a compiled dictionary file) pre-loads the dictionary, and documents that fit the schema are sent without field tags or type codes.
+- Stream mode remembers recent values per field, so repeats and small changes cost a few bits; longer text goes through a zstd channel (about 3 MB per stream at the default 128 KiB window). Stream packets leave out the sender id, since a connection has one sender.
+- `CSjsonLink` runs SJSON over any `CStream` (a `CSocketStream` over TCP or WinSock, a pipe) with an ACK/NAK protocol: missing names are fetched, a stream that lost its place is reset, and damaged packets are sent again. It talks to the Python library's `examples/acknak.py`.
+- Wire-compatible with the [Python sjson library](https://github.com/jnaujok/sjson): the same document gives the same bytes, and packets decode in either.
+
 **Networking**
 - Portable sockets: TCP, UDP, timed reads and accepts, and IPv4/IPv6 addresses.
 - **SIP server** (RFC 3261): server transactions with their timers, CANCEL, `received`/`rport`, keep-alives, and UDP, TCP and TLS transports.
@@ -121,10 +128,10 @@ The same source compiles on every platform. A single platform flag (`IASLIB_LINU
 ### Requirements
 
 - A C++11 compiler and CMake 3.10 or later.
-- **Optional:** OpenSSL for TLS, and SQLite 3 for the database layer.
-  - Linux: `sudo apt-get install libssl-dev libsqlite3-dev tzdata`
-  - macOS: `brew install openssl@3` (SQLite comes with macOS)
-  - Windows: `vcpkg install sqlite3:x64-windows`, plus an OpenSSL installation
+- **Optional:** OpenSSL for TLS, SQLite 3 for the database layer, and LZ4 and zstd for SJSON (LZ4 for one string form; zstd for the stream-mode text channel).
+  - Linux: `sudo apt-get install libssl-dev libsqlite3-dev tzdata liblz4-dev libzstd-dev`
+  - macOS: `brew install openssl@3 lz4 zstd` (SQLite comes with macOS)
+  - Windows: `vcpkg install sqlite3:x64-windows lz4:x64-windows zstd:x64-windows`, plus an OpenSSL installation
 
 ### Build
 
@@ -181,6 +188,7 @@ CI builds the packages on every push (the `IASLib-packages` artifact), and every
 | `USE_THREADS` | `ON` | Multi-threading support. |
 | `USE_NETWORK` | `ON` | Sockets, SIP and HTTP. TLS is built in when OpenSSL is found (`IASLIB_TLS__`). |
 | `USE_JSON` | `ON` | The JSON library (needed for saving blockchains as JSON). |
+| `USE_SJSON` | `ON` | SJSON binary packets (needs `USE_JSON`). Uses liblz4 and libzstd when CMake finds them. |
 | `USE_DATABASE` | `ON` | The database layer. |
 | `USE_SQLITE` | `ON` | SQLite connector. |
 | `USE_MYSQL` / `USE_ORACLE` / `USE_SYBASE` | `OFF` | Other database connectors. |
@@ -216,6 +224,28 @@ CObjectNode obj;
 obj.put( "name", "Ann" )->put( "admin", true );
 obj.putArray( "tags" )->add( "a" )->add( 2.5 );
 printf( "%s\n", (const char *)obj.toPrettyString() );
+```
+
+### SJSON
+
+```cpp
+    // Both sides load the same schema (or a compiled dictionary file).
+std::shared_ptr<const CSjsonSchemaModel> schema( SjsonSchema::loadSchema( "order.xsd" ) );
+std::unique_ptr<CSjsonDictionary> dictionary( CSjsonDictionary::fromSchema( schema ) );
+
+CSjson sender( 1, true );           // sender id 1, stream mode
+sender.setDictionary( *dictionary );
+CSjson receiver( 2 );
+receiver.registerDictionary( *dictionary );
+
+std::vector<unsigned char> packet;
+sender.encode( *document, packet );
+CJsonNode *copy = receiver.decode( packet.data(), packet.size() );   // NULL: see receiver.lastError()
+
+    // Or let a link handle framing, ACKs and NAKs over a stream:
+CSocketStream stream( new CClientSocket( "10.0.0.5", 7400 ) );
+CSjsonLink link( stream, sender );
+link.send( *document );             // returns once the peer has decoded it
 ```
 
 ### An HTTPS server with virtual hosts

@@ -4,6 +4,20 @@ All notable changes to IASLib are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/) from 2.5.0 on.
 
+## [Unreleased]
+
+### Added
+
+- **SJSON** (`inc/SJSON`, `CSjson`): compact binary packets for JSON trees, a C++ port of the [Python sjson library](https://github.com/jnaujok/sjson) and wire-compatible with it (identical bytes for the same document; packets decode in either).
+  - Dictionary compression of field names with a NAK exchange, tight number encodings (integers of any size, float32 when exact, float64, decimal digits) and string forms (UUID, interned, LZ4, range coding, hex, ISO-8601, base64).
+  - Schemas: JSON Schema (drafts 4 to 2020-12, `$ref` across files) and XSD loaders, Python-identical fingerprints, compiled dictionary files, and the schema-driven encoding that drops field tags and type codes.
+  - Stream mode: per-field recent-value caches, float / integer / timestamp / prefix deltas, inline name definitions, sequence numbers with gap detection and reset, and a zstd text channel (128 KiB window by default, `setTextWindowLog`).
+  - Packet version 5: the sender id is optional (`setIncludeSenderId`), on for stateless packets and off in stream mode; `decode()` and `readHeader()` take the id to give packets without one.
+  - Each endpoint keeps its sending dictionary (`ownDictionary()`) apart from the dictionaries it learns from peers (`dictionary( id )`), so no packet or NAK reply from a peer can change it, whatever id it carries. Stateless packets with a text dictionary reuse one zstd context each way and a dictionary digested once.
+  - `CSjsonLink`: SJSON over a `CStream` with an ACK/NAK protocol (dictionary NAKs, stream reset, resend of damaged packets, duplex), frame-compatible with the Python library's `examples/acknak.py`.
+  - `TestSjson` checks byte-for-byte agreement with the Python library; `BenchSjson` measures both on the same message streams.
+  - New option `USE_SJSON` (default `ON`); LZ4 (liblz4) and zstd (libzstd) are optional dependencies.
+
 ## [3.0.0] — 2026-11-18
 
 Every folder of the library reviewed and brought up to date. The base types and collections were cleaned up, and every collection got a template version. The stubs are filled in: the memory manager, a resource archive and manager, memory-mapped files, an HTTP client, SMTP mail, and the SQLite driver's updatable cursors. Sockets support IPv6. Every public class, method and field has Doxygen documentation, and the build publishes it as HTML and PDF.
