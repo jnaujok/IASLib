@@ -37,6 +37,9 @@ namespace IASLib
                 m_strExceptionMessage = "Unknown XML Exception!";
                 break;
         }
+
+            // (The call stack kept saying "Unknown Exception".)
+        SyncMessage();
     }
 
     CXMLException::CXMLException( const char *strMessage )

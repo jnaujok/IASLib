@@ -20,33 +20,34 @@
 
 namespace IASLib
 {
-   CWindowsSystemException::CWindowsSystemException( DWORD dwError ) 
+      // (When FormatMessage() failed the buffer was used uninitialised, and
+      // the text never reached the exception's message.)
+   CWindowsSystemException::CWindowsSystemException( DWORD dwError )
    : CException( "Windows System Exception" )
    {
       m_dwErrorCode = dwError;
 
-      LPVOID lpMsgBuf;
-      LPVOID lpDisplayBuf;
+      LPSTR pszMessage = NULL;
+      DWORD dwLength = FormatMessageA( FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                       NULL, m_dwErrorCode, MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ), (LPSTR)&pszMessage, 0, NULL );
+      CString strSystem;
+      if ( dwLength > 0 && pszMessage != NULL )
+      {
+            // Without the trailing line break FormatMessage adds.
+         while ( dwLength > 0 && ( pszMessage[ dwLength - 1 ] == '\r' || pszMessage[ dwLength - 1 ] == '\n' || pszMessage[ dwLength - 1 ] == ' ' ) )
+            pszMessage[ --dwLength ] = '\0';
+         strSystem = pszMessage;
+      }
+      else
+      {
+         strSystem = "(no description)";
+      }
+      if ( pszMessage != NULL )
+         LocalFree( pszMessage );
 
-      FormatMessage(
-          FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-          FORMAT_MESSAGE_FROM_SYSTEM,
-          NULL,
-          m_dwErrorCode,
-          MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-          (LPTSTR) &lpMsgBuf,
-          0, NULL );
-
-      lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, 
-          (lstrlen((LPCTSTR)lpMsgBuf)+40)*sizeof(TCHAR)); 
-      wsprintf((LPTSTR)lpDisplayBuf, 
-          TEXT("Windows System Error %d: %s"), 
-          m_dwErrorCode, lpMsgBuf); 
-
-      m_strErrorMessage = (const char *)lpDisplayBuf;
-
-      LocalFree(lpMsgBuf);
-      LocalFree(lpDisplayBuf);
+      m_strErrorMessage.Format( "Windows System Error %lu: %s", (unsigned long)m_dwErrorCode, (const char *)strSystem );
+      m_strExceptionMessage = m_strErrorMessage;
+      SyncMessage();
    }
 
    CWindowsSystemException::~CWindowsSystemException( void )

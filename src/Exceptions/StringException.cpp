@@ -20,7 +20,7 @@
 
 namespace IASLib
 {
-    IMPLEMENT_OBJECT( CStringException, CObject );
+    IMPLEMENT_OBJECT( CStringException, CException );
 
     CStringException::CStringException( const char *strMessage, CException::ExceptionSeverity nExceptionLevel )
     : CException( strMessage, nExceptionLevel )
@@ -40,6 +40,9 @@ namespace IASLib
                 m_strExceptionMessage = "Unknown String Exception!";
                 break;
         }
+
+            // (The call stack kept saying "Unknown Exception".)
+        SyncMessage();
     }
     CStringException::~CStringException( void )
     {

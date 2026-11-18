@@ -34,7 +34,10 @@ namespace IASLib
 
             void            SetFileName( const char *strFileName ) { m_strSettingsFile = strFileName; }
             const char     *GetFileName( void ) { return (const char *)m_strSettingsFile; }
+                // Reads the file (adding to what was read before): false
+                // if it cannot be opened.
             bool            ReadSettings( void );
+            bool            HasSetting( const char *strSettingName ) const;
 
             CString         GetSetting( const char *strSettingName, const char *strDefault = "" );
             int             GetIntSetting( const char *strSettingName, int nDefault = 0 );

@@ -33,6 +33,14 @@
 **
 ***********************************************************************/
 
+/*
+ *  NOTE: declarations only. CEncrypt has no implementation in the library
+ * (none was ever written), so nothing here can be called: the file is
+ * kept as the record of the algorithm's design, and is not included by
+ * IASLib.h. Use CTlsContext / CSecureSocket (OpenSSL) for encryption, and
+ * CSHA256 for hashing.
+ */
+
 #ifndef IASLIB_ENCRYPT_H__
 #define IASLIB_ENCRYPT_H__
 

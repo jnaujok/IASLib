@@ -41,10 +41,15 @@ namespace IASLib
         public:
             DECLARE_OBJECT( CSHA256, CObject );
 
+                // Ready to hash. (The state was left uninitialised until
+                // init() was called.)
+                CSHA256( void ) { init(); }
+
             static const uint32 DIGEST_SIZE = ( 256 / 8);
 
-                // Incremental use: init(), update() as often as needed, final().
-                // A context can be copied part way through to hash several
+                // Incremental use: update() as often as needed, then final(),
+                // which also starts the context over (init() does too). A
+                // context can be copied part way through to hash several
                 // messages that share a prefix.
             void init();
             void update(const uint8 *message, uint32 len);

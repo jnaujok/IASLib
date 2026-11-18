@@ -28,8 +28,9 @@ namespace IASLib
                         CXMLException( const char *strException );
             virtual    ~CXMLException( void );
 
-                        DEFINE_OBJECT( CXMLExcetption )
+                        DEFINE_OBJECT( CXMLException )
             virtual void        Throw( void ) { throw *this; }
+            virtual void        Rethrow( void ) { throw *this; }
 
 
     };

@@ -87,6 +87,8 @@ namespace IASLib
     
     void CSHA256::update(const unsigned char *message, unsigned int len)
     {
+        if ( message == NULL || len == 0 )
+            return;
         unsigned int block_nb;
         unsigned int new_len, rem_len, tmp_len;
         const unsigned char *shifted_message;
@@ -141,6 +143,9 @@ namespace IASLib
         for (i = 0 ; i < 8; i++) {
             SHA2_UNPACK32(m_h[i], &digest[i << 2]);
         }
+            // Ready for the next message. (A second final() or update()
+            // went on from the padded state.)
+        init();
     }
     
     CString CSHA256::StringDigest(const CString &input)

@@ -23,6 +23,10 @@ add_executable(TestDate TestDate/TestDate.cpp)
 target_link_libraries(TestDate IASLib)
 add_test(test_date TestDate)
 
+add_executable(TestUtilities TestUtilities/TestUtilities.cpp)
+target_link_libraries(TestUtilities IASLib)
+add_test(test_utilities TestUtilities)
+
 if(USE_DATABASE AND USE_SQLITE)
     add_executable(TestDatabase TestDatabase/TestDatabase.cpp)
     target_link_libraries(TestDatabase IASLib)

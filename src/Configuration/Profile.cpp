@@ -1,13 +1,10 @@
 /*
  * Profile Class
  *
- * This module is used to maintain profile ( *.INI ) files. These
- * files are of the same format that Windows uses to store
- * configuration data.
- *
- * Major revision - 03/06/2002 - converted from C to C++ format
- * and used internal genlib (IASLib) functionality to replace
- * most of the code. Basically equivalent to a 90% rewrite.
+ *      See Profile.h. (Rewritten: the constructor threw for a missing file,
+ * the const char * read returned storage a later call could free, the
+ * modified check was never reset so every read re-parsed the file, and
+ * WriteInt() and ReadSection() were declared but never written.)
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 11/09/1994
@@ -19,961 +16,399 @@
  */
 
 #include "Profile.h"
-#include "FileStat.h"
-#include <stdlib.h>
-#include <string.h>
+#include "File.h"
 
-#define ROOT_NAME "[ROOT]"
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 namespace IASLib
 {
         // Allows for a global profile object.
     CProfile *g_Profile = NULL;
 
-    /*************************************************************************
-    *                     P R I V A T E   C L A S S E S                      *
-    *************************************************************************/
+    IMPLEMENT_OBJECT( CProfile, CObject );
 
-    /*************************************************************************
-    *                       C E n t r y S t o r a g e                        *
-    *************************************************************************/
-    /*************************************************************************
-    *   CEntryStorage                                                        *
-    *                                                                        *
-    *       Description:  This class stores individual entries in the        *
-    *                     sections of the profile file. Entries can also     *
-    *                     contain comment lines.                             *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-      
-    class CEntryStorage : public CObject
+    namespace
     {
-        protected:
-            CString         m_strEntryName;
-            CString         m_strValue;
-            CEntryStorage  *m_listNextEntry;
-            bool            m_bCommentFlag;
-            int             m_nLeadingWhitespace;
-        public:
-                            CEntryStorage( const char *strName, const char *strValue, bool bComment = false, int nLeadSpace = 0 ) { m_strEntryName = strName; m_strValue = strValue; m_bCommentFlag = bComment; m_listNextEntry = NULL; m_nLeadingWhitespace = nLeadSpace; }
-            virtual        ~CEntryStorage( void ) { delete m_listNextEntry; }
-
-                            DEFINE_OBJECT( CEntryStorage )
-
-            CString        &GetName( void ) { return m_strEntryName; }
-            const char     *GetValue( void ) { return (const char *)m_strValue; }
-            bool            SetValue( const char *strValue ) { m_strValue = strValue; return true; }
-
-            CEntryStorage  *GetNext( void ) { return m_listNextEntry; }
-            CEntryStorage  *SetNext( CEntryStorage *pNext ) { CEntryStorage *pTemp = m_listNextEntry; m_listNextEntry = pNext; return pTemp; }
-
-            bool            IsComment( void ) { return m_bCommentFlag; }
-
-            void            Write( CFile &oFile );
-    };
-
-    IMPLEMENT_OBJECT( CEntryStorage, CObject );
-
-    /*************************************************************************
-    *   CEntryStorage::Write                                                 *
-    *                                                                        *
-    *       Description:  This method writes the entry out to the passed in  *
-    *                     file.                                              *
-    *           Returns:  None.                                              *
-    *            Throws:  None                                               *
-    *            Errors:  None                                               *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    void CEntryStorage::Write( CFile &oFile )
-    {
-        if ( m_bCommentFlag )
+        bool SameName( const CString &strA, const char *pszB )
         {
-            oFile.WriteString( m_strValue );
-            oFile.Write( "\n", 1 );
+            return strA.Compare( ( pszB ) ? pszB : "", false ) == 0;
         }
-        else
+
+        std::string Trimmed( const std::string &str )
         {
-            CString strTemp;
-            strTemp.Format( "%s = %s\n", (const char *)m_strEntryName, (const char *)m_strValue );
-            if ( m_nLeadingWhitespace )
-            {
-                strTemp = strTemp.Pad( (int)strTemp.GetLength() + m_nLeadingWhitespace, ' ', false );
-            }
-            oFile.WriteString( strTemp );
+            size_t nStart = str.find_first_not_of( " \t\r\n\f\v" );
+            if ( nStart == std::string::npos )
+                return std::string();
+            size_t nEnd = str.find_last_not_of( " \t\r\n\f\v" );
+            return str.substr( nStart, nEnd - nStart + 1 );
         }
     }
 
-    /*************************************************************************
-    *                     C S e c t i o n S t o r a g e                      *
-    *************************************************************************/
-    /*************************************************************************
-    *   CSectionStorage                                                      *
-    *                                                                        *
-    *       Description:  This class stores individual sections in the       *
-    *                     profile file.                                      *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    class CSectionStorage : public CObject
+    CProfile::CProfile( const char *pszFileName, bool bCacheFile )
     {
-        protected:
-            CString             m_strSectionName;
-            CEntryStorage      *m_listEntries;
-            CSectionStorage    *m_listNextSection;
+        m_strFileName = ( pszFileName ) ? pszFileName : "";
+        m_bCached = bCacheFile;
+        m_bExistsFlag = false;
+        m_bLoaded = false;
+        m_llFileStamp = -1;
+        m_llFileSize = -1;
+        Load();
+    }
 
-        public:
-                                CSectionStorage( const char *strName ) { m_strSectionName = strName; m_listEntries = NULL; m_listNextSection = NULL; }
-            virtual            ~CSectionStorage( void ) { delete m_listEntries; delete m_listNextSection; }
-
-                                DEFINE_OBJECT( CSectionStorage )
-
-            CString            &GetName( void ) { return m_strSectionName; }
-
-            CEntryStorage      *FindEntry( const char *strEntryName );
-            void                Write( CFile &oFile );
-
-            CEntryStorage      *AddEntry( const char *strName, const char *strValue, bool bComment = false, int nLeadSpace = 0 );
-
-            CSectionStorage    *GetNext( void ) { return m_listNextSection; }
-            CSectionStorage    *SetNext( CSectionStorage *pNext ) { CSectionStorage *pTemp = m_listNextSection; m_listNextSection = pNext; return pTemp; }
-    };
-
-    IMPLEMENT_OBJECT( CSectionStorage, CObject );
-
-    /*************************************************************************
-    *   CSectionStorage::FindEntry                                           *
-    *                                                                        *
-    *       Description:  This method returns an entry object given the      *
-    *                     corresponding entry name.                          *
-    *           Returns:  The Entry Storage Object.                          *
-    *            Throws:  None                                               *
-    *            Errors:  Returns NULL if the entry can't be found.          *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    CEntryStorage *CSectionStorage::FindEntry( const char *strEntryName )
+    CProfile::~CProfile( void )
     {
-        CEntryStorage *pRetVal = NULL;
-        CEntryStorage *pTemp = m_listEntries;
+    }
 
-        while ( ( pTemp ) && ( ! pRetVal ) )
+        // The file's modification time and size, to see whether it changed.
+    bool CProfile::Stamp( long long &llTime, long long &llSize ) const
+    {
+    #ifdef IASLIB_WIN32__
+        struct _stat64 oStat;
+        if ( _stat64( (const char *)m_strFileName, &oStat ) != 0 )
+            return false;
+        llTime = (long long)oStat.st_mtime;
+    #else
+        struct stat oStat;
+        if ( stat( (const char *)m_strFileName, &oStat ) != 0 )
+            return false;
+      #if defined( __APPLE__ )
+        llTime = (long long)oStat.st_mtimespec.tv_sec * 1000000000LL + oStat.st_mtimespec.tv_nsec;
+      #else
+        llTime = (long long)oStat.st_mtim.tv_sec * 1000000000LL + oStat.st_mtim.tv_nsec;
+      #endif
+    #endif
+        llSize = (long long)oStat.st_size;
+        return true;
+    }
+
+    bool CProfile::Load( void )
+    {
+        m_aSections.clear();
+        SSection oRoot;
+        m_aSections.push_back( oRoot );
+        m_bLoaded = true;
+
+        long long llTime = -1, llSize = -1;
+        m_bExistsFlag = Stamp( llTime, llSize );
+        m_llFileStamp = llTime;
+        m_llFileSize = llSize;
+        if ( ! m_bExistsFlag )
+            return false;
+
+        std::ifstream oIn( (const char *)m_strFileName, std::ios::in | std::ios::binary );
+        if ( ! oIn )
         {
-            if ( ( pTemp->IsComment() ) || ( pTemp->GetName().Compare( strEntryName, false ) != 0 ) )
+            m_bExistsFlag = false;
+            return false;
+        }
+
+        std::string strLine;
+        while ( std::getline( oIn, strLine ) )
+        {
+            if ( ! strLine.empty() && strLine[ strLine.size() - 1 ] == '\r' )
+                strLine.erase( strLine.size() - 1 );
+            std::string strTrim = Trimmed( strLine );
+
+            if ( strTrim.size() >= 2 && strTrim[0] == '[' && strTrim[ strTrim.size() - 1 ] == ']' )
             {
-                pTemp = pTemp->GetNext();
+                SSection oSection;
+                oSection.strName = Trimmed( strTrim.substr( 1, strTrim.size() - 2 ) ).c_str();
+                oSection.strHeader = strLine.c_str();
+                m_aSections.push_back( oSection );
+                continue;
+            }
+
+            SLine oLine;
+            size_t nEquals = strTrim.find( '=' );
+            if ( strTrim.empty() || strTrim[0] == ';' || strTrim[0] == '#' || nEquals == std::string::npos || nEquals == 0 )
+            {
+                oLine.bEntry = false;
+                oLine.strRaw = strLine.c_str();
             }
             else
             {
-                pRetVal = pTemp;
+                oLine.bEntry = true;
+                oLine.strName = Trimmed( strTrim.substr( 0, nEquals ) ).c_str();
+                oLine.strValue = Trimmed( strTrim.substr( nEquals + 1 ) ).c_str();
+                oLine.strIndent = strLine.substr( 0, strLine.find_first_not_of( " \t" ) ).c_str();
+            }
+            m_aSections.back().aLines.push_back( oLine );
+        }
+        return true;
+    }
+
+    void CProfile::Refresh( void )
+    {
+        if ( m_bLoaded && m_bCached )
+            return;
+        long long llTime = -1, llSize = -1;
+        bool bExists = Stamp( llTime, llSize );
+        if ( m_bLoaded && bExists == m_bExistsFlag && llTime == m_llFileStamp && llSize == m_llFileSize )
+            return;
+        Load();
+    }
+
+    void CProfile::Reload( void )
+    {
+        Load();
+    }
+
+    bool CProfile::Save( void )
+    {
+        if ( m_strFileName.GetLength() == 0 )
+            return false;
+
+        CString strTemp = m_strFileName + ".tmp";
+        {
+            std::ofstream oOut( (const char *)strTemp, std::ios::out | std::ios::binary | std::ios::trunc );
+            if ( ! oOut )
+                return false;
+            for ( size_t nSection = 0; nSection < m_aSections.size(); nSection++ )
+            {
+                const SSection &oSection = m_aSections[ nSection ];
+                if ( nSection > 0 )
+                {
+                    if ( oSection.strHeader.GetLength() )
+                        oOut << (const char *)oSection.strHeader << "\n";
+                    else
+                        oOut << "[" << (const char *)oSection.strName << "]\n";
+                }
+                for ( size_t n = 0; n < oSection.aLines.size(); n++ )
+                {
+                    const SLine &oLine = oSection.aLines[ n ];
+                    if ( oLine.bEntry )
+                        oOut << (const char *)oLine.strIndent << (const char *)oLine.strName << " = " << (const char *)oLine.strValue << "\n";
+                    else
+                        oOut << (const char *)oLine.strRaw << "\n";
+                }
+            }
+            oOut.flush();
+            if ( ! oOut )
+            {
+                oOut.close();
+                std::remove( (const char *)strTemp );
+                return false;
             }
         }
 
-        return pRetVal;
+        bool bRenamed = false;
+        try
+        {
+            bRenamed = CFile::Rename( strTemp, m_strFileName );
+        }
+        catch ( ... )
+        {
+            bRenamed = false;
+        }
+        if ( ! bRenamed )
+        {
+            std::remove( (const char *)strTemp );
+            return false;
+        }
+
+        long long llTime = -1, llSize = -1;
+        m_bExistsFlag = Stamp( llTime, llSize );
+        m_llFileStamp = llTime;
+        m_llFileSize = llSize;
+        return true;
     }
 
-    /*************************************************************************
-    *   CSectionStorage::AddEntry                                            *
-    *                                                                        *
-    *       Description:  This method adds an entry to a section.            *
-    *           Returns:  The added CEntryStorage Object.                    *
-    *            Throws:  None                                               *
-    *            Errors:  Returns NULL if the entry can't be added.          *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    CEntryStorage *CSectionStorage::AddEntry( const char *strName, const char *strValue, bool bComment, int nLeadSpace )
+    CProfile::SSection *CProfile::FindSection( const char *pszSectionName )
     {
-        CEntryStorage *pLast = NULL;
-        CEntryStorage *pTemp = m_listEntries;
-
-        while ( pTemp )
+        if ( pszSectionName == NULL || *pszSectionName == '\0' )
+            return &m_aSections[0];
+        for ( size_t n = 1; n < m_aSections.size(); n++ )
         {
-            pLast = pTemp;
-            pTemp = pTemp->GetNext();
+            if ( SameName( m_aSections[ n ].strName, pszSectionName ) )
+                return &m_aSections[ n ];
         }
+        return NULL;
+    }
 
-        pTemp = new CEntryStorage( strName, strValue, bComment, nLeadSpace );
-
-        if ( ! pLast )
+    CProfile::SLine *CProfile::FindEntry( const char *pszSectionName, const char *pszEntryName )
+    {
+        SSection *pSection = FindSection( pszSectionName );
+        if ( pSection == NULL || pszEntryName == NULL )
+            return NULL;
+        for ( size_t n = 0; n < pSection->aLines.size(); n++ )
         {
-            m_listEntries = pTemp;
+            SLine &oLine = pSection->aLines[ n ];
+            if ( oLine.bEntry && SameName( oLine.strName, pszEntryName ) )
+                return &oLine;
         }
+        return NULL;
+    }
+
+    size_t CProfile::GetString( const char *pszSectionName, const char *pszEntryName, const char *pszDefault, char *pszBuffer, int nBufferLen )
+    {
+        if ( pszBuffer == NULL || nBufferLen <= 0 )
+            return 0;
+        CString strValue;
+        GetString( pszSectionName, pszEntryName, pszDefault, strValue );
+        size_t nCopy = strValue.GetLength();
+        if ( nCopy > (size_t)nBufferLen - 1 )
+            nCopy = (size_t)nBufferLen - 1;
+        memcpy( pszBuffer, (const char *)strValue, nCopy );
+        pszBuffer[ nCopy ] = '\0';
+        return nCopy;
+    }
+
+    size_t CProfile::GetString( const char *pszSectionName, const char *pszEntryName, const char *pszDefault, CString &strBuffer )
+    {
+        Refresh();
+        SLine *pLine = FindEntry( pszSectionName, pszEntryName );
+        if ( pLine )
+            strBuffer = pLine->strValue;
         else
-        {
-            pLast->SetNext( pTemp );
-        }
-
-        return pTemp;
+            strBuffer = ( pszDefault ) ? pszDefault : "";
+        return strBuffer.GetLength();
     }
 
-    /*************************************************************************
-    *   CEntryStorage::Write                                                 *
-    *                                                                        *
-    *       Description:  This method writes the section out to the passed   *
-    *                     in file.                                           *
-    *           Returns:  None.                                              *
-    *            Throws:  None                                               *
-    *            Errors:  None                                               *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    void CSectionStorage::Write( CFile &oFile )
-    {
-        CString strTemp;
-        CEntryStorage *pTemp = m_listEntries;
-        
-        if ( m_strSectionName != ROOT_NAME )
-        {
-            strTemp.Format( "[%s]\n", (const char *)m_strSectionName );
-            oFile.WriteString( strTemp );
-        }
-
-        while ( pTemp )
-        {
-            pTemp->Write( oFile );
-            pTemp = pTemp->GetNext();
-        }
-    }
-        
-
-    /*************************************************************************
-    *                       C L A S S   M E T H O D S                        *
-    *************************************************************************/
-
-    /*************************************************************************
-    *                   P U B L I C   F U N C T I O N S                      *
-    *************************************************************************/
-    IMPLEMENT_OBJECT( CProfile, CObject );
-
-    /*************************************************************************
-    *   CProfile                                                             *
-    *                                                                        *
-    *       Description:  This is the constructor method for the Profile     *
-    *                     object. It attempts to locate the given filename   *
-    *                     in the correct path group, and then set up its     *
-    *                     internal flags accordingly.                        *
-    *           Returns:  None                                               *
-    *            Throws:  None                                               *
-    *            Errors:  None                                               *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, November 9, 1994                        *
-    *                                                                        *
-    *     Revision Date:  Wednesday, March 6, 2002                           *
-    *        Revised By:  Jeffrey R. Naujok                                  *
-    *           Changes:  Changed entire style and formatting to match the   *
-    *                     genlib formatting to include all of the actual OOP *
-    *                     features that genlib includes. Basically a total   *
-    *                     rewrite of all the code.                           *
-    *                                                                        *
-    *************************************************************************/
-      
-    CProfile::CProfile( const char *pszFileName, bool bCacheFile )
-    {
-        m_listSections = NULL;
-
-        m_strFileName = pszFileName;
-        m_ProfileFile.Open( m_strFileName, CFile::READ );
-        
-        if ( m_ProfileFile.IsOpen() )
-        {
-            m_bExistsFlag = true;
-            m_bCached = false;
-
-            if ( bCacheFile )
-            {
-                FindSection( "]" );
-            }
-        }  
-        else
-        {
-            m_bCached = true;
-            m_bExistsFlag = false;
-        }
-    }
-
-    /*************************************************************************
-    *   ~CProfile                                                            *
-    *                                                                        *
-    *       Description:  This is the destructor method for objects of the   *
-    *                     CProfile class. It cleans up the section chain and *
-    *                     makes sure that the file is closed.                *
-    *           Returns:  None                                               *
-    *            Throws:  None                                               *
-    *            Errors:  None                                               *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, November 9, 1994                        *
-    *                                                                        *
-    *     Revision Date:  Wednesday, March 6, 2002                           *
-    *        Revised By:  Jeffrey R. Naujok                                  *
-    *           Changes:  Changed entire style and formatting to match the   *
-    *                     genlib formatting to include all of the actual OOP *
-    *                     features that genlib includes. Basically a total   *
-    *                     rewrite of all the code.                           *
-    *                                                                        *
-    *************************************************************************/
-
-    CProfile::~CProfile( void )
-    { 
-        if ( m_listSections )
-        {
-            delete m_listSections;
-        }
-
-        if ( IsOpen() )
-            CloseFile();
-    }
-
-    /*************************************************************************
-    *   CProfile::GetString                                                  *
-    *                                                                        *
-    *       Description:  This function retrieves a single string from the   *
-    *                     INI file by finding its section, and then finding  *
-    *                     its exact entry, and then using an fgets to get    *
-    *                     the actual entry value. The string is then trimmed *
-    *                     of leading and trailing spaces before being        *
-    *                     returned to the calling code.                      *
-    *           Returns:  int - Length of String                             *
-    *            Throws:  None                                               *
-    *            Errors:  Returns Default value on failure                   *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, November 9, 1994                        *
-    *                                                                        *
-    *     Revision Date:  Wednesday, March 6, 2002                           *
-    *        Revised By:  Jeffrey R. Naujok                                  *
-    *           Changes:  Changed entire style and formatting to match the   *
-    *                     genlib formatting to include all of the actual OOP *
-    *                     features that genlib includes. Basically a total   *
-    *                     rewrite of all the code.                           *
-    *                                                                        *
-    *************************************************************************/
-                                                                              
-    size_t CProfile::GetString( const char *pszSectionName, const char *pszEntryName, const char *pszDefault, char *pszBuffer, int nBufferSize )
-    {
-        CSectionStorage    *pSection;
-        CEntryStorage      *pEntry;
-        int                 nRetVal = 0;
-        bool                bFound = false;
-
-        pSection = FindSection( pszSectionName );
-
-        if ( pSection )
-        {
-            pEntry = pSection->FindEntry( pszEntryName );
-
-            if ( pEntry )
-            {
-#ifdef IASLIB_WIN32__
-                strncpy_s( pszBuffer, nBufferSize, pEntry->GetValue(), _TRUNCATE );
-#else
-                strncpy( pszBuffer, pEntry->GetValue(), nBufferSize );
-#endif
-                bFound = true;
-            }
-        }
-
-        if (! bFound )
-        {
-#ifdef IASLIB_WIN32__
-            strncpy_s( pszBuffer, nBufferSize, pszDefault, _TRUNCATE );
-#else
-            strncpy( pszBuffer, pszDefault, nBufferSize );
-#endif
-        }
-
-        pszBuffer[ nBufferSize - 1 ] = 0;
-        nRetVal = (int)strlen( pszBuffer );
-
-        return nRetVal;
-    }
-
-    /*************************************************************************
-    *   CProfile::GetString                                                  *
-    *                                                                        *
-    *       Description:  This function retrieves a single string from the   *
-    *                     INI file by finding its section, and then finding  *
-    *                     its exact entry, and then copying it into a        *
-    *                     CString object for return to the caller.           *
-    *           Returns:  size_t - Length of String                             *
-    *            Throws:  None                                               *
-    *            Errors:  Returns Default value on failure                   *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-                                                                              
-    size_t CProfile::GetString( const char *pszSectionName, const char *pszEntryName, const char *pszDefault, CString &strReturn )
-    {
-        CSectionStorage    *pSection;
-        CEntryStorage      *pEntry;
-        size_t              nRetVal = 0;
-        bool                bFound = false;
-
-        pSection = FindSection( pszSectionName );
-
-        if ( pSection )
-        {
-            pEntry = pSection->FindEntry( pszEntryName );
-
-            if ( pEntry )
-            {
-                strReturn = pEntry->GetValue();
-                bFound = true;
-            }
-        }
-
-        if ( ! bFound )
-        {
-            strReturn = pszDefault;
-        }
-
-        nRetVal = strReturn.GetLength();
-
-        return nRetVal;
-    }
-
-    /*************************************************************************
-    *   CProfile::GetString                                                  *
-    *                                                                        *
-    *       Description:  This function retrieves a single string from the   *
-    *                     INI file by finding its section, and then finding  *
-    *                     its exact entry, and then copying it into a        *
-    *                     CString object for return to the caller.           *
-    *           Returns:  int - Length of String                             *
-    *            Throws:  None                                               *
-    *            Errors:  Returns Default value on failure                   *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-                                                                              
     const char *CProfile::GetString( const char *pszSectionName, const char *pszEntryName, const char *pszDefault )
     {
-        CSectionStorage    *pSection;
-        CEntryStorage      *pEntry;
-        const char         *pRetVal = NULL;
-        bool                bFound = false;
-
-        pSection = FindSection( pszSectionName );
-
-        if ( pSection )
-        {
-            pEntry = pSection->FindEntry( pszEntryName );
-
-            if ( pEntry )
-            {
-                pRetVal = pEntry->GetValue();
-                bFound = true;
-            }
-        }
-
-        if ( ! bFound )
-        {
-            pRetVal = pszDefault;
-        }
-
-        return pRetVal;
+        Refresh();
+        SLine *pLine = FindEntry( pszSectionName, pszEntryName );
+        if ( pLine == NULL )
+            return pszDefault;
+        std::string strKey = std::string( ( pszSectionName ) ? pszSectionName : "" ) + '\n' + ( ( pszEntryName ) ? pszEntryName : "" );
+        CString &strKept = m_mapReturned[ strKey ];
+        strKept = pLine->strValue;
+        return (const char *)strKept;
     }
-
-    /*************************************************************************
-    *   CProfile::GetInt                                                     *
-    *                                                                        *
-    *       Description:  This method returns the integer value of the given *
-    *                     entry. It does this by getting the string and then *
-    *                     converting that return value to an integer.        *
-    *           Returns:  int - The value of the entry                       *
-    *            Throws:  None                                               *
-    *            Errors:  Returns Default value on failure                   *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, November 9, 1994                        *
-    *                                                                        *
-    *     Revision Date:  Wednesday, March 6, 2002                           *
-    *        Revised By:  Jeffrey R. Naujok                                  *
-    *           Changes:  Changed entire style and formatting to match the   *
-    *                     genlib formatting to include all of the actual OOP *
-    *                     features that genlib includes. Basically a total   *
-    *                     rewrite of all the code.                           *
-    *                                                                        *
-    *************************************************************************/
 
     int CProfile::GetInt( const char *pszSectionName, const char *pszEntryName, int nDefault )
     {
-        CSectionStorage    *pSection;
-        CEntryStorage      *pEntry;
-        int                 nRetVal = nDefault;
-
-        pSection = FindSection( pszSectionName );
-
-        if ( pSection )
-        {
-            pEntry = pSection->FindEntry( pszEntryName );
-
-            if ( pEntry )
-            {
-                nRetVal = atoi( pEntry->GetValue() );
-            }
-        }
-
-        return nRetVal;
+        Refresh();
+        SLine *pLine = FindEntry( pszSectionName, pszEntryName );
+        if ( pLine == NULL )
+            return nDefault;
+        const char *pszValue = pLine->strValue;
+        char *pszEnd = NULL;
+        long lValue = strtol( pszValue, &pszEnd, 0 );
+        if ( pszEnd == pszValue )
+            return nDefault;        // (atoi() gave 0 for text)
+        return (int)lValue;
     }
-
-    /*************************************************************************
-    *   CProfile::WriteString                                                *
-    *                                                                        *
-    *       Description:  This method would write the given string at the    *
-    *                     correct section and entry, replacing the current   *
-    *                     value or adding a new entry, or even a new         *
-    *                     section. If the file does not exist, the file is   *
-    *                     created. All other data in the file remains in its *
-    *                     original state.                                    *
-    *                     All this sounds good, but for now, the function is *
-    *                     just stubbed out to save time.                     *
-    *           Returns:  True - Item was written.                           *
-    *                     False - Item could not be written.                 *
-    *            Throws:  CFileException from FindSection.                   *
-    *            Errors:  None.                                              *
-    *                                                                        *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, November 9, 1994                        *
-    *                                                                        *
-    *     Revision Date:  Wednesday, March 6, 2002                           *
-    *        Revised By:  Jeffrey R. Naujok                                  *
-    *           Changes:  Changed entire style and formatting to match the   *
-    *                     genlib formatting to include all of the actual OOP *
-    *                     features that genlib includes. Basically a total   *
-    *                     rewrite of all the code.                           *
-    *                                                                        *
-    *************************************************************************/
 
     bool CProfile::WriteString( const char *pszSectionName, const char *pszEntryName, const char *pszBuffer )
     {
-        CSectionStorage    *pSection;
-        CEntryStorage      *pEntry;
+        if ( pszEntryName == NULL || *pszEntryName == '\0' )
+            return false;
+            // A name with '=', '[' or a line break, or a value with a
+            // line break, would read back as something else.
+        if ( strpbrk( pszEntryName, "=\r\n" ) || ( pszSectionName && strpbrk( pszSectionName, "[]\r\n" ) ) || ( pszBuffer && strpbrk( pszBuffer, "\r\n" ) ) )
+            return false;
 
-        if ( ! DoesExist() )
+            // Start from the file as it is now, so changes made by others
+            // since it was read are not lost.
+        if ( ! m_bCached )
+            Load();
+
+        SLine *pLine = FindEntry( pszSectionName, pszEntryName );
+        if ( pLine == NULL )
         {
-            CString strTemp;
-            CDate   dttNow;
-
-            pSection = AddSection( ROOT_NAME );
-            strTemp.Format( "; Profile created by CProfile class: %s\n", (const char *)dttNow.PrettyDate() );
-            pSection->AddEntry( "", strTemp, true );
+            SSection *pSection = FindSection( pszSectionName );
+            if ( pSection == NULL )
+            {
+                SSection oSection;
+                oSection.strName = pszSectionName;
+                m_aSections.push_back( oSection );
+                pSection = &m_aSections.back();
+            }
+            SLine oLine;
+            oLine.bEntry = true;
+            oLine.strName = pszEntryName;
+                // After the section's last entry, before its trailing
+                // blank lines and comments.
+            size_t nAt = pSection->aLines.size();
+            while ( nAt > 0 && ! pSection->aLines[ nAt - 1 ].bEntry )
+                nAt--;
+                // No entries yet: straight after a section's header, or
+                // after the root's opening comments.
+            if ( nAt == 0 && pSection == &m_aSections[0] )
+                nAt = pSection->aLines.size();
+            pSection->aLines.insert( pSection->aLines.begin() + (long)nAt, oLine );
+            pLine = &pSection->aLines[ nAt ];
         }
-
-        if ( ( pSection = FindSection( pszSectionName ) ) == NULL )
-            pSection = AddSection( pszSectionName );
-
-        if ( pSection )
-        {
-            if ( ( pEntry = pSection->FindEntry( pszEntryName ) ) == NULL )
-                pEntry = pSection->AddEntry( pszEntryName, pszBuffer );
-            else
-                pEntry->SetValue( pszBuffer );
-
-            WriteFile();
-        }
-
-        return true;
+        pLine->strValue = ( pszBuffer ) ? pszBuffer : "";
+        return Save();
     }
 
-
-    /*************************************************************************
-    *                  P R I V A T E   F U N C T I O N S                     *
-    *************************************************************************/
-
-
-    /*************************************************************************
-    *   CProfile::OpenFile                                                   *
-    *                                                                        *
-    *       Description:  This method opens the profile file. If it does not *
-    *                     exist, then it creates the file. If it does exist, *
-    *                     it opens the file for reading and writing.         *
-    *           Returns:  True - File is open.                               *
-    *                     False - File did not open.                         *
-    *            Throws:  None.                                              *
-    *            Errors:  None.                                              *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, November 9, 1994                        *
-    *                                                                        *
-    *     Revision Date:  Wednesday, March 6, 2002                           *
-    *        Revised By:  Jeffrey R. Naujok                                  *
-    *           Changes:  Changed entire style and formatting to match the   *
-    *                     genlib formatting to include all of the actual OOP *
-    *                     features that genlib includes. Basically a total   *
-    *                     rewrite of all the code.                           *
-    *                                                                        *
-    *************************************************************************/
-
-    bool CProfile::OpenFile( void )
+    bool CProfile::WriteInt( const char *pszSectionName, const char *pszEntryName, const int nValue )
     {
-        CString     strTemp;
-        CDate       dttNow;
-
-        if ( m_ProfileFile.IsOpen() )
-            return true;
-        
-        if ( m_bExistsFlag )
-        {
-            m_ProfileFile.Open( m_strFileName, CFile::READ );
-        }
-        else
-        {
-            m_ProfileFile.Open( m_strFileName, CFile::WRITE );
-            strTemp.Format( "; Profile created by CProfile class: %s\n", (const char *)dttNow.PrettyDate() );
-            m_ProfileFile.WriteString( strTemp );
-            m_ProfileFile.Close();
-            m_ProfileFile.Open( m_strFileName, CFile::READ );
-            m_bCached = false;
-            m_bExistsFlag = true;
-        }  
-        return m_ProfileFile.IsOpen();
+        char achValue[ 32 ];
+        snprintf( achValue, sizeof( achValue ), "%d", nValue );
+        return WriteString( pszSectionName, pszEntryName, achValue );
     }
 
-    /*************************************************************************
-    *   CProfile::CloseFile                                                  *
-    *                                                                        *
-    *       Description:  This method closes and flushes the object's open   *
-    *                     INI file. This allows other profile files to be    *
-    *                     opened without a major loss of file handles.       *
-    *           Returns:  None.                                              *
-    *            Throws:  None.                                              *
-    *            Errors:  None.                                              *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, November 9, 1994                        *
-    *                                                                        *
-    *     Revision Date:  Wednesday, March 6, 2002                           *
-    *        Revised By:  Jeffrey R. Naujok                                  *
-    *           Changes:  Changed entire style and formatting to match the   *
-    *                     genlib formatting to include all of the actual OOP *
-    *                     features that genlib includes. Basically a total   *
-    *                     rewrite of all the code.                           *
-    *                                                                        *
-    *************************************************************************/
-
-    bool CProfile::CloseFile( void )
-    {
-        if ( m_ProfileFile.IsOpen() )
-        {
-            m_ProfileFile.Close();
-        }
-
-        return ( ! m_ProfileFile.IsOpen() );
-    }
-
-    /*************************************************************************
-    *   CProfile::AddSection                                                 *
-    *                                                                        *
-    *       Description:  This method adds a new section to the list of      *
-    *                     cached sections in memory. It maintains the linked *
-    *                     list chain as well.                                *
-    *           Returns:  The CSectionStorage object added to the cache.     *
-    *            Throws:  None.                                              *
-    *            Errors:  None.                                              *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    CSectionStorage *CProfile::AddSection( const char *strName )
-    {
-        CSectionStorage *pLast = NULL;
-        CSectionStorage *pTemp = m_listSections;
-
-        while ( pTemp )
-        {
-            pLast = pTemp;
-            pTemp = pTemp->GetNext();
-        }
-
-        pTemp = new CSectionStorage( strName );
-
-        if ( ! pLast )
-        {
-            m_listSections = pTemp;
-        }
-        else
-        {
-            pLast->SetNext( pTemp );
-        }
-
-        return pTemp;
-    }
-
-    /*************************************************************************
-    *   CProfile::FindSection                                                *
-    *                                                                        *
-    *       Description:  This method is the real heart of the profile       *
-    *                     class. It looks for a matching section in the      *
-    *                     cached linked list. If it doesn't find one, it     *
-    *                     reads the disk file to cache sections into memory. *
-    *                     It only caches up to the section required. It also *
-    *                     correctly re-caches the file if the disk file is   *
-    *                     modified.                                          *
-    *           Returns:  The CSectionStorage object associated with the     *
-    *                     given section name.                                *
-    *            Throws:  IsModified can throw a CFileException.             *
-    *            Errors:  Returns NULL if the section is not found.          *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    CSectionStorage *CProfile::FindSection( const char *strSection )
-    {
-        CString             strLine;
-        CString             strTemp;
-        CSectionStorage    *pCurrentSection = NULL;
-        CSectionStorage    *pRetVal = NULL;
-        int                 nLastOffset = 0;
-        int                 nBreak;
-        CString             strName;
-        CString             strValue;
-        int                 nLeadSpace;
-
-            // Check if the file has changed. 
-        if ( IsModified() )
-        {
-                // The disk file was modified, we need to wipe all of the cached 
-                // version out of memory and start over.
-            m_bCached = false;
-            delete m_listSections;
-            m_listSections = NULL;
-
-            if ( ! m_ProfileFile.IsOpen() )
-            {
-                m_ProfileFile.Open( m_strFileName, CFile::READ );
-            }
-        }
-
-        CSectionStorage *pTemp = m_listSections;
-
-        while ( ( pTemp ) && ( ! pRetVal ) )
-        {
-            if ( pTemp->GetName().Compare( strSection, false ) != 0 )
-            {
-                pCurrentSection = pTemp;
-                pTemp = pTemp->GetNext();
-            }
-            else
-            {
-                pRetVal = pTemp;
-            }
-        }
-
-            // We haven't found the section, and we haven't cached the file yet.
-        if ( ( ! pRetVal ) && ( ! m_bCached ) && ( m_ProfileFile.IsOpen() ) )
-        {
-
-            while ( ( ! m_ProfileFile.IsEOF() ) && ( ! pRetVal ) )
-            {
-                nLastOffset = m_ProfileFile.GetPos();
-                strLine = m_ProfileFile.GetLine();
-                while ( ( strLine[ strLine.GetLength() - 1 ] == '\n' ) || ( strLine[ strLine.GetLength() - 1 ] == '\r' ) )
-                {
-                    strLine = strLine.Substring( 0, (int)strLine.GetLength() - 1 );
-                }
-                strTemp = strLine;
-                strTemp.Trim();
-
-                switch ( strTemp[0] )
-                {
-                    case '[':
-                            // This is a new section! Hooray!
-                        nBreak = (int)strTemp.IndexOf( ']' );
-                        if ( nBreak != -1 )
-                        {
-                            if ( ( pCurrentSection ) && ( pCurrentSection->GetName().Compare( strSection, false ) == 0 ) )
-                            {
-                                    // We don't need to cache this section yet. We found the one we need.
-                                pRetVal = pCurrentSection;
-                                    // We wind the file back to the last section
-                                m_ProfileFile.Seek( nLastOffset, CFile::BEGIN );
-                            }
-                            else
-                            {
-                                strName = strTemp.Substring( 1, nBreak - 1 );
-                                strName.Trim();
-                                pCurrentSection = AddSection( strName );
-                            }
-                        }
-                        else
-                        {
-                                // This is a corrupted section heading. It has an open bracket "[",
-                                // but no closing bracket. We'll turn it into a comment...
-
-                                // We have to do the following, in case it's a comment
-                                // before the first section. Then we have to create a dummy section to
-                                // store the comments in.
-                            if ( pCurrentSection == NULL )
-                            {
-                                pCurrentSection = new CSectionStorage( ROOT_NAME );
-                                m_listSections = pCurrentSection;
-                            }
-                            pCurrentSection->AddEntry( "", strLine, true );
-                        }
-                        break;
-                    
-                    case ';':
-                    case '#':
-                    case '\n':
-                    case '\r':
-                            // This is a comment! We have to do the following, in case it's a comment
-                            // before the first section. Then we have to create a dummy section to
-                            // store the comments in.
-                        if ( pCurrentSection == NULL )
-                        {
-                            pCurrentSection = new CSectionStorage( ROOT_NAME );
-                            m_listSections = pCurrentSection;
-                        }
-                        pCurrentSection->AddEntry( "", strLine, true );
-                        break;
-                   
-                    default:
-                            // This could be a name/value or a comment.
-                            // We have to do the following, in case it's a comment
-                            // before the first section. Then we have to create a dummy section to
-                            // store the comments in.
-                        if ( pCurrentSection == NULL )
-                        {
-                            pCurrentSection = new CSectionStorage( ROOT_NAME );
-                            m_listSections = pCurrentSection;
-                        }
-
-                        if ( ( nBreak = (int)strLine.IndexOf( '=' ) ) == -1 )
-                        {
-                                // This is a comment.
-                            pCurrentSection->AddEntry( "", strLine, true );
-                        }
-                        else
-                        {
-                            strName = strLine.Substring( 0, nBreak );
-                            strValue = strLine.Substring( nBreak + 1 );
-                            strName.Trim();
-                            strValue.Trim();
-                            nLeadSpace = (int)strLine.IndexOf( strName );
-                            pCurrentSection->AddEntry( strName, strValue, false, nLeadSpace );
-                        }
-                        break;
-                }
-            }
-
-            if ( m_ProfileFile.IsEOF() )
-            {
-                m_bCached = true;
-                CloseFile();    // Saves File Handles.
-            }
-
-            if ( ( pCurrentSection ) && ( pCurrentSection->GetName().Compare( strSection, false ) == 0 ) )
-            {
-                pRetVal = pCurrentSection;
-            }
-        }
-
-        return pRetVal;
-    }
-
-    /*************************************************************************
-    *   CProfile::IsModified                                                 *
-    *                                                                        *
-    *       Description:  This method uses the CFileStat class to check if   *
-    *                     the profile file has been modified.                *
-    *           Returns:  True - The file has been modified since the last   *
-    *                            time it was loaded.                         *
-    *                     False - The file has not changed since its last    *
-    *                             load time.                                 *
-    *            Throws:  FileStat can throw a CFileException.               *
-    *            Errors:  None                                               *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    bool CProfile::IsModified( void )
-    {
-        bool    bRetVal = false;
-
-        CFileStat fsCheckFile( m_strFileName );
-
-        if ( fsCheckFile.GetLastModified() > m_dttLastChanged )
-        {
-            bRetVal = true;
-        }
-
-        return bRetVal;
-    }
-
-    /*************************************************************************
-    *   CProfile::WriteFile                                                  *
-    *                                                                        *
-    *       Description:  This method writes the profile file back to disk.  *
-    *                     Some formatting can be lost in this process, but   *
-    *                     only on section headers and unused whitespace      *
-    *                     surrounding the "=" in name/value pairs. Trailing  *
-    *                     whitespace is also trimmed from values. Comments   *
-    *                     are rendered true to form.                         *
-    *           Returns:  True - File was written.                           *
-    *                     False - File was not written.                      *
-    *            Throws:  None                                               *
-    *            Errors:  None                                               *
-    *                                                                        *
-    *            Author:  Jeffrey R. Naujok                                  *
-    *              Date:  Wednesday, March 6, 2002                           *
-    *                                                                        *
-    *************************************************************************/
-
-    bool CProfile::WriteFile( void )
+    bool CProfile::DeleteEntry( const char *pszSectionName, const char *pszEntryName )
     {
         if ( ! m_bCached )
+            Load();
+        SSection *pSection = FindSection( pszSectionName );
+        if ( pSection == NULL || pszEntryName == NULL )
+            return false;
+        for ( size_t n = 0; n < pSection->aLines.size(); n++ )
         {
-            FindSection( "]" );
+            if ( pSection->aLines[ n ].bEntry && SameName( pSection->aLines[ n ].strName, pszEntryName ) )
+            {
+                pSection->aLines.erase( pSection->aLines.begin() + (long)n );
+                return Save();
+            }
         }
+        return false;
+    }
 
-        CSectionStorage    *pTemp = m_listSections;
-        m_ProfileFile.Close();
-
-        m_ProfileFile.Open( m_strFileName, CFile::WRITE );
-
-        while ( pTemp )
+    bool CProfile::DeleteSection( const char *pszSectionName )
+    {
+        if ( pszSectionName == NULL || *pszSectionName == '\0' )
+            return false;
+        if ( ! m_bCached )
+            Load();
+        for ( size_t n = 1; n < m_aSections.size(); n++ )
         {
-            pTemp->Write( m_ProfileFile );
-            pTemp = pTemp->GetNext();
+            if ( SameName( m_aSections[ n ].strName, pszSectionName ) )
+            {
+                m_aSections.erase( m_aSections.begin() + (long)n );
+                return Save();
+            }
         }
+        return false;
+    }
 
-        m_ProfileFile.Close();
+    bool CProfile::HasEntry( const char *pszSectionName, const char *pszEntryName )
+    {
+        Refresh();
+        return FindEntry( pszSectionName, pszEntryName ) != NULL;
+    }
 
-        m_bCached = true;
-        m_dttLastChanged.SetToCurrent();
+    std::vector<CString> CProfile::GetSectionNames( void )
+    {
+        Refresh();
+        std::vector<CString> aNames;
+        for ( size_t n = 1; n < m_aSections.size(); n++ )
+            aNames.push_back( m_aSections[ n ].strName );
+        return aNames;
+    }
 
-        return true;
+    std::vector<CString> CProfile::GetEntryNames( const char *pszSectionName )
+    {
+        Refresh();
+        std::vector<CString> aNames;
+        SSection *pSection = FindSection( pszSectionName );
+        if ( pSection )
+        {
+            for ( size_t n = 0; n < pSection->aLines.size(); n++ )
+            {
+                if ( pSection->aLines[ n ].bEntry )
+                    aNames.push_back( pSection->aLines[ n ].strName );
+            }
+        }
+        return aNames;
     }
 } // namespace IASLib

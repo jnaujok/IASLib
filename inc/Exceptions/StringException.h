@@ -34,6 +34,8 @@ namespace IASLib
 
             virtual void        Throw( void ) { throw *this; }
 
+            virtual void        Rethrow( void ) { throw *this; }
+
 
     };
 

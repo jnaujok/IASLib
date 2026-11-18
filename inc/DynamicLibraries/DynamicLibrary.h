@@ -1,10 +1,14 @@
 /*
  *  Dynamic Library Class
  *
- *      This class gives us access to dynamic libraries in a cross-
- * platform, architecture independent manor. This will allow us to
- * build applications which can use dynamic libraries without worrying
- * about the underlying mechanism.
+ *      Loads a shared library (.so, .dylib or .dll) and finds functions in
+ * it, the same way on every platform.
+ *
+ *      The name is used as given when it has a directory or an extension
+ * ("./plugins/libfoo.so", "libm.so.6", "user32.dll"). A bare name is
+ * tried in the platform's form first - "foo" is libfoo.so on Linux,
+ * libfoo.dylib on macOS, foo.dll on Windows - and then as given, through
+ * the system's usual search.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 03/15/2004
@@ -24,22 +28,9 @@
 #ifdef IASLIB_WIN32__
 #include "../BaseTypes/Platform.h"
     typedef HMODULE DYN_LIB_TYPE;
-#endif
-
-#ifdef IASLIB_SUN__
-#include <dlfcn.h>
-    typedef void *DYN_LIB_TYPE;
-#endif
-
-#ifdef IASLIB_DEC__
-#include <dlfcn.h>
-    typedef void *DYN_LIB_TYPE;
-#endif
-
-#if defined( IASLIB_LINUX__ ) || defined( IASLIB_MAC__ )
+#else
     #include <dlfcn.h>
     typedef void *DYN_LIB_TYPE;
-    //#define __cdecl
 #endif
 
 namespace IASLib
@@ -48,17 +39,44 @@ namespace IASLib
     {
         protected:
             DYN_LIB_TYPE        m_LibHandle;
+            CString             m_strPath;      // the name that loaded
+            CString             m_strError;
 
         public:
-
+                                // Loads the library; IsLoaded() says whether
+                                // it did, and GetError() why not. (A failure
+                                // was silent, and every later call then
+                                // used a NULL handle: dlclose() crashed, and
+                                // dlsym() searched the program itself.)
                                 CDynamicLibrary( const char *strLibPath );
+                                // Unloads it.
             virtual            ~CDynamicLibrary( void );
 
                                 DECLARE_OBJECT(CDynamicLibrary,CObject);
 
+            bool                IsLoaded( void ) const { return m_LibHandle != NULL; }
+                // The name that was loaded (after the platform's form was
+                // applied), or "".
+            const char         *GetPath( void ) const { return m_strPath; }
+                // Why the library or the last function could not be found.
+            const char         *GetError( void ) const { return m_strError; }
+
+                // The address of an exported function or variable. Throws a
+                // CException (CWindowsSystemException on Windows) when it
+                // is not there or the library is not loaded.
             void               *GetFunction( const char *strFunctionName );
+                // The same, but NULL instead of throwing.
+            void               *FindFunction( const char *strFunctionName );
+
+                // The platform's file name for a bare library name
+                // ("foo" -> "libfoo.so", "libfoo.dylib" or "foo.dll").
+            static CString      PlatformName( const char *strName );
+
+        private:
+                                CDynamicLibrary( const CDynamicLibrary & );
+            CDynamicLibrary    &operator =( const CDynamicLibrary & );
+            bool                TryLoad( const char *strName );
     };
 } // namespace IASLib
 
 #endif // IASLIB_DYNAMICLIBRARY_H__
-

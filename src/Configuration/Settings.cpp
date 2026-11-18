@@ -35,39 +35,63 @@ namespace IASLib
         m_hashSettings.DeleteAll();
     }
 
+        // Lines are "name = value"; blank lines and lines whose first
+        // non-blank character is '#' or ';' are skipped. The value is
+        // everything after the first '=', so it may hold '=' itself. A
+        // later line replaces an earlier one with the same name.
+        // (A missing file threw CFileException out of here; a value was
+        // cut at its second '='; an indented comment was read as a
+        // setting.)
     bool CSettings::ReadSettings( void )
     {
-        CFile   oFile( m_strSettingsFile, CFile::READ );
-
-        if ( oFile.IsOpen() )
+        CFile   *pFile = NULL;
+        try
         {
-            CString     strLine;
-
-            while ( ! oFile.IsEOF() )
-            {
-                strLine = oFile.GetLine();
-                if ( strLine[0] != '#' )
-                {
-                    strLine.Trim();
-
-                    if ( strLine.IndexOf( '=' ) != NOT_FOUND )
-                    {
-                        CStringTokenizer stTokens( strLine, "=", false );
-                        CString strName = stTokens.NextToken();
-                        CString *pstrValue = new CString;
-                        *pstrValue = stTokens.NextToken();
-                        pstrValue->Trim();
-                        strName.Trim();
-                        m_hashSettings.Push( strName, pstrValue );
-                    }
-                }
-            }
-
-            oFile.Close();
-            return true;
+            pFile = new CFile( m_strSettingsFile, CFile::READ );
+        }
+        catch ( ... )
+        {
+            delete pFile;
+            return false;
         }
 
-        return false;
+        if ( ! pFile->IsOpen() )
+        {
+            delete pFile;
+            return false;
+        }
+
+        while ( ! pFile->IsEOF() )
+        {
+            CString strLine = pFile->GetLine();
+            strLine.Trim();
+            if ( strLine.GetLength() == 0 || strLine[0] == '#' || strLine[0] == ';' )
+                continue;
+
+            size_t nEquals = strLine.IndexOf( '=' );
+            if ( nEquals == NOT_FOUND )
+                continue;
+
+            CString strName = strLine.Substring( 0, (int)nEquals );
+            CString *pstrValue = new CString( strLine.Substring( nEquals + 1 ) );
+            strName.Trim();
+            pstrValue->Trim();
+            if ( strName.GetLength() == 0 )
+            {
+                delete pstrValue;
+                continue;
+            }
+            m_hashSettings.Push( strName, pstrValue, true );
+        }
+
+        pFile->Close();
+        delete pFile;
+        return true;
+    }
+
+    bool CSettings::HasSetting( const char *strSettingName ) const
+    {
+        return m_hashSettings.HasKey( strSettingName );
     }
 
     CString CSettings::GetSetting( const char *strSettingName, const char *strDefault )

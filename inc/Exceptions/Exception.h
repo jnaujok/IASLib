@@ -101,8 +101,15 @@ namespace IASLib
                                 operator const char *( void ) { return (const char *) m_strExceptionMessage; }
             const CString      &GetMessage( void ) const { return m_strExceptionMessage; }
 
+                // The system's description of an errno value ("No such file
+                // or directory"). The text stays valid until the same thread
+                // calls this again. (It came from a fixed table, from one
+                // Unix, that was wrong for most numbers on other systems.)
             static const char  *ErrnoToText( int nErrno );
 
+                // Throw a copy of this exception, as its own class: every
+                // derived class overrides both, so IASLIB_RETHROW keeps the
+                // type.
             virtual void        Throw( void ) { throw *this; }
             virtual void        Rethrow( void ) { throw *this; }
 
@@ -110,6 +117,11 @@ namespace IASLib
             virtual void         AddStack( const char *strFile, int nLine, const char *strMessage );
 
             CString              DumpStack( void );
+
+        protected:
+                // For derived constructors that set m_strExceptionMessage:
+                // the call stack's first entry takes the same text.
+            void                 SyncMessage( void ) { if ( m_pCallStack ) m_pCallStack->SetMessage( m_strExceptionMessage ); }
     };
 } // namespace IASLib
 

@@ -32,6 +32,9 @@ namespace IASLib
 
                         DEFINE_OBJECT( CFileException );
             virtual void        Throw( void ) { throw *this; }
+                // The errno value it was made from.
+            int                 GetErrorNumber( void ) const { return m_nErrorNumber; }
+            virtual void        Rethrow( void ) { throw *this; }
 
 
     };

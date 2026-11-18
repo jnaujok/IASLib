@@ -126,7 +126,7 @@ namespace IASLib
                 break;
     #endif
 
-    #ifdef IASLIB_SUN_
+    #ifdef EOVERFLOW
             case EOVERFLOW:
                 m_strExceptionMessage = "The current value of the file position cannot be represented correctly in an object of type fpos_t.";
                 m_nPriority = CException::FATAL;
@@ -134,10 +134,12 @@ namespace IASLib
     #endif
 
             default:
+                    // (Any other number gave "Unknown File Exception".)
+                m_strExceptionMessage = ErrnoToText( m_nErrorNumber );
                 break;
         }
 
-        m_pCallStack->SetMessage( m_strExceptionMessage );
+        SyncMessage();
     }
 
 

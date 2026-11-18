@@ -99,7 +99,16 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - Transactions are real `BEGIN`/`COMMIT`/`ROLLBACK` (they were emulated by buffering the SQL text). A failed commit rolls back.
   - `CSQLiteDatabase::Connection()` returns NULL when the database cannot be opened, with the error on the database. `SetTimeout()` returns true.
   - `CBaseResult::Next()` stops at the last row (it kept counting), and column names match without regard to case.
-  - Windows: `CThread::Kill()` ends the thread at its next sleep or semaphore wait (an APC) instead of `TerminateThread()`, which could stop it holding the heap lock and hang the process. It returns -1 if the thread has not reached one within two seconds.
+- **Configuration:**
+  - `CProfile` is rewritten with the same interface. It no longer throws for a missing file (it reads as empty and the first write creates it). Every write saves at once through a temporary file, keeping comments, blank lines and order; without the cache, reads see changes made by others. The `const char *` `GetString()` stays valid (it pointed into storage a later call could free); the buffer form always ends its text; `GetInt()` gives the default for text that is not a number.
+  - `CSettings::ReadSettings()` returns false for a missing file (it threw), keeps `=` inside values, skips indented comments and `;` comments, and a later line replaces an earlier one.
+- **DynamicLibraries:** `CDynamicLibrary` uses a name with a directory or extension as given, and tries a bare name in the platform's form (`libfoo.so`, `libfoo.dylib`, `foo.dll`) and then as given (it always used `lib%s.so`, on macOS too). A library that fails to load is safe to use: `GetFunction()` throws, where dlclose(NULL) crashed and dlsym(NULL) searched the program itself. It cannot be copied.
+- **Encryption:** `CSHA256` is ready to use when constructed, and `final()` starts it over. `Encrypt.h` is marked as declarations only (it never had an implementation).
+- **Exceptions:**
+  - Every exception class overrides `Rethrow()`, so `IASLIB_RETHROW` keeps the class (it threw a plain `CException`).
+  - `CException::ErrnoToText()` gives the system's text (a fixed table from one Unix was wrong elsewhere). `CFileException` uses it for numbers it has no message for.
+  - `CWindowsSystemException` puts the system's text in the exception's message, and copes with `FormatMessage()` failing.
+- **Threading:** on Windows, `CThread::Kill()` ends the thread at its next sleep or semaphore wait (an APC) instead of `TerminateThread()`, which could stop it holding the heap lock and hang the process. It returns -1 if the thread has not reached one within two seconds.
 - **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
 
 ### Added
@@ -213,6 +222,10 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CConnectionArray::Find()` and `Remove()`.
   - `CString::FromBytes()`: a string of exactly the bytes given, zeros included.
   - `TestDatabase`, on an in-memory SQLite database.
+- **Configuration:** `CProfile::WriteInt()` (declared, never written), `DeleteEntry()`, `DeleteSection()`, `HasEntry()`, `GetSectionNames()`, `GetEntryNames()` and `Reload()`; `CSettings::HasSetting()`.
+- **DynamicLibraries:** `CDynamicLibrary::IsLoaded()`, `GetPath()`, `GetError()`, `FindFunction()` (NULL instead of throwing) and `PlatformName()`.
+- **Exceptions:** `CFileException::GetErrorNumber()`.
+- **Tests:** `TestUtilities` (Configuration, DynamicLibraries, Encryption and Exceptions).
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
 ### Fixed
@@ -407,7 +420,9 @@ The base types and collections, reviewed one by one and cleaned up, and template
 - **Security:** external entities (XXE) are refused, and entity expansion ("billion laughs") is capped.
 - **Exceptions:**
   - The `IASLIB_THROW_*` macros threw a shared `static` exception, which two threads could change at once.
-  - `CCollectionException` named itself `"CCollectionExcetption"`.
+  - `CCollectionException` named itself `"CCollectionExcetption"`, and `CXMLException` `"CXMLExcetption"`.
+  - `CStringException` registered `CObject` as its parent class; its and `CXMLException`'s number constructors left "Unknown Exception" on the call stack.
+  - `CFileException`'s `EOVERFLOW` message was behind a misspelt `IASLIB_SUN_` and never compiled.
 
 ## [2.5.0] — 2026-11-17
 
