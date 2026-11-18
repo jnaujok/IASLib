@@ -803,7 +803,7 @@ namespace IASLib
         std::unique_ptr<CFile> pFile;
         try
         {
-            pFile.reset( new CFile( fileName, CFile::READ ) );
+            pFile.reset( new CFile( fileName, CFile::READ | CFile::BINARY ) );
         }
         catch ( CFileException & )
         {

@@ -192,7 +192,13 @@ namespace IASLib
 
         while ( nReceived < nLength )
         {
-            nReceived += m_pFile->Read( achBuffer + nReceived, nLength - nReceived );
+                // In text mode (on Windows) line breaks shrink as they are
+                // read, so fewer bytes come than the size suggests: stop when
+                // the file has none left, instead of asking forever.
+            int nRead = m_pFile->Read( achBuffer + nReceived, nLength - nReceived );
+            if ( nRead <= 0 )
+                break;
+            nReceived += nRead;
         }
 
         return nReceived;

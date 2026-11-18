@@ -33,7 +33,7 @@ namespace IASLib
         {
             try
             {
-                pOwned.reset( new CFile( m_strXMLFileName, CFile::READ ) );
+                pOwned.reset( new CFile( m_strXMLFileName, CFile::READ | CFile::BINARY ) );
             }
             catch ( CFileException & )
             {
