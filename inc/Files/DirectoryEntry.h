@@ -1,5 +1,6 @@
-/*
- *  Directory Entry Class
+/**
+ * @file
+ * @brief Directory Entry Class.
  *
  *      This class provides storage for individual directory entries
  * when a directory is loaded.
@@ -22,26 +23,29 @@
 
 namespace IASLib
 {
-        // One name in a directory. Unless lightweight, its size, time and
-        // kind come from CFileStat (left as 0, now and "not a directory" if
-        // that fails).
+        /// One name in a directory. Unless lightweight, its size, time and
+        /// kind come from CFileStat (left as 0, now and "not a directory" if
+        /// that fails).
     class CDirectoryEntry : public CObject
     {
         public:
-            CString     m_strFileName;      // the name alone
-            CString     m_strEntryName;     // <directory>/<name>
-            CString     m_strExtension;     // after the last '.', for files
-            CDate       m_dttLastModified;
-            int64_t     m_lSize;            // (a long: wrong past 2 GB on Windows)
-            bool        m_bIsDir;
+            CString     m_strFileName;      ///< the name alone
+            CString     m_strEntryName;     ///< \<directory\>/\<name\>
+            CString     m_strExtension;     ///< after the last '.', for files ("" if none, or the name starts with it)
+            CDate       m_dttLastModified;  ///< The last modification time.
+            int64_t     m_lSize;            ///< The size in bytes. (It was a long: wrong past 2 GB on Windows.)
+            bool        m_bIsDir;           ///< Whether it is a directory.
 
+                        /// Makes the entry for @p strFileName in directory @p strDir
+                        /// ("." if NULL). With @p bLightweight the size, time and
+                        /// kind are not looked up.
                         CDirectoryEntry( const char *strDir, const char *strFileName, bool bLightweight = false );
-            virtual    ~CDirectoryEntry( void );
+            virtual    ~CDirectoryEntry( void );        ///< Destructor.
 
                         DEFINE_OBJECT( CDirectoryEntry )
 
-            bool        IsDirectory( void ) const { return m_bIsDir; }
-                // "." and "..".
+            bool        IsDirectory( void ) const { return m_bIsDir; }      ///< Whether it is a directory.
+                /// "." and "..".
             bool        IsDotEntry( void ) const { return m_strFileName == "." || m_strFileName == ".."; }
     };
 } // namespace IASLib

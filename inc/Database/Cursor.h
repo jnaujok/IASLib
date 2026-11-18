@@ -1,5 +1,6 @@
-/*
- *  Cursor Class
+/**
+ * @file
+ * @brief Cursor Class.
  *
  *  This class stores the result of a selection and provides for deletion
  * and updates.
@@ -24,21 +25,32 @@
 
 namespace IASLib
 {
-        // A result whose rows can be changed: SetColumn() stages new values
-        // for the current row (by number or by name, any case), and
-        // UpdateRow(), InsertRow() and DeleteRow() apply them to a table.
-        // Moving to another row does not clear what was staged:
-        // ClearChanges() does, and the drivers do after applying them.
+        /// A result whose rows can be changed: SetColumn() stages new values
+        /// for the current row (by number or by name, any case), and
+        /// UpdateRow(), InsertRow() and DeleteRow() apply them to a table.
+        /// Moving to another row does not clear what was staged:
+        /// ClearChanges() does, and the drivers do after applying them.
+        ///
+        /// @code
+        /// CCursor *pCursor = pConnection->Cursor( "SELECT id, name FROM people", true );
+        /// if ( pCursor && pCursor->IsUpdatable() )
+        /// {
+        ///     pCursor->SetColumn( "name", "Irene" );
+        ///     pCursor->UpdateRow( "people" );
+        /// }
+        /// delete pCursor;
+        /// @endcode
     class CCursor : public CBaseResult
     {
         protected:
-            CStringArray        m_astrNewValues;
-            std::vector<bool>   m_abChanged;
-            std::map<size_t, CDataBlock> m_mapNewBlobs;     // staged binary values
-            bool                m_bUpdatable;
+            CStringArray        m_astrNewValues;    ///< Staged text values, by column.
+            std::vector<bool>   m_abChanged;        ///< Which columns have a staged value.
+            std::map<size_t, CDataBlock> m_mapNewBlobs;     ///< staged binary values
+            bool                m_bUpdatable;       ///< Whether the rows can be changed.
 
-                // (The staged values were never sized, so every SetColumn()
-                // went to one scratch slot.)
+                /// Sizes the staged values to the number of columns.
+                /// @note The staged values used to be never sized, so every
+                /// SetColumn() went to one scratch slot.
             void                EnsureNewValues( void )
                                 {
                                     while ( m_astrNewValues.Length() < m_nColumns )
@@ -48,29 +60,37 @@ namespace IASLib
                                 }
 
         public:
+                                /// Makes an empty cursor that cannot be updated.
                                 CCursor( void ) { m_bUpdatable = false; }
-            virtual            ~CCursor( void ) { }
+            virtual            ~CCursor( void ) { }     ///< Destructor.
 
                                 DECLARE_OBJECT( CCursor, CBaseResult );
 
+                /// Deletes the current row from @p strTable (driver specific).
             virtual int         DeleteRow( const char *strTable ) = 0;
+                /// Inserts the staged values into @p strTable as a new row (driver specific).
             virtual int         InsertRow( const char *strTable ) = 0;
+                /// Writes the staged values to the current row in @p strTable (driver specific).
             virtual int         UpdateRow( const char *strTable ) = 0;
 
-            bool                IsUpdatable( void ) const { return m_bUpdatable; }
-                // Whether a column has a staged value, and that value.
+            bool                IsUpdatable( void ) const { return m_bUpdatable; }     ///< Whether the rows can be changed.
+                /// Whether a column has a staged value.
             bool                IsChanged( size_t nColumn ) const { return nColumn < m_abChanged.size() && m_abChanged[ nColumn ]; }
+                /// A column's staged text ("" if none).
             CString             GetNewValue( size_t nColumn ) const { return ( nColumn < m_astrNewValues.Length() ) ? m_astrNewValues.Get( nColumn ) : CString( "" ); }
-                // Whether a column's staged value is binary, and its bytes.
+                /// Whether a column's staged value is binary.
             bool                IsNewValueBlob( size_t nColumn ) const { return IsChanged( nColumn ) && m_mapNewBlobs.count( nColumn ) != 0; }
+                /// A column's staged bytes (empty if none).
             CDataBlock          GetNewBlob( size_t nColumn ) const
                                 {
                                     std::map<size_t, CDataBlock>::const_iterator it = m_mapNewBlobs.find( nColumn );
                                     return ( it != m_mapNewBlobs.end() ) ? it->second : CDataBlock();
                                 }
+                /// Forgets every staged value.
             void                ClearChanges( void ) { m_abChanged.assign( m_abChanged.size(), false ); m_mapNewBlobs.clear(); }
 
-                // Stages a binary value (written as a BLOB).
+                /// Stages a binary value (written as a BLOB).
+                /// @return 1, or 0 if the cursor is not valid or there is no such column.
             virtual int         SetColumn( size_t nColumn, const CDataBlock &oValue )
                                 {
                                     if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
@@ -83,12 +103,15 @@ namespace IASLib
                                     }
                                     return 0;
                                 }
+                /// Same, by column name (0 if there is no such column).
             virtual size_t      SetColumn( const char *pszColumn, const CDataBlock &oValue )
                                 {
                                     size_t nColumn = FindColumn( pszColumn );
                                     return ( nColumn == NOT_FOUND ) ? 0 : (size_t)SetColumn( nColumn, oValue );
                                 }
 
+                /// Stages a text value (NULL stages "").
+                /// @return 1, or 0 if the cursor is not valid or there is no such column.
             virtual int         SetColumn( size_t nColumn, const char *strValue )
                                 {
                                     if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
@@ -102,6 +125,7 @@ namespace IASLib
                                     return 0;
                                 }
 
+                /// Same, for a number.
             virtual int         SetColumn( size_t nColumn, size_t nValue )
                                 {
                                     CString strValue;
@@ -109,14 +133,16 @@ namespace IASLib
                                     return SetColumn( nColumn, (const char *)strValue );
                                 }
 
-                // (The by-name forms compared names with case, though the
-                // drivers report them in their own case.)
+                /// Stages a text value by column name (0 if there is no such column).
+                /// @note The by-name forms used to compare names with case, though
+                /// the drivers report them in their own case.
             virtual size_t      SetColumn( const char *pszColumn, const char *strValue )
                                 {
                                     size_t nColumn = FindColumn( pszColumn );
                                     return ( nColumn == NOT_FOUND ) ? 0 : (size_t)SetColumn( nColumn, strValue );
                                 }
 
+                /// Same, for a number.
             virtual size_t      SetColumn( const char *pszColumn, int nValue )
                                 {
                                     CString strValue;
