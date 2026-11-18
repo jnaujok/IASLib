@@ -1,5 +1,6 @@
-/*
- * THash Template
+/**
+ * @file
+ * @brief THash Template.
  *
  *      A hash table from keys to values. Lookups, additions and removals
  * take constant time on average; the table doubles its buckets when it is
@@ -26,68 +27,101 @@
 
 namespace IASLib
 {
+    /// A hash table from keys to values that remembers the order entries were added.
+    ///
+    /// Lookups, additions and removals take constant time on average. Each
+    /// entry is a separate heap node in a bucket chain and in a list kept in
+    /// the order entries were added; iteration follows that list, and it does
+    /// not change when the table grows. Changing an existing key's value does
+    /// not move it. The bucket count is a power of two and doubles when the
+    /// table is three-quarters full; removals never shrink it (see Compact()).
+    ///
+    /// Pointers from Find() and iterators stay valid until that entry is
+    /// removed. Not thread-safe.
+    ///
+    /// @tparam K The key type.
+    /// @tparam V The value type.
+    /// @tparam Hash Hash function object; the default is THashOf.
+    /// @tparam Equal Key equality function object; the default is operator ==.
+    ///
+    /// @code
+    /// THash<CString, int> oAges;
+    /// oAges.Put( "Ann", 31 );
+    /// oAges[ "Bob" ] = 27;
+    /// int nAge = oAges.Get( "Ann", -1 );          // 31
+    /// for ( const auto &oEntry : oAges )          // Ann, then Bob
+    ///     printf( "%s %d\n", (const char *)oEntry.Key, oEntry.Value );
+    /// @endcode
     template <class K, class V, class Hash = THashOf<K>, class Equal = TEqualTo<K> >
     class THash : public CObject
     {
         public:
+            /// A key and its value, as iteration gives them.
             struct Entry
             {
-                const K     Key;
-                V           Value;
+                const K     Key;   ///< The key (cannot be changed in place).
+                V           Value;   ///< The value.
 
-                Entry( const K &key, const V &value ) : Key( key ), Value( value ) {}
-                Entry( const K &key, V &&value ) : Key( key ), Value( std::move( value ) ) {}
+                Entry( const K &key, const V &value ) : Key( key ), Value( value ) {}   ///< A key with a copied value.
+                Entry( const K &key, V &&value ) : Key( key ), Value( std::move( value ) ) {}   ///< A key with a moved value.
             };
 
         protected:
+            /// One entry with its hash and links.
             struct Node
             {
-                Entry       oEntry;
-                size_t      nHash;
-                Node       *pBucketNext;    // the next node in this bucket
-                Node       *pPrev;          // the order nodes were added in
-                Node       *pNext;
+                Entry       oEntry;   ///< The key and value.
+                size_t      nHash;   ///< The key's hash.
+                Node       *pBucketNext;    ///< the next node in this bucket
+                Node       *pPrev;          ///< the order nodes were added in (the one before)
+                Node       *pNext;   ///< The node added after this one.
 
-                Node( const K &key, const V &value, size_t nHashValue ) : oEntry( key, value ), nHash( nHashValue ), pBucketNext( NULL ), pPrev( NULL ), pNext( NULL ) {}
-                Node( const K &key, V &&value, size_t nHashValue ) : oEntry( key, std::move( value ) ), nHash( nHashValue ), pBucketNext( NULL ), pPrev( NULL ), pNext( NULL ) {}
+                Node( const K &key, const V &value, size_t nHashValue ) : oEntry( key, value ), nHash( nHashValue ), pBucketNext( NULL ), pPrev( NULL ), pNext( NULL ) {}   ///< An unlinked node with a copied value.
+                Node( const K &key, V &&value, size_t nHashValue ) : oEntry( key, std::move( value ) ), nHash( nHashValue ), pBucketNext( NULL ), pPrev( NULL ), pNext( NULL ) {}   ///< An unlinked node with a moved value.
             };
 
-            Node      **m_apBuckets;
-            size_t      m_nBuckets;         // 0, or a power of two
-            size_t      m_nLength;
-            Node       *m_pFirst;
-            Node       *m_pLast;
-            Hash        m_fnHash;
-            Equal       m_fnEqual;
+            Node      **m_apBuckets;   ///< The bucket chains (owned array of m_nBuckets heads).
+            size_t      m_nBuckets;         ///< 0, or a power of two
+            size_t      m_nLength;   ///< Number of entries.
+            Node       *m_pFirst;   ///< The oldest node, or NULL.
+            Node       *m_pLast;   ///< The newest node, or NULL.
+            Hash        m_fnHash;   ///< The hash function.
+            Equal       m_fnEqual;   ///< The key equality.
 
         public:
+            /// Forward iterator over the entries, oldest first.
+            /// @tparam E The entry type (const for a const_iterator).
+            /// @tparam N The node type (const for a const_iterator).
             template <class E, class N>
             class THashIterator
             {
-                    N          *m_pNode;
+                    N          *m_pNode;   ///< The node, or NULL at end().
                 public:
-                    typedef std::forward_iterator_tag   iterator_category;
-                    typedef E                           value_type;
-                    typedef ptrdiff_t                   difference_type;
-                    typedef E                          *pointer;
-                    typedef E                          &reference;
+                    typedef std::forward_iterator_tag   iterator_category;   ///< A forward iterator.
+                    typedef E                           value_type;   ///< The entry type.
+                    typedef ptrdiff_t                   difference_type;   ///< Distance type.
+                    typedef E                          *pointer;   ///< Pointer to an entry.
+                    typedef E                          &reference;   ///< Reference to an entry.
 
-                    explicit THashIterator( N *pNode = NULL ) : m_pNode( pNode ) {}
-                    operator THashIterator<const E, const N>( void ) const { return THashIterator<const E, const N>( m_pNode ); }
-                    E &operator *( void ) const { return m_pNode->oEntry; }
-                    E *operator ->( void ) const { return &m_pNode->oEntry; }
-                    THashIterator &operator ++( void ) { m_pNode = m_pNode->pNext; return *this; }
-                    THashIterator operator ++( int ) { THashIterator old( *this ); m_pNode = m_pNode->pNext; return old; }
-                    bool operator ==( const THashIterator &o ) const { return m_pNode == o.m_pNode; }
-                    bool operator !=( const THashIterator &o ) const { return m_pNode != o.m_pNode; }
+                    explicit THashIterator( N *pNode = NULL ) : m_pNode( pNode ) {}   ///< Points at pNode (NULL for end()).
+                    operator THashIterator<const E, const N>( void ) const { return THashIterator<const E, const N>( m_pNode ); }   ///< An iterator converts to a const_iterator.
+                    E &operator *( void ) const { return m_pNode->oEntry; }   ///< The entry.
+                    E *operator ->( void ) const { return &m_pNode->oEntry; }   ///< The entry.
+                    THashIterator &operator ++( void ) { m_pNode = m_pNode->pNext; return *this; }   ///< Moves to the next entry.
+                    THashIterator operator ++( int ) { THashIterator old( *this ); m_pNode = m_pNode->pNext; return old; }   ///< Moves to the next entry, returning the old position.
+                    bool operator ==( const THashIterator &o ) const { return m_pNode == o.m_pNode; }   ///< Same entry.
+                    bool operator !=( const THashIterator &o ) const { return m_pNode != o.m_pNode; }   ///< Different entries.
             };
 
-            typedef THashIterator<Entry, Node>              iterator;
-            typedef THashIterator<const Entry, const Node>  const_iterator;
+            typedef THashIterator<Entry, Node>              iterator;   ///< Iterator, oldest entry first.
+            typedef THashIterator<const Entry, const Node>  const_iterator;   ///< Const iterator, oldest entry first.
 
             DECLARE_OBJECT( THash, CObject )
 
-                // nExpected: how many entries to make room for at first.
+                /// Makes an empty table.
+            /// @param nExpected How many entries to make room for at first (0 allocates nothing).
+            /// @param fnHash The hash function.
+            /// @param fnEqual The key equality.
             explicit THash( size_t nExpected = 0, Hash fnHash = Hash(), Equal fnEqual = Equal() )
                 : m_apBuckets( NULL ), m_nBuckets( 0 ), m_nLength( 0 ), m_pFirst( NULL ), m_pLast( NULL ), m_fnHash( fnHash ), m_fnEqual( fnEqual )
             {
@@ -95,6 +129,7 @@ namespace IASLib
                     Reserve( nExpected );
             }
 
+            /// Copies another table, keeping its order.
             THash( const THash &oSource )
                 : CObject( oSource ), m_apBuckets( NULL ), m_nBuckets( 0 ), m_nLength( 0 ), m_pFirst( NULL ), m_pLast( NULL ),
                   m_fnHash( oSource.m_fnHash ), m_fnEqual( oSource.m_fnEqual )
@@ -104,6 +139,7 @@ namespace IASLib
                     Put( p->oEntry.Key, p->oEntry.Value );
             }
 
+            /// Takes over another table's entries, leaving it empty.
             THash( THash &&oSource )
                 : CObject( oSource ), m_apBuckets( oSource.m_apBuckets ), m_nBuckets( oSource.m_nBuckets ), m_nLength( oSource.m_nLength ),
                   m_pFirst( oSource.m_pFirst ), m_pLast( oSource.m_pLast ), m_fnHash( oSource.m_fnHash ), m_fnEqual( oSource.m_fnEqual )
@@ -113,12 +149,14 @@ namespace IASLib
                 oSource.m_pFirst = oSource.m_pLast = NULL;
             }
 
+            /// Deletes every entry. Pointed-to values are not deleted.
             virtual ~THash( void )
             {
                 Clear();
                 delete [] m_apBuckets;
             }
 
+            /// Replaces the contents with copies of another table's.
             THash &operator =( const THash &oSource )
             {
                 if ( this != &oSource )
@@ -129,6 +167,7 @@ namespace IASLib
                 return *this;
             }
 
+            /// Replaces the contents by taking over another table's entries, leaving it empty.
             THash &operator =( THash &&oSource )
             {
                 if ( this != &oSource )
@@ -139,6 +178,7 @@ namespace IASLib
                 return *this;
             }
 
+            /// Exchanges the contents of two tables (no copying).
             void Swap( THash &oOther )
             {
                 std::swap( m_apBuckets, oOther.m_apBuckets );
@@ -150,14 +190,14 @@ namespace IASLib
                 std::swap( m_fnEqual, oOther.m_fnEqual );
             }
 
-            size_t      Length( void ) const { return m_nLength; }
-            size_t      GetLength( void ) const { return m_nLength; }
-            size_t      Count( void ) const { return m_nLength; }
-            size_t      GetCount( void ) const { return m_nLength; }
-            bool        IsEmpty( void ) const { return m_nLength == 0; }
-            size_t      BucketCount( void ) const { return m_nBuckets; }
+            size_t      Length( void ) const { return m_nLength; }   ///< Number of entries.
+            size_t      GetLength( void ) const { return m_nLength; }   ///< Same as Length().
+            size_t      Count( void ) const { return m_nLength; }   ///< Same as Length().
+            size_t      GetCount( void ) const { return m_nLength; }   ///< Same as Length().
+            bool        IsEmpty( void ) const { return m_nLength == 0; }   ///< True if there are no entries.
+            size_t      BucketCount( void ) const { return m_nBuckets; }   ///< Number of buckets (0 or a power of two).
 
-                // Room for nExpected entries without growing.
+                /// Room for nExpected entries without growing.
             void Reserve( size_t nExpected )
             {
                 size_t nBuckets = BucketsFor( nExpected );
@@ -165,7 +205,7 @@ namespace IASLib
                     Rehash( nBuckets );
             }
 
-                // Shrinks the buckets to what the entries need.
+                /// Shrinks the buckets to what the entries need.
             void Compact( void )
             {
                 size_t nBuckets = BucketsFor( m_nLength );
@@ -173,8 +213,8 @@ namespace IASLib
                     Rehash( nBuckets );
             }
 
-                // Sets key's value, adding the key if it is new; returns true
-                // if it was new.
+                /// Sets key's value, adding the key if it is new; returns true
+                /// if it was new. An existing key keeps its place in the order.
             bool Put( const K &key, const V &value )
             {
                 size_t nHash = m_fnHash( key );
@@ -188,6 +228,7 @@ namespace IASLib
                 return true;
             }
 
+            /// Same, moving the value in.
             bool Put( const K &key, V &&value )
             {
                 size_t nHash = m_fnHash( key );
@@ -201,26 +242,28 @@ namespace IASLib
                 return true;
             }
 
-                // key's value, or NULL if it is not there.
+                /// key's value, or NULL if it is not there. The pointer is valid until the key is removed.
             V *Find( const K &key )
             {
                 Node *pNode = FindNode( key, m_fnHash( key ) );
                 return ( pNode != NULL ) ? &pNode->oEntry.Value : NULL;
             }
 
+            /// Same, for a const table.
             const V *Find( const K &key ) const
             {
                 return const_cast<THash *>( this )->Find( key );
             }
 
-                // key's value, or oDefault.
+                /// A copy of key's value, or oDefault.
             V Get( const K &key, const V &oDefault = V() ) const
             {
                 const V *pValue = Find( key );
                 return ( pValue != NULL ) ? *pValue : oDefault;
             }
 
-                // Copies key's value to oValue, if it is there.
+                /// Copies key's value to oValue, if it is there.
+            /// @return False (and oValue unchanged) if the key is not there.
             bool Get( const K &key, V &oValue ) const
             {
                 const V *pValue = Find( key );
@@ -230,7 +273,7 @@ namespace IASLib
                 return true;
             }
 
-                // key's value, added (as V()) if it is not there.
+                /// key's value, added (as V()) if it is not there.
             V &operator []( const K &key )
             {
                 size_t nHash = m_fnHash( key );
@@ -243,11 +286,10 @@ namespace IASLib
                 return pNode->oEntry.Value;
             }
 
-            bool HasKey( const K &key ) const { return Find( key ) != NULL; }
-            bool Contains( const K &key ) const { return Find( key ) != NULL; }
+            bool HasKey( const K &key ) const { return Find( key ) != NULL; }   ///< True if the key is there.
+            bool Contains( const K &key ) const { return Find( key ) != NULL; }   ///< Same as HasKey().
 
-                // Removes key, returning whether it was there (and its value,
-                // in oValue).
+                /// Removes key, returning whether it was there.
             bool Remove( const K &key )
             {
                 Node *pNode = UnlinkNode( key );
@@ -257,6 +299,7 @@ namespace IASLib
                 return true;
             }
 
+            /// Removes key, returning whether it was there (and its value, in oValue).
             bool Remove( const K &key, V &oValue )
             {
                 Node *pNode = UnlinkNode( key );
@@ -267,7 +310,7 @@ namespace IASLib
                 return true;
             }
 
-                // The keys and the values, in the order they were added.
+                /// The keys, in the order they were added.
             TArray<K> Keys( void ) const
             {
                 TArray<K> aKeys;
@@ -277,6 +320,7 @@ namespace IASLib
                 return aKeys;
             }
 
+            /// The values, in the order they were added.
             TArray<V> Values( void ) const
             {
                 TArray<V> aValues;
@@ -286,10 +330,12 @@ namespace IASLib
                 return aValues;
             }
 
-                // The oldest entry (NULL if empty), and moving an entry to the
-                // newest place (as TCache does on each use).
+                /// The oldest entry (NULL if empty).
             Entry *FirstEntry( void ) { return ( m_pFirst != NULL ) ? &m_pFirst->oEntry : NULL; }
+            /// The oldest entry (NULL if empty).
             const Entry *FirstEntry( void ) const { return ( m_pFirst != NULL ) ? &m_pFirst->oEntry : NULL; }
+            /// Moves an entry to the newest place (as TCache does on each use).
+            /// @return False if the key is not there.
             bool MoveToEnd( const K &key )
             {
                 Node *pNode = FindNode( key, m_fnHash( key ) );
@@ -303,7 +349,8 @@ namespace IASLib
                 return true;
             }
 
-                // Moving an entry to the oldest place.
+                /// Moving an entry to the oldest place.
+            /// @return False if the key is not there.
             bool MoveToFront( const K &key )
             {
                 Node *pNode = FindNode( key, m_fnHash( key ) );
@@ -320,6 +367,7 @@ namespace IASLib
                 return true;
             }
 
+            /// Deletes every entry. The buckets are kept.
             void Clear( void )
             {
                 Node *p = m_pFirst;
@@ -335,7 +383,7 @@ namespace IASLib
                 m_nLength = 0;
             }
 
-                // For pointer values: deletes what each points to, then empties.
+                /// For pointer values: deletes what each points to, then empties.
             void DeleteAll( void )
             {
                 static_assert( std::is_pointer<V>::value, "DeleteAll() is for tables of pointers" );
@@ -344,12 +392,14 @@ namespace IASLib
                 Clear();
             }
 
-            iterator        begin( void ) { return iterator( m_pFirst ); }
-            iterator        end( void ) { return iterator( NULL ); }
-            const_iterator  begin( void ) const { return const_iterator( m_pFirst ); }
-            const_iterator  end( void ) const { return const_iterator( NULL ); }
+            iterator        begin( void ) { return iterator( m_pFirst ); }   ///< The oldest entry.
+            iterator        end( void ) { return iterator( NULL ); }   ///< Past the newest entry.
+            const_iterator  begin( void ) const { return const_iterator( m_pFirst ); }   ///< The oldest entry.
+            const_iterator  end( void ) const { return const_iterator( NULL ); }   ///< Past the newest entry.
 
         protected:
+            /// The bucket count (0, or a power of two from 8) that holds nEntries at most three-quarters full.
+            /// @throws std::bad_alloc if that would overflow.
             static size_t BucketsFor( size_t nEntries )
             {
                 if ( nEntries == 0 )
@@ -364,6 +414,7 @@ namespace IASLib
                 return nBuckets;
             }
 
+            /// The node for key (whose hash is nHash), or NULL.
             Node *FindNode( const K &key, size_t nHash ) const
             {
                 if ( m_nBuckets == 0 )
@@ -374,6 +425,8 @@ namespace IASLib
                 return NULL;
             }
 
+            /// Links a new node in, growing the buckets if needed. If growing throws,
+            /// the node is deleted and the exception passed on.
             void AddNode( Node *pNode )
             {
                 if ( m_nLength + 1 > m_nBuckets - m_nBuckets / 4 )
@@ -395,6 +448,7 @@ namespace IASLib
                 m_nLength++;
             }
 
+            /// Unlinks key's node without deleting it. @return The node, or NULL.
             Node *UnlinkNode( const K &key )
             {
                 if ( m_nBuckets == 0 )
@@ -416,6 +470,7 @@ namespace IASLib
                 return NULL;
             }
 
+            /// Appends a node to the order list (as the newest).
             void LinkOrder( Node *pNode )
             {
                 pNode->pNext = NULL;
@@ -427,6 +482,7 @@ namespace IASLib
                 m_pLast = pNode;
             }
 
+            /// Removes a node from the order list.
             void UnlinkOrder( Node *pNode )
             {
                 if ( pNode->pPrev != NULL )
@@ -439,6 +495,7 @@ namespace IASLib
                     m_pLast = pNode->pPrev;
             }
 
+            /// Rebuilds the buckets with nBuckets heads (0 frees them).
             void Rehash( size_t nBuckets )
             {
                 Node **apNew = NULL;

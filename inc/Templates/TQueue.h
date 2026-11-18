@@ -1,5 +1,6 @@
-/*
- * TQueue Template
+/**
+ * @file
+ * @brief TQueue Template.
  *
  *      First in, first out, in a ring buffer: Push() and Pop() take
  * constant time (a queue built on an array has to move every element on
@@ -23,48 +24,70 @@
 
 namespace IASLib
 {
+    /// A first in, first out queue, stored as a ring buffer.
+    ///
+    /// Push() adds at the back and Pop() takes from the front, both in
+    /// constant time (apart from growing). The buffer grows and shrinks as
+    /// described in TCommon.h. Pop() and Peek() on an empty queue throw a
+    /// CCollectionException. Iteration runs front to back. Not thread-safe.
+    ///
+    /// @tparam T The element type.
+    ///
+    /// @code
+    /// TQueue<CString> oJobs;
+    /// oJobs.Push( "first" );
+    /// oJobs.Push( "second" );
+    /// while ( ! oJobs.IsEmpty() )
+    ///     Run( oJobs.Pop() );         // "first", then "second"
+    /// @endcode
     template <class T>
     class TQueue : public CObject
     {
         protected:
-            T              *m_pData;
-            size_t          m_nCapacity;
-            size_t          m_nFront;       // where the front element is
-            size_t          m_nLength;
-            size_t          m_nScale;
+            T              *m_pData;   ///< The ring buffer (raw storage of m_nCapacity slots).
+            size_t          m_nCapacity;   ///< Number of slots allocated.
+            size_t          m_nFront;       ///< where the front element is
+            size_t          m_nLength;   ///< Number of elements.
+            size_t          m_nScale;   ///< The least the buffer grows by.
 
         public:
+            /// Forward iterator over a queue, front to back.
+            /// @tparam Q The queue type (const for a const_iterator).
+            /// @tparam V The element type (const for a const_iterator).
             template <class Q, class V>
             class TQueueIterator
             {
-                    Q          *m_pQueue;
-                    size_t      m_nPosition;
+                    Q          *m_pQueue;   ///< The queue.
+                    size_t      m_nPosition;   ///< Position from the front.
                 public:
-                    typedef std::forward_iterator_tag   iterator_category;
-                    typedef V                           value_type;
-                    typedef ptrdiff_t                   difference_type;
-                    typedef V                          *pointer;
-                    typedef V                          &reference;
+                    typedef std::forward_iterator_tag   iterator_category;   ///< A forward iterator.
+                    typedef V                           value_type;   ///< The element type.
+                    typedef ptrdiff_t                   difference_type;   ///< Distance type.
+                    typedef V                          *pointer;   ///< Pointer to an element.
+                    typedef V                          &reference;   ///< Reference to an element.
 
-                    TQueueIterator( Q *pQueue, size_t nPosition ) : m_pQueue( pQueue ), m_nPosition( nPosition ) {}
-                    V &operator *( void ) const { return m_pQueue->At( m_nPosition ); }
-                    V *operator ->( void ) const { return &m_pQueue->At( m_nPosition ); }
-                    TQueueIterator &operator ++( void ) { m_nPosition++; return *this; }
-                    TQueueIterator operator ++( int ) { TQueueIterator old( *this ); m_nPosition++; return old; }
-                    bool operator ==( const TQueueIterator &o ) const { return m_pQueue == o.m_pQueue && m_nPosition == o.m_nPosition; }
-                    bool operator !=( const TQueueIterator &o ) const { return ! ( *this == o ); }
+                    TQueueIterator( Q *pQueue, size_t nPosition ) : m_pQueue( pQueue ), m_nPosition( nPosition ) {}   ///< Points at position nPosition of pQueue.
+                    V &operator *( void ) const { return m_pQueue->At( m_nPosition ); }   ///< The element.
+                    V *operator ->( void ) const { return &m_pQueue->At( m_nPosition ); }   ///< The element.
+                    TQueueIterator &operator ++( void ) { m_nPosition++; return *this; }   ///< Moves to the next element.
+                    TQueueIterator operator ++( int ) { TQueueIterator old( *this ); m_nPosition++; return old; }   ///< Moves to the next element, returning the old position.
+                    bool operator ==( const TQueueIterator &o ) const { return m_pQueue == o.m_pQueue && m_nPosition == o.m_nPosition; }   ///< Same queue and position.
+                    bool operator !=( const TQueueIterator &o ) const { return ! ( *this == o ); }   ///< Not equal.
             };
 
-            typedef TQueueIterator<TQueue, T>               iterator;
-            typedef TQueueIterator<const TQueue, const T>   const_iterator;
+            typedef TQueueIterator<TQueue, T>               iterator;   ///< Iterator, front to back.
+            typedef TQueueIterator<const TQueue, const T>   const_iterator;   ///< Const iterator, front to back.
 
             DECLARE_OBJECT( TQueue, CObject )
 
+            /// Makes an empty queue (no memory is allocated until needed).
+            /// @param nScale The least the buffer grows by (0 is taken as 1).
             explicit TQueue( size_t nScale = 16 )
                 : m_pData( NULL ), m_nCapacity( 0 ), m_nFront( 0 ), m_nLength( 0 ), m_nScale( ( nScale > 0 ) ? nScale : 1 )
             {
             }
 
+            /// Copies another queue.
             TQueue( const TQueue &oSource )
                 : CObject( oSource ), m_pData( NULL ), m_nCapacity( 0 ), m_nFront( 0 ), m_nLength( 0 ), m_nScale( oSource.m_nScale )
             {
@@ -73,6 +96,7 @@ namespace IASLib
                     Push( oSource.At( n ) );
             }
 
+            /// Takes over another queue's buffer, leaving it empty.
             TQueue( TQueue &&oSource )
                 : CObject( oSource ), m_pData( oSource.m_pData ), m_nCapacity( oSource.m_nCapacity ), m_nFront( oSource.m_nFront ),
                   m_nLength( oSource.m_nLength ), m_nScale( oSource.m_nScale )
@@ -81,12 +105,14 @@ namespace IASLib
                 oSource.m_nCapacity = oSource.m_nFront = oSource.m_nLength = 0;
             }
 
+            /// Destroys the elements and frees the buffer. Pointed-to objects are not deleted.
             virtual ~TQueue( void )
             {
                 Clear();
                 ::operator delete( m_pData );
             }
 
+            /// Replaces the contents with copies of another queue's.
             TQueue &operator =( const TQueue &oSource )
             {
                 if ( this != &oSource )
@@ -97,6 +123,7 @@ namespace IASLib
                 return *this;
             }
 
+            /// Replaces the contents by taking over another queue's buffer, leaving it empty.
             TQueue &operator =( TQueue &&oSource )
             {
                 if ( this != &oSource )
@@ -107,6 +134,7 @@ namespace IASLib
                 return *this;
             }
 
+            /// Exchanges the contents of two queues (no copying).
             void Swap( TQueue &oOther )
             {
                 std::swap( m_pData, oOther.m_pData );
@@ -116,23 +144,24 @@ namespace IASLib
                 std::swap( m_nScale, oOther.m_nScale );
             }
 
-            size_t      Length( void ) const { return m_nLength; }
-            size_t      GetLength( void ) const { return m_nLength; }
-            size_t      Count( void ) const { return m_nLength; }
-            size_t      GetCount( void ) const { return m_nLength; }
-            bool        IsEmpty( void ) const { return m_nLength == 0; }
-            size_t      Capacity( void ) const { return m_nCapacity; }
-            void        SetScale( size_t nScale ) { if ( nScale > 0 ) m_nScale = nScale; }
-            void        Reserve( size_t nCapacity ) { if ( nCapacity > m_nCapacity ) Reallocate( nCapacity ); }
-            void        Compact( void ) { if ( m_nCapacity > m_nLength ) Reallocate( m_nLength ); }
+            size_t      Length( void ) const { return m_nLength; }   ///< Number of elements.
+            size_t      GetLength( void ) const { return m_nLength; }   ///< Same as Length().
+            size_t      Count( void ) const { return m_nLength; }   ///< Same as Length().
+            size_t      GetCount( void ) const { return m_nLength; }   ///< Same as Length().
+            bool        IsEmpty( void ) const { return m_nLength == 0; }   ///< True if the queue is empty.
+            size_t      Capacity( void ) const { return m_nCapacity; }   ///< Number of elements that fit without growing.
+            void        SetScale( size_t nScale ) { if ( nScale > 0 ) m_nScale = nScale; }   ///< Sets the least the buffer grows by (0 is ignored).
+            void        Reserve( size_t nCapacity ) { if ( nCapacity > m_nCapacity ) Reallocate( nCapacity ); }   ///< Room for nCapacity elements without growing.
+            void        Compact( void ) { if ( m_nCapacity > m_nLength ) Reallocate( m_nLength ); }   ///< Gives back unused room.
 
-                // Adds at the back, returning the new length.
+                /// Adds a copy at the back, returning the new length.
             size_t Push( const T &value )
             {
                 T copy( value );
                 return Push( std::move( copy ) );
             }
 
+            /// Same, moving the value in.
             size_t Push( T &&value )
             {
                 T moved( std::move( value ) );
@@ -143,7 +172,8 @@ namespace IASLib
                 return m_nLength;
             }
 
-                // Removes and returns the front.
+                /// Removes and returns the front.
+            /// @throws CCollectionException if the queue is empty.
             T Pop( void )
             {
                 if ( m_nLength == 0 )
@@ -161,6 +191,8 @@ namespace IASLib
                 return value;
             }
 
+            /// The front element, left in place.
+            /// @throws CCollectionException if the queue is empty.
             T &Peek( void )
             {
                 if ( m_nLength == 0 )
@@ -168,6 +200,8 @@ namespace IASLib
                 return m_pData[ m_nFront ];
             }
 
+            /// The front element, left in place.
+            /// @throws CCollectionException if the queue is empty.
             const T &Peek( void ) const
             {
                 if ( m_nLength == 0 )
@@ -175,12 +209,13 @@ namespace IASLib
                 return m_pData[ m_nFront ];
             }
 
-                // The element nPosition from the front, or oDefault.
+                /// A copy of the element nPosition from the front, or oDefault.
             T Get( size_t nPosition, const T &oDefault = T() ) const
             {
                 return ( nPosition < m_nLength ) ? At( nPosition ) : oDefault;
             }
 
+            /// Destroys every element. The buffer is kept.
             void Clear( void )
             {
                 for ( size_t n = 0; n < m_nLength; n++ )
@@ -189,6 +224,7 @@ namespace IASLib
                 m_nFront = 0;
             }
 
+            /// For a queue of pointers: deletes what each points to, then empties the queue.
             void DeleteAll( void )
             {
                 static_assert( std::is_pointer<T>::value, "DeleteAll() is for queues of pointers" );
@@ -197,22 +233,26 @@ namespace IASLib
                 Clear();
             }
 
-            iterator        begin( void ) { return iterator( this, 0 ); }
-            iterator        end( void ) { return iterator( this, m_nLength ); }
-            const_iterator  begin( void ) const { return const_iterator( this, 0 ); }
-            const_iterator  end( void ) const { return const_iterator( this, m_nLength ); }
+            iterator        begin( void ) { return iterator( this, 0 ); }   ///< The front element.
+            iterator        end( void ) { return iterator( this, m_nLength ); }   ///< Past the back element.
+            const_iterator  begin( void ) const { return const_iterator( this, 0 ); }   ///< The front element.
+            const_iterator  end( void ) const { return const_iterator( this, m_nLength ); }   ///< Past the back element.
 
-                // Unchecked access by position from the front.
+                /// Unchecked access by position from the front (nPosition must be less than Length()).
             T          &At( size_t nPosition ) { return m_pData[ Slot( nPosition ) ]; }
+            /// Same, for a const queue.
             const T    &At( size_t nPosition ) const { return m_pData[ Slot( nPosition ) ]; }
 
         protected:
+            /// The buffer slot of the element nPosition from the front.
             size_t Slot( size_t nPosition ) const
             {
                 size_t nSlot = m_nFront + nPosition;
                 return ( nSlot >= m_nCapacity ) ? nSlot - m_nCapacity : nSlot;
             }
 
+            /// Moves the elements to a new buffer of nCapacity slots (at least the length), front first.
+            /// @throws std::bad_alloc if the memory cannot be had; the queue is then unchanged.
             void Reallocate( size_t nCapacity )
             {
                 if ( nCapacity < m_nLength )
