@@ -855,6 +855,9 @@ static void testBasicServerIPv6( void )
     RequestOptions t;
     t.viaHost = "[::1]:5099";
     t.branch = "z9hG4bKipv6tcp";
+        // A new call: the same Call-ID, From tag and CSeq with another branch
+        // is a merged request, which gets 482 (RFC 3261 8.2.2.2).
+    t.callId = "ipv6-tcp-call";
     request = buildRequest( t );
     tcp.Send( request.data(), (int)request.size() );
     n = tcp.ReadWithTimeout( buffer, sizeof( buffer ) - 1, 2000 );
