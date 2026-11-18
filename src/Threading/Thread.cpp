@@ -33,6 +33,12 @@ IASLib::CMutex IASLib::CThread::m_mutexCriticalSection;
 extern "C"
 {
 #ifdef IASLIB_WIN32__
+        // Kill()'s APC: runs on the thread itself, at an alertable wait.
+    static void CALLBACK KillThreadApc( ULONG_PTR )
+    {
+        ExitThread( (DWORD)-1 );
+    }
+
     static DWORD WINAPI ThreadStartRoutine( LPVOID pThreadObject )
     {
         IASLib::CThread *pThread = (IASLib::CThread *)pThreadObject;
@@ -246,7 +252,16 @@ namespace IASLib
         return pthread_cancel( m_ptThreadID );
     #endif
     #ifdef IASLIB_WIN32__
-        if ( TerminateThread( m_ptThreadID, (DWORD)-1 ) )
+        if ( GetCurrentThreadId() == m_dwThreadID )
+        {
+            m_bIsRunning = false;
+            ::ExitThread( (DWORD)-1 );
+        }
+            // Delivered when the thread next waits alertably, which the
+            // library's sleeps and semaphore waits do.
+        if ( ! QueueUserAPC( KillThreadApc, m_ptThreadID, 0 ) )
+            return -1;
+        if ( WaitForSingleObject( m_ptThreadID, 2000 ) == WAIT_OBJECT_0 )
         {
             m_bIsRunning = false;
             return 0;
@@ -311,8 +326,22 @@ namespace IASLib
 
     void CThread::Millisleep( int milliseconds )
     {
-        if ( milliseconds > 0 )
-            std::this_thread::sleep_for( std::chrono::milliseconds( milliseconds ) );
+        if ( milliseconds <= 0 )
+            return;
+    #ifdef IASLIB_WIN32__
+            // Alertable, so Kill()'s APC can end the thread here. Other APCs
+            // end the sleep early: sleep the rest.
+        std::chrono::steady_clock::time_point tpEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds( milliseconds );
+        for ( ;; )
+        {
+            long long llLeft = std::chrono::duration_cast<std::chrono::milliseconds>( tpEnd - std::chrono::steady_clock::now() ).count();
+            if ( llLeft <= 0 )
+                break;
+            SleepEx( (DWORD)llLeft, TRUE );
+        }
+    #else
+        std::this_thread::sleep_for( std::chrono::milliseconds( milliseconds ) );
+    #endif
     }
 
     void CThread::Suspend( void )

@@ -126,7 +126,15 @@
                     // return code with SetReturnCode() or ExitThread()).
                 virtual void           *Run( void );
 
-                    // Ends the thread at once (pthread_cancel, TerminateThread).
+                    // Ends the thread at its next safe point: a Millisleep(),
+                    // Sleep() or CSemaphore wait (and, outside Windows, the
+                    // system's other cancellation points). 0 once it has
+                    // ended; -1 if it has not reached one within two seconds
+                    // (it still ends when it does). A thread that never waits
+                    // can only be stopped by its own code: see
+                    // RequestShutdown(). (On Windows this was TerminateThread(),
+                    // which can stop a thread while it holds a lock - the heap's,
+                    // the loader's - so that the whole process then hangs.)
                 virtual int             Kill( void );
 
                     // Waits for the thread to end, returning its return code
@@ -171,6 +179,7 @@
 
                 static bool             Equals( THREAD_T ptThread1, THREAD_T ptThread2 );
 
+                    // Sleeps (a point at which Kill() can end the thread).
                 static void             Sleep( int nSeconds );
                 static void             Millisleep( int milliseconds );
 

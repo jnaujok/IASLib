@@ -27,6 +27,7 @@ jobs:
       - name: Generate HTML and LaTeX
         run: |
           doxygen --version
+          mkdir -p build/docs
           doxygen Doxyfile
           echo "Doxygen warnings: $(wc -l < build/docs/doxygen-warnings.log)"
 

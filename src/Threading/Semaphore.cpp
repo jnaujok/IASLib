@@ -11,6 +11,7 @@
 ***********************************************************************/
 
 #include "Semaphore.h"
+#include <chrono>
 #include <exception>
 #include <stdexcept>
 #ifdef IASLIB_PTHREAD__
@@ -68,7 +69,10 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_WIN32__
-        WaitForSingleObject( m_threadSemaphore, INFINITE );
+            // Alertable, so CThread::Kill() can end a thread waiting here.
+        while ( WaitForSingleObjectEx( m_threadSemaphore, INFINITE, TRUE ) == WAIT_IO_COMPLETION )
+        {
+        }
     #endif
     }
 
@@ -120,7 +124,14 @@ namespace IASLib
         return bTaken;
     #endif
     #ifdef IASLIB_WIN32__
-        return WaitForSingleObject( m_threadSemaphore, (DWORD)nTimeoutMs ) == WAIT_OBJECT_0;
+        std::chrono::steady_clock::time_point tpEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds( nTimeoutMs );
+        for ( ;; )
+        {
+            long long llLeft = std::chrono::duration_cast<std::chrono::milliseconds>( tpEnd - std::chrono::steady_clock::now() ).count();
+            DWORD dwResult = WaitForSingleObjectEx( m_threadSemaphore, (DWORD)( ( llLeft > 0 ) ? llLeft : 0 ), TRUE );
+            if ( dwResult != WAIT_IO_COMPLETION )
+                return dwResult == WAIT_OBJECT_0;
+        }
     #endif
     }
 
