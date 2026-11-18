@@ -59,11 +59,7 @@
 #include "BaseTypes/Object.h"
 
     // String classes
-#ifdef IASLIB_USE_DEEP_COPY_STRING__
-#include "BaseTypes/String_Copy.h"
-#else
 #include "BaseTypes/String_.h"
-#endif
 #include "BaseTypes/StringTokenizer.h"
 
     // Date and Time
@@ -75,6 +71,7 @@
 
     // UUID Support
 #include "BaseTypes/Uuid.h"
+#include "BaseTypes/Random.h"
 
     // Variant Support
 #include "BaseTypes/Variant.h"

@@ -21,6 +21,9 @@
 #include "../BaseTypes/String_.h"
 #include "Hash.h"
 #include "CacheItem.h"
+#ifdef IASLIB_MULTI_THREADED__
+#include "../Threading/Mutex.h"
+#endif
 
 namespace IASLib
 {

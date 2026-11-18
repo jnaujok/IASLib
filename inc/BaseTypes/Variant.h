@@ -11,34 +11,40 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
+
 #ifndef IASLIB_VARIANT_H__
 #define IASLIB_VARIANT_H__
 
 #include "Object.h"
 #include "String_.h"
 #include "Date.h"
-#include "Object.h"
 
 namespace IASLib
 {
     // Forward declaration of Array
     class CArray;
-    
+
+        // A value of one of several types. The number getters convert
+        // between the number types (and booleans), and read numbers from
+        // strings; getString() writes any value as text. Arrays and
+        // objects are held by pointer, not owned: the program keeps them
+        // alive while the variant refers to them.
     class CVariant : public CObject
     {
-        enum VARIANT_TYPE
-        {
-            UNKNOWN,
-            STRING,
-            DATE,
-            INTEGER,
-            LONG,
-            FLOAT,
-            DOUBLE,
-            BOOLEAN,
-            ARRAY,
-            OBJECT
-        };
+        public:
+            enum VARIANT_TYPE
+            {
+                UNKNOWN,
+                STRING,
+                DATE,
+                INTEGER,
+                LONG,
+                FLOAT,
+                DOUBLE,
+                BOOLEAN,
+                ARRAY,
+                OBJECT
+            };
 
         private:
             VARIANT_TYPE    valType;
@@ -55,17 +61,17 @@ namespace IASLib
         public:
                         DEFINE_OBJECT( CVariant );
 
-                        CVariant( void );
-                        CVariant( const char *oSource ) { init(); valType = STRING; strVal = oSource; }
-                        CVariant( const CString &oSource ) { init(); valType = STRING; strVal = oSource; }
-                        CVariant( const CDate &oSource ) { init(); valType = DATE; dateVal = oSource; }
-                        CVariant( const int source ) { init(); valType = INTEGER; intVal = source; }
-                        CVariant( const long source ) { init(); valType = LONG; longVal = source; }
-                        CVariant( const float source ) { init(); valType = FLOAT; floatVal = source; }
-                        CVariant( const double source ) { init(); valType = DOUBLE; doubleVal = source; }
-                        CVariant( const bool source ) { init(); valType = BOOLEAN; boolVal = source; }
-                        CVariant( CArray *array ) { init(); valType = ARRAY; arrayVal = array; }
-                        CVariant( CObject *object ) { init(); valType = OBJECT; objVal = object; }
+                        CVariant( void ) { init(); }
+                        CVariant( const char *oSource ) { init(); *this = oSource; }
+                        CVariant( const CString &oSource ) { init(); *this = oSource; }
+                        CVariant( const CDate &oSource ) { init(); *this = oSource; }
+                        CVariant( const int source ) { init(); *this = source; }
+                        CVariant( const long source ) { init(); *this = source; }
+                        CVariant( const float source ) { init(); *this = source; }
+                        CVariant( const double source ) { init(); *this = source; }
+                        CVariant( const bool source ) { init(); *this = source; }
+                        CVariant( CArray *array ) { init(); *this = array; }
+                        CVariant( CObject *object ) { init(); *this = object; }
 
                         CVariant( const CVariant &oSource );
 
@@ -73,42 +79,42 @@ namespace IASLib
 
             virtual    ~CVariant( void );
 
-            void        init( void ) 
-                        { 
-                            valType = UNKNOWN;
-                            strVal = CString("");
-                            dateVal = CDate();
-                            intVal = 0;
-                            longVal = 0L;
-                            floatVal = (float)0.0;
-                            doubleVal = 0.0;
-                            boolVal = false;
-                            arrayVal = NULL;
-                            objVal = NULL;
-                        }
+                // Back to UNKNOWN, with every value cleared.
+            void        init( void );
 
-            CVariant   &operator =( const CString &oSource ) { valType = STRING; strVal = oSource; return *this; }
-            CVariant   &operator =( const CDate &oSource ) { valType = DATE; dateVal = oSource; return *this; }
-            CVariant   &operator =( const int source ) { valType = INTEGER; intVal = source; return *this; }
-            CVariant   &operator =( const long source ) { valType = LONG; longVal = source; return *this; }
-            CVariant   &operator =( const float source ) { valType = FLOAT; floatVal = source; return *this; }
-            CVariant   &operator =( const double source ) { valType = DOUBLE; doubleVal = source; return *this; }
-            CVariant   &operator =( const bool source ) { valType = BOOLEAN; boolVal = source; return *this; }
-            CVariant   &operator =( CArray *array ) { valType = ARRAY; arrayVal = array; return *this; }
-            CVariant   &operator =( CObject *object ) { valType = OBJECT; objVal = object; return *this; }
+            CVariant   &operator =( const char *oSource ) { clear( STRING ); strVal = oSource; return *this; }
+            CVariant   &operator =( const CString &oSource ) { clear( STRING ); strVal = oSource; return *this; }
+            CVariant   &operator =( const CDate &oSource ) { clear( DATE ); dateVal = oSource; return *this; }
+            CVariant   &operator =( const int source ) { clear( INTEGER ); intVal = source; return *this; }
+            CVariant   &operator =( const long source ) { clear( LONG ); longVal = source; return *this; }
+            CVariant   &operator =( const float source ) { clear( FLOAT ); floatVal = source; return *this; }
+            CVariant   &operator =( const double source ) { clear( DOUBLE ); doubleVal = source; return *this; }
+            CVariant   &operator =( const bool source ) { clear( BOOLEAN ); boolVal = source; return *this; }
+            CVariant   &operator =( CArray *array ) { clear( ARRAY ); arrayVal = array; return *this; }
+            CVariant   &operator =( CObject *object ) { clear( OBJECT ); objVal = object; return *this; }
 
-            VARIANT_TYPE getType( void ) { return valType; }
+            VARIANT_TYPE getType( void ) const { return valType; }
+            bool        isEmpty( void ) const { return valType == UNKNOWN; }
+            bool        isNumber( void ) const;
 
-            CString     getString( void );
-            CDate       getDate( void );
-            int         getInt( void );
-            long        getLong( void );
-            float       getFloat( void );
-            double      getDouble( void );
-            bool        getBoolean( void );
-            CArray     *getArray( void );
-            CObject    *getObject( void );
+            CString     getString( void ) const;
+                // The date (or an empty CDate, if this is not a date).
+            CDate       getDate( void ) const;
+                // The value as a number: numbers convert (doubles are cut
+                // toward zero, and limited to the type's range), booleans are
+                // 0 or 1, strings are read as numbers; anything else is 0.
+            int         getInt( void ) const;
+            long        getLong( void ) const;
+            float       getFloat( void ) const;
+            double      getDouble( void ) const;
+                // True for true, a non-zero number, or a string "true",
+                // "yes" or "on" (in any case) or a non-zero number.
+            bool        getBoolean( void ) const;
+            CArray     *getArray( void ) const;
+            CObject    *getObject( void ) const;
 
+        private:
+            void        clear( VARIANT_TYPE newType );
     };
 }
 

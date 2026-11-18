@@ -31,6 +31,9 @@
 #define IASLIB_ARRAY_H__
 
 #include "Collection.h"
+#ifdef IASLIB_MULTI_THREADED__
+#include "../Threading/Mutex.h"
+#endif
 
 namespace IASLib
 {

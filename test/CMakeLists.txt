@@ -40,3 +40,7 @@ if(USE_JSON)
     target_link_libraries(TestBlockchain IASLib)
     add_test(test_blockchain TestBlockchain)
 endif()
+
+add_executable(TestBaseTypes TestBaseTypes/TestBaseTypes.cpp)
+target_link_libraries(TestBaseTypes IASLib)
+add_test(test_base_types TestBaseTypes)

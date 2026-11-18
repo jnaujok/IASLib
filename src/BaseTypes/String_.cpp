@@ -17,129 +17,239 @@
 
 #include "String_.h"
 
-#include <stdio.h>
-
-#include <string>
-#include <memory>
-#include <iostream>
-
-#ifndef IASLIB_WIN32__
+#include <ctype.h>
+#include <locale.h>
 #include <stdarg.h>
-#else
-#include <strsafe.h>
-#endif
+#include <stdio.h>
+#include <stdlib.h>
 
-#include "StringException.h"
-
-#if ( _MSC_VER >= 1300 )
-#pragma warning( disable:4995 )
-#endif
+#include <new>
+#include <string>
+#include <vector>
 
 #ifdef IASLIB_STD_STREAM_SUPPORT__
-    #ifdef IASLIB_WIN32__
-        #if ( _MSC_VER >= 1300 )
-            #include <ostream>
-            #include <istream>
-        #else
-            #include <iostream.h>
-        #endif
-    #else
-        #include <iostream>
-    #endif
-#endif
-
-#if ( _MSC_VER >= 1300 )
-#pragma warning( default:4995 )
-#endif
-
-#ifdef IASLIB_MULTI_THREADED__
-#include "Mutex.h"
-#endif
-
-#ifdef IASLIB_DEBUG_MEMORY__
-#include <crtdbg.h>
-
-#define malloc(x)   _malloc_dbg( x, _CLIENT_BLOCK, __FILE__, __LINE__ )
-#define realloc(p,x)   _realloc_dbg( p,x, _CLIENT_BLOCK, __FILE__, __LINE__ )
-#define calloc(n,x)   _calloc_dbg( n,x, _CLIENT_BLOCK, __FILE__, __LINE__ )
-#define free(p)       _free_dbg(p,_CLIENT_BLOCK)
-#endif
-
-
-#ifdef IASLIB_MAC__
-
-/*************************************************************************
-*   stricmp Function                                                     *
-*                                                                        *
-*       Description:  This function is not included in the Macintosh     *
-*                     standard run-time libraries, and must therefore be *
-*                     defined within the program.                        *
-*                                                                        *
-*            Author:  Jeffrey R. Naujok                                  *
-*              Date:  Tuesday, May 30, 1995                              *
-*                                                                        *
-*************************************************************************/
-
-static int stricmp( IASLibChar__ *pszString1, IASLibChar__ *pszString2 )
-{
-  while ( ( *pszString1 ) && ( *pszString2 ) && ( toupper( *pszString1 ) == toupper( *pszString2 ) ) )
-  {
-    pszString1++;
-    pszString2++;
-  }
-  if ( ( *pszString1 == '\0' ) && ( *pszString2 == '\0' ) )
-    return 0;
-
-  if ( toupper( *pszString1 ) < toupper( *pszString2 ) )
-    return -1;
-
-  return 1;
-}
-
-/*************************************************************************
-*   strnicmp Function                                                    *
-*                                                                        *
-*       Description:  This function is not included in the Macintosh     *
-*                     standard run-time libraries, and must therefore be *
-*                     defined within the program.                        *
-*                                                                        *
-*            Author:  Jeffrey R. Naujok                                  *
-*              Date:  Tuesday, May 30, 1995                              *
-*                                                                        *
-*************************************************************************/
-
-static int strnicmp( IASLibChar__ *pszString1, IASLibChar__ *pszString2, size_t nLength )
-{
-  size_t nCount = nLength;
-
-  while ( ( nCount ) && ( *pszString1 ) && ( *pszString2 ) && ( toupper( *pszString1 ) == toupper( *pszString2 ) ) )
-  {
-    pszString1++;
-    pszString2++;
-    nCount--;
-  }
-
-  if ( nCount == 0 )
-    return 0;
-
-  if ( ( *pszString1 == '\0' ) && ( *pszString2 == '\0' ) )
-    return 0;
-
-  if ( toupper( *pszString1 ) < toupper( *pszString2 ) )
-    return -1;
-
-  return 1;
-}
-
-#endif // ifdef IASLIB_MAC__
-
-#ifdef IASLIB_MULTI_THREADED__
-static IASLib::CMutex  mutexStringProtect;
+#include <istream>
+#include <ostream>
 #endif
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CString, CObject );
+
+    namespace
+    {
+            // The length of text up to its first NUL, looking no further
+            // than nMax characters (the text need not be NUL terminated
+            // if it is at least that long).
+        size_t BoundedLength( const IASLibChar__ *pText, size_t nMax )
+        {
+            if ( pText == NULL )
+            {
+                return 0;
+            }
+            const void *pNul = memchr( pText, 0, nMax );
+            return ( pNul != NULL ) ? (size_t)( (const IASLibChar__ *)pNul - pText ) : nMax;
+        }
+
+        size_t TextLength( const IASLibChar__ *pText )
+        {
+            return ( pText != NULL ) ? strlen( pText ) : 0;
+        }
+
+        inline unsigned char Byte( IASLibChar__ ch )
+        {
+            return (unsigned char)ch;
+        }
+
+        inline int Upper( IASLibChar__ ch )
+        {
+            return toupper( Byte( ch ) );
+        }
+
+        inline int Lower( IASLibChar__ ch )
+        {
+            return tolower( Byte( ch ) );
+        }
+
+        int CompareText( const IASLibChar__ *p1, size_t n1, const IASLibChar__ *p2, size_t n2, bool bCaseSensitive )
+        {
+            size_t nCommon = ( n1 < n2 ) ? n1 : n2;
+            for ( size_t nCount = 0; nCount < nCommon; nCount++ )
+            {
+                int c1 = bCaseSensitive ? Byte( p1[ nCount ] ) : Upper( p1[ nCount ] );
+                int c2 = bCaseSensitive ? Byte( p2[ nCount ] ) : Upper( p2[ nCount ] );
+                if ( c1 != c2 )
+                {
+                    return ( c1 < c2 ) ? -1 : 1;
+                }
+            }
+            if ( n1 == n2 )
+            {
+                return 0;
+            }
+            return ( n1 < n2 ) ? -1 : 1;
+        }
+
+        bool SameText( const IASLibChar__ *p1, const IASLibChar__ *p2, size_t nLength, bool bCaseSensitive )
+        {
+            return CompareText( p1, nLength, p2, nLength, bCaseSensitive ) == 0;
+        }
+
+            // Where pNeedle (nNeedle long) first appears in pText at or after
+            // nStart, or NOT_FOUND.
+        size_t FindText( const IASLibChar__ *pText, size_t nText, const IASLibChar__ *pNeedle, size_t nNeedle, size_t nStart, bool bCaseSensitive )
+        {
+            if ( nStart > nText || nNeedle > nText - nStart )
+            {
+                return NOT_FOUND;
+            }
+            for ( size_t nPos = nStart; nPos + nNeedle <= nText; nPos++ )
+            {
+                if ( SameText( pText + nPos, pNeedle, nNeedle, bCaseSensitive ) )
+                {
+                    return nPos;
+                }
+            }
+            return NOT_FOUND;
+        }
+
+        std::string FormatV( const char *strFormat, va_list vaArgs )
+        {
+            if ( strFormat == NULL )
+            {
+                return std::string();
+            }
+
+            char achBuffer[ 256 ];
+            va_list vaCopy;
+            va_copy( vaCopy, vaArgs );
+            int nLength = vsnprintf( achBuffer, sizeof( achBuffer ), strFormat, vaCopy );
+            va_end( vaCopy );
+
+            if ( nLength < 0 )
+            {
+                return std::string();
+            }
+            if ( (size_t)nLength < sizeof( achBuffer ) )
+            {
+                return std::string( achBuffer, (size_t)nLength );
+            }
+
+            std::vector<char> aBuffer( (size_t)nLength + 1 );
+            va_copy( vaCopy, vaArgs );
+            vsnprintf( &aBuffer[ 0 ], aBuffer.size(), strFormat, vaCopy );
+            va_end( vaCopy );
+            return std::string( &aBuffer[ 0 ], (size_t)nLength );
+        }
+
+        std::string FormatSigned( long long nValue )
+        {
+            char achBuffer[ 32 ];
+            snprintf( achBuffer, sizeof( achBuffer ), "%lld", nValue );
+            return achBuffer;
+        }
+
+        std::string FormatUnsigned( unsigned long long nValue )
+        {
+            char achBuffer[ 32 ];
+            snprintf( achBuffer, sizeof( achBuffer ), "%llu", nValue );
+            return achBuffer;
+        }
+
+            // printf follows the C locale's decimal point; ours is always '.'.
+        void UseDecimalPoint( char *pszNumber )
+        {
+            const struct lconv *pLocale = localeconv();
+            char chPoint = ( pLocale != NULL && pLocale->decimal_point != NULL && pLocale->decimal_point[0] != 0 ) ? pLocale->decimal_point[0] : '.';
+            if ( chPoint != '.' )
+            {
+                for ( char *p = pszNumber; *p; p++ )
+                {
+                    if ( *p == chPoint )
+                    {
+                        *p = '.';
+                    }
+                }
+            }
+        }
+
+            // The shortest %g form that reads back as the same value.
+        std::string FormatDouble( double dValue )
+        {
+            char achBuffer[ 40 ];
+            for ( int nPrecision = 1; nPrecision <= 17; nPrecision++ )
+            {
+                snprintf( achBuffer, sizeof( achBuffer ), "%.*g", nPrecision, dValue );
+                if ( nPrecision == 17 || strtod( achBuffer, NULL ) == dValue || dValue != dValue )
+                {
+                    break;
+                }
+            }
+            UseDecimalPoint( achBuffer );
+            return achBuffer;
+        }
+
+        std::string FormatFloat( float fValue )
+        {
+            char achBuffer[ 40 ];
+            for ( int nPrecision = 1; nPrecision <= 9; nPrecision++ )
+            {
+                snprintf( achBuffer, sizeof( achBuffer ), "%.*g", nPrecision, (double)fValue );
+                if ( nPrecision == 9 || strtof( achBuffer, NULL ) == fValue || fValue != fValue )
+                {
+                    break;
+                }
+            }
+            UseDecimalPoint( achBuffer );
+            return achBuffer;
+        }
+
+        int HexDigit( IASLibChar__ ch )
+        {
+            if ( ch >= '0' && ch <= '9' ) return ch - '0';
+            if ( ch >= 'A' && ch <= 'F' ) return 10 + ( ch - 'A' );
+            if ( ch >= 'a' && ch <= 'f' ) return 10 + ( ch - 'a' );
+            return -1;
+        }
+
+        const char *HEX_DIGITS = "0123456789ABCDEF";
+        const char *DEFAULT_WHITESPACE = " \t\r\n\f";
+
+        bool WildcardMatch( const IASLibChar__ *pText, size_t nText, const IASLibChar__ *pPattern, size_t nPattern, bool bCaseSensitive )
+        {
+                // The usual greedy matcher: on a mismatch, go back to the
+                // last '*' and let it take one more character.
+            size_t nT = 0, nP = 0;
+            size_t nStarP = NOT_FOUND, nStarT = 0;
+            while ( nT < nText )
+            {
+                if ( nP < nPattern && pPattern[ nP ] == '*' )
+                {
+                    nStarP = nP++;
+                    nStarT = nT;
+                }
+                else if ( nP < nPattern && ( pPattern[ nP ] == '?' || SameText( pText + nT, pPattern + nP, 1, bCaseSensitive ) ) )
+                {
+                    nP++;
+                    nT++;
+                }
+                else if ( nStarP != NOT_FOUND )
+                {
+                    nP = nStarP + 1;
+                    nT = ++nStarT;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            while ( nP < nPattern && pPattern[ nP ] == '*' )
+            {
+                nP++;
+            }
+            return nP == nPattern;
+        }
+    }
 
         // Default constructor. Creates a zero length string.
     CString::CString( void )
@@ -147,121 +257,252 @@ namespace IASLib
         m_pStubData = NULL;
     }
 
-        // String Constructor - Takes a char * and converts
-        // it to a CString object.
     CString::CString( const IASLibChar__ *strSource, int nLength )
     {
-        if ( ( strSource == NULL ) || ( nLength == 0 ) )
+        m_pStubData = NULL;
+        if ( strSource != NULL && nLength != 0 )
         {
-            m_pStubData = NULL;
-        }
-        else
-        {
-            size_t nStrLen = strlen( strSource );
-            if ( ( nLength > (int)nStrLen ) || ( nLength < 0 ) )
-                nLength = (int)nStrLen;
-
-            if ( nLength > 0 )
-            {
-                m_pStubData = new CStringStub( strSource, nLength );
-                m_pStubData->AddRef();
-            }
-            else
-            {
-                m_pStubData = NULL;
-            }
+            Assign( strSource, ( nLength < 0 ) ? strlen( strSource ) : BoundedLength( strSource, (size_t)nLength ) );
         }
     }
 
-        // String Constructor - Takes a char * and converts
-        // it to a CString object.
     CString::CString( const IASLibChar__ *strSource, size_t nLength )
     {
-        if ( ( strSource == NULL ) || ( nLength == 0 ) )
+        m_pStubData = NULL;
+        if ( strSource != NULL && nLength != 0 )
         {
-            m_pStubData = NULL;
-        }
-        else
-        {
-            size_t nStrLen = strlen( strSource );
-            if ( nLength > nStrLen )
-                nLength = nStrLen;
-
-            if ( nLength > 0 )
-            {
-                m_pStubData = new CStringStub( strSource, nLength );
-                m_pStubData->AddRef();
-            }
-            else
-            {
-                m_pStubData = NULL;
-            }
+            Assign( strSource, BoundedLength( strSource, nLength ) );
         }
     }
 
-        // String Constructor - Takes a fixed memory buffer
-        //  with a maximum size and creates a non-movable
-        //  fixed StringStub that points at it. The fixed
-        //  CString violates a lot of the rules for other
-        //  string types, in that no matter how many people
-        //  have a copy, it never spawns a new string stub
-        //  and everyone points at the same string. So if
-        //  it changes, everyone's copy changes.
-        //  Note: if you pass NULL, then this constructor
-        //  will create a fixed stub of the size specified.
     CString::CString( IASLibChar__ *strSource, int nLength, int nSize )
     {
-        if ( nLength > nSize )
+        m_pStubData = NULL;
+        if ( nSize <= 0 )
         {
-            nLength = nSize;
+            return;
         }
 
         if ( strSource == NULL )
         {
-            IASLibChar__ *strData;
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-            strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( nSize + 1, __FILE__, __LINE__ );
-    #else
-            strData = (IASLibChar__ *)CMemoryManager::Allocate( nSize + 1 );
-    #endif
-#else
-            strData = (IASLibChar__ *)malloc( nSize + 1 );
-#endif
-            memset( strData, 0, nLength );
-            m_pStubData = new CStringStub( strData, nLength, nSize, true );
-            m_pStubData->AddRef();
+                // Room for nSize characters and the NUL.
+            IASLibChar__ *pBuffer = (IASLibChar__ *)malloc( (size_t)nSize + 1 );
+            if ( pBuffer == NULL )
+            {
+                throw std::bad_alloc();
+            }
+            memset( pBuffer, 0, (size_t)nSize + 1 );
+            m_pStubData = new CStringStub( pBuffer, 0, (size_t)nSize + 1, true );
         }
         else
         {
-            size_t nStrLen = strlen( strSource );
-            if ( ( nLength > (int)nStrLen ) || ( nLength < 0 ) )
-                nLength = (int)nStrLen;
-
-            if ( nLength > nSize )
-                nLength = nSize;
-
-            m_pStubData = new CStringStub( strSource, nLength, nSize );
-            m_pStubData->AddRef();
+            size_t nTextLength = ( nLength < 0 ) ? BoundedLength( strSource, (size_t)nSize ) : BoundedLength( strSource, (size_t)nLength );
+            m_pStubData = new CStringStub( strSource, nTextLength, (size_t)nSize, false );
         }
+        m_pStubData->AddRef();
     }
 
-        // Copy Constructor - Takes another CString object
-        // and creates a new string object that's an exact
-        // duplicate of the source object.
-    CString::CString( const CString &strSource )
+    CString::CString( IASLibChar__ *strSource, size_t nLength, size_t nSize )
+    {
+        m_pStubData = NULL;
+        if ( nSize == 0 )
+        {
+            return;
+        }
+
+        if ( strSource == NULL )
+        {
+            if ( nSize == (size_t)-1 )
+            {
+                throw std::bad_alloc();
+            }
+            IASLibChar__ *pBuffer = (IASLibChar__ *)malloc( nSize + 1 );
+            if ( pBuffer == NULL )
+            {
+                throw std::bad_alloc();
+            }
+            memset( pBuffer, 0, nSize + 1 );
+            m_pStubData = new CStringStub( pBuffer, 0, nSize + 1, true );
+        }
+        else
+        {
+            m_pStubData = new CStringStub( strSource, BoundedLength( strSource, ( nLength < nSize ) ? nLength : nSize ), nSize, false );
+        }
+        m_pStubData->AddRef();
+    }
+
+    CString::CString( const CString &strSource ) : CObject( strSource )
     {
         m_pStubData = strSource.m_pStubData;
         if ( m_pStubData )
             m_pStubData->AddRef();
     }
 
+    CString::CString( CString &&strSource ) : CObject( strSource )
+    {
+        m_pStubData = strSource.m_pStubData;
+        if ( m_pStubData != NULL && m_pStubData->m_bFixedStub )
+        {
+                // The source still uses its fixed buffer: share it.
+            m_pStubData->AddRef();
+        }
+        else
+        {
+            strSource.m_pStubData = NULL;
+        }
+    }
 
-        // Destructor - Destroys a string obejct
     CString::~CString( void )
     {
+        Release();
+    }
+
+        // The helpers everything else is built on.
+
+    void CString::Release( void )
+    {
         if ( m_pStubData )
+        {
             m_pStubData->RemoveRef();
+            m_pStubData = NULL;
+        }
+    }
+
+    void CString::ChangeStub( void )
+    {
+        if ( m_pStubData != NULL && ! m_pStubData->m_bFixedStub && m_pStubData->IsShared() )
+        {
+            CStringStub *pCopy = new CStringStub( m_pStubData->m_strData, m_pStubData->m_nLength );
+            pCopy->AddRef();
+            m_pStubData->RemoveRef();
+            m_pStubData = pCopy;
+        }
+    }
+
+    IASLibChar__ *CString::SetLength( size_t nLength )
+    {
+        if ( m_pStubData == NULL )
+        {
+            if ( nLength == 0 )
+            {
+                return NULL;
+            }
+            m_pStubData = new CStringStub( NULL, nLength );
+            m_pStubData->AddRef();
+            return m_pStubData->m_strData;
+        }
+
+        if ( nLength == 0 && ! m_pStubData->m_bFixedStub )
+        {
+            Release();
+            return NULL;
+        }
+
+        if ( m_pStubData->IsShared() && ! m_pStubData->m_bFixedStub )
+        {
+                // Copy only what will be kept.
+            size_t nKeep = ( m_pStubData->m_nLength < nLength ) ? m_pStubData->m_nLength : nLength;
+            CStringStub *pCopy = new CStringStub( m_pStubData->m_strData, nKeep, nLength );
+            pCopy->AddRef();
+            m_pStubData->RemoveRef();
+            m_pStubData = pCopy;
+        }
+        m_pStubData->ChangeSize( nLength );
+        return m_pStubData->m_strData;
+    }
+
+    void CString::Assign( const IASLibChar__ *pData, size_t nLength )
+    {
+        if ( m_pStubData != NULL && m_pStubData->m_bFixedStub )
+        {
+                // Written into the fixed buffer (memmove: the text may come
+                // from the buffer itself).
+            if ( nLength > m_pStubData->m_nCapacity )
+            {
+                nLength = m_pStubData->m_nCapacity;
+            }
+            if ( nLength > 0 )
+            {
+                memmove( m_pStubData->m_strData, pData, nLength * sizeof( IASLibChar__ ) );
+            }
+            m_pStubData->ChangeSize( nLength );
+            return;
+        }
+
+        if ( nLength == 0 )
+        {
+            Release();
+            return;
+        }
+
+            // Make the new stub before letting go of the old one, which the
+            // text may be part of.
+        CStringStub *pNew = new CStringStub( pData, nLength );
+        pNew->AddRef();
+        Release();
+        m_pStubData = pNew;
+    }
+
+    void CString::Append( const IASLibChar__ *pData, size_t nLength )
+    {
+        if ( nLength == 0 )
+        {
+            return;
+        }
+
+        size_t nOld = GetLength();
+        if ( m_pStubData != NULL && pData >= m_pStubData->m_strData && pData < m_pStubData->m_strData + m_pStubData->m_nLength )
+        {
+                // Appending part of ourselves: the buffer may move.
+            std::string strCopy( pData, nLength );
+            Append( strCopy.data(), strCopy.size() );
+            return;
+        }
+
+        if ( nOld > (size_t)-1 - nLength - 1 )
+        {
+            throw std::bad_alloc();
+        }
+        IASLibChar__ *pBuffer = SetLength( nOld + nLength );
+        size_t nNew = GetLength();          // less, if a fixed buffer is full
+        if ( pBuffer != NULL && nNew > nOld )
+        {
+            memcpy( pBuffer + nOld, pData, ( nNew - nOld ) * sizeof( IASLibChar__ ) );
+        }
+    }
+
+    void CString::Reserve( size_t nCapacity )
+    {
+        if ( m_pStubData == NULL )
+        {
+            if ( nCapacity > 0 )
+            {
+                    // An empty string is normally stub-less; this one keeps
+                    // its stub so the room is there.
+                m_pStubData = new CStringStub( NULL, 0, nCapacity );
+                m_pStubData->AddRef();
+            }
+            return;
+        }
+        ChangeStub();
+        m_pStubData->Reserve( nCapacity );
+    }
+
+    void CString::Compact( void )
+    {
+        if ( m_pStubData == NULL )
+        {
+            return;
+        }
+        if ( m_pStubData->m_nLength == 0 && ! m_pStubData->m_bFixedStub )
+        {
+            Release();
+            return;
+        }
+        if ( ! m_pStubData->IsShared() )
+        {
+            m_pStubData->Compact();
+        }
     }
 
                 // Operator Methods
@@ -269,99 +510,43 @@ namespace IASLib
     CString::operator const IASLibChar__ *() const
     {
         if ( m_pStubData )
-            return (const IASLibChar__ *)m_pStubData->m_strData;
-        return (const IASLibChar__ *)"";
-    }
-
-            // Concatenation Operators (+) - Combines two strings
-    CString operator +( const CString &strSource1, const int nSource2 )
-    {
-        CString strReturn( (const IASLibChar__ *)strSource1 );
-        CString strTemp;
-        strTemp.Format( "%i", nSource2 );
-        strReturn += strTemp;
-
-        return strReturn;
-    }
-
-            // Concatenation Operators (+) - Combines two strings
-    CString operator +( const int nSource1, const CString &strSource2 )
-    {
-        CString strTemp;
-        strTemp.Format( "%i", nSource1 );
-        CString strReturn( strTemp );
-        strReturn += strSource2;
-        return strReturn;
-    }
-
-            // Concatenation Operators (+) - Combines two strings
-    CString operator +( const CString &strSource1, const long nSource2 )
-    {
-        CString strReturn( (const IASLibChar__ *)strSource1 );
-        CString strTemp;
-        strTemp.Format( "%ld", nSource2 );
-        strReturn += strTemp;
-
-        return strReturn;
-    }
-
-            // Concatenation Operators (+) - Combines two strings
-    CString operator +( const long nSource1, const CString &strSource2 )
-    {
-        CString strTemp;
-        strTemp.Format( "%ld", nSource1 );
-        CString strReturn( strTemp );
-        strReturn += strSource2;
-        return strReturn;
-    }
-
-            // Concatenation Operators (+) - Combines two strings
-    CString operator +( const CString &strSource1, const short nSource2 )
-    {
-        CString strReturn( (const IASLibChar__ *)strSource1 );
-        CString strTemp;
-        strTemp.Format( "%d", nSource2 );
-        strReturn += strTemp;
-
-        return strReturn;
-    }
-
-            // Concatenation Operators (+) - Combines two strings
-    CString operator +( const short nSource1, const CString &strSource2 )
-    {
-        CString strTemp;
-        strTemp.Format( "%d", nSource1 );
-        CString strReturn( strTemp );
-        strReturn += strSource2;
-        return strReturn;
+            return m_pStubData->m_strData;
+        return "";
     }
 
             // Concatenation Operators (+) - Combines two strings
     CString operator +( const CString &strSource1, const CString &strSource2 )
     {
-        CString strReturn( (const IASLibChar__ *)strSource1 );
+        CString strReturn;
+        strReturn.Reserve( strSource1.GetLength() + strSource2.GetLength() );
+        strReturn += strSource1;
         strReturn += strSource2;
         return strReturn;
     }
 
     CString operator +( const CString &strSource1, const IASLibChar__ *strSource2 )
     {
-        CString strReturn( (const IASLibChar__ *)strSource1 );
+        CString strReturn;
+        size_t nLength2 = TextLength( strSource2 );
+        strReturn.Reserve( strSource1.GetLength() + nLength2 );
+        strReturn += strSource1;
         strReturn += strSource2;
         return strReturn;
     }
 
     CString operator +( const IASLibChar__ *strSource1, const CString &strSource2 )
     {
-        CString strReturn( strSource1 );
+        CString strReturn;
+        size_t nLength1 = TextLength( strSource1 );
+        strReturn.Reserve( nLength1 + strSource2.GetLength() );
+        strReturn += strSource1;
         strReturn += strSource2;
         return strReturn;
     }
 
-
     CString operator +( const CString &strSource1, const IASLibChar__ chSource2 )
     {
-        CString strReturn( (const IASLibChar__ *)strSource1 );
+        CString strReturn( strSource1 );
         strReturn += chSource2;
         return strReturn;
     }
@@ -374,1834 +559,698 @@ namespace IASLib
         return strReturn;
     }
 
+#define IASLIB_STRING_NUMBER_OPERATORS__( TYPE, FORMAT ) \
+    CString operator +( const CString &strSource1, const TYPE nSource2 ) \
+    { \
+        std::string strNumber = FORMAT( nSource2 ); \
+        CString strReturn( strSource1 ); \
+        strReturn += strNumber.c_str(); \
+        return strReturn; \
+    } \
+    CString operator +( const TYPE nSource1, const CString &strSource2 ) \
+    { \
+        std::string strNumber = FORMAT( nSource1 ); \
+        CString strReturn( strNumber.c_str() ); \
+        strReturn += strSource2; \
+        return strReturn; \
+    } \
+    CString &CString::operator +=( const TYPE nSource ) \
+    { \
+        std::string strNumber = FORMAT( nSource ); \
+        Append( strNumber.data(), strNumber.size() ); \
+        return *this; \
+    } \
+    CString &CString::operator =( const TYPE nSource ) \
+    { \
+        std::string strNumber = FORMAT( nSource ); \
+        Assign( strNumber.data(), strNumber.size() ); \
+        return *this; \
+    }
+
+    IASLIB_STRING_NUMBER_OPERATORS__( short, FormatSigned )
+    IASLIB_STRING_NUMBER_OPERATORS__( int, FormatSigned )
+    IASLIB_STRING_NUMBER_OPERATORS__( unsigned int, FormatUnsigned )
+    IASLIB_STRING_NUMBER_OPERATORS__( long, FormatSigned )
+    IASLIB_STRING_NUMBER_OPERATORS__( unsigned long, FormatUnsigned )
+    IASLIB_STRING_NUMBER_OPERATORS__( long long, FormatSigned )
+    IASLIB_STRING_NUMBER_OPERATORS__( unsigned long long, FormatUnsigned )
+    IASLIB_STRING_NUMBER_OPERATORS__( double, FormatDouble )
+
+#undef IASLIB_STRING_NUMBER_OPERATORS__
+
                     // Concatenate / Assign - Concatenates the string onto the
                     // current string and assigns the result
     CString &CString::operator +=( const CString &strSource )
     {
-        if ( strSource.m_pStubData )
+        if ( strSource.m_pStubData == NULL || strSource.m_pStubData->m_nLength == 0 )
         {
-            if ( m_pStubData )
-            {
-                ChangeStub();
-                size_t nLength = m_pStubData->m_nLength;
-
-                if ( m_pStubData->m_bFixedStub )
-                {
-                    size_t nCopy = strSource.GetLength();
-                    size_t nTemp = nLength + nCopy;
-
-                    if ( nTemp > m_pStubData->m_nSize )
-                    {
-                        nCopy = (m_pStubData->m_nSize - nLength) - 1;
-                    }
-                    memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, nCopy );
-                    m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-                }
-                else
-                {
-                    m_pStubData->ChangeSize( nLength + strSource.GetLength() );
-                    memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, strSource.GetLength() );
-                    m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-                }
-            }
-            else
-            {
-                m_pStubData = strSource.m_pStubData;
-                m_pStubData->AddRef();
-            }
+            return *this;
         }
+        if ( m_pStubData == NULL )
+        {
+                // Nothing to add to: share the source's text.
+            return *this = strSource;
+        }
+        Append( strSource.m_pStubData->m_strData, strSource.m_pStubData->m_nLength );
         return *this;
     }
 
     CString &CString::operator +=( const IASLibChar__ *strSource )
     {
-        if ( strSource == NULL )
-            return *this;
-
-        if ( m_pStubData )
-        {
-            size_t nLen = strlen( strSource );
-            size_t nTemp = m_pStubData->m_nLength + nLen;
-            size_t nLength = m_pStubData->m_nLength;
-            if ( nTemp )
-            {
-                    // We need to create a new copy of the string (if it's used by more than one
-                    // CString object.
-                ChangeStub();
-                m_pStubData->ChangeSize( nTemp );
-
-                if ( m_pStubData->m_bFixedStub )
-                {
-                    size_t nCopy = nLen;
-
-                    if ( nTemp > m_pStubData->m_nLength )
-                    {
-                        nCopy = m_pStubData->m_nLength - nLength;
-                    }
-                    memcpy( m_pStubData->m_strData + nLength, strSource, nCopy );
-                    m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-                }
-                else
-                {
-                    memcpy( m_pStubData->m_strData + nLength, strSource, nLen );
-                    m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-                }
-            }
-        }
-        else
-        {
-            if ( strlen( strSource ) != 0 )
-            {
-                m_pStubData = new CStringStub( strSource, -1 );
-                m_pStubData->AddRef();
-            }
-        }
-
-        // The combined lengths could only be zero if we're concatenating two empty strings,
-        // thus, they're still empty, and no change has occured.
-
+        Append( strSource, TextLength( strSource ) );
         return *this;
     }
 
     CString &CString::operator +=( const IASLibChar__ chSource )
     {
-        if ( chSource == 0 )
+        if ( chSource != 0 )
         {
-            return *this;
+            Append( &chSource, 1 );
         }
-
-        if ( ! m_pStubData  )
-        {
-            m_pStubData = new CStringStub( 1 );
-            m_pStubData->AddRef();
-            if ( m_pStubData->m_strData )
-            {
-                m_pStubData->m_strData[0] = chSource;
-                m_pStubData->m_strData[1] = 0;
-            }
-        }
-        else
-        {
-            size_t nLength = m_pStubData->m_nLength;
-            ChangeStub();
-            m_pStubData->ChangeSize( nLength + 1 );
-
-            if ( m_pStubData->m_nLength > nLength )
-            {
-                m_pStubData->m_strData[ nLength ] = chSource;
-                m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-            }
-        }
-
-        return *this;
-    }
-
-    CString &CString::operator +=( const int nSource )
-    {
-        CString strSource;
-        strSource.Format( "%i", nSource );
-
-        if ( ! m_pStubData  )
-        {
-            *this = strSource;
-        }
-        else
-        {
-            size_t nLength = m_pStubData->m_nLength;
-            ChangeStub();
-            m_pStubData->ChangeSize( nLength + strSource.m_pStubData->m_nLength );
-            if ( m_pStubData->m_bFixedStub )
-            {
-                size_t nCopy = m_pStubData->m_nLength - nLength;
-
-                if ( strSource.m_pStubData->m_nLength < nCopy )
-                    nCopy = strSource.m_pStubData->m_nLength;
-                memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, nCopy );
-            }
-            else
-            {
-                memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, strSource.m_pStubData->m_nLength );
-                m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-            }
-        }
-
-        return *this;
-    }
-
-    CString &CString::operator +=( const long nSource )
-    {
-        CString strSource;
-        strSource.Format( "%ld", nSource );
-
-        if ( ! m_pStubData  )
-        {
-            *this = strSource;
-        }
-        else
-        {
-            size_t nLength = m_pStubData->m_nLength;
-            ChangeStub();
-            m_pStubData->ChangeSize( nLength + strSource.m_pStubData->m_nLength );
-            if ( m_pStubData->m_bFixedStub )
-            {
-                size_t nCopy = m_pStubData->m_nLength - nLength;
-
-                if ( strSource.m_pStubData->m_nLength < nCopy )
-                    nCopy = strSource.m_pStubData->m_nLength;
-                memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, nCopy );
-            }
-            else
-            {
-                memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, strSource.m_pStubData->m_nLength );
-                m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-            }
-        }
-
-        return *this;
-    }
-
-    CString &CString::operator +=( const short nSource )
-    {
-        CString strSource;
-        strSource.Format( "%d", nSource );
-
-        if ( ! m_pStubData )
-        {
-            *this = strSource;
-        }
-        else
-        {
-            size_t nLength = m_pStubData->m_nLength;
-            ChangeStub();
-            m_pStubData->ChangeSize( nLength + strSource.m_pStubData->m_nLength );
-            if ( m_pStubData->m_bFixedStub )
-            {
-                size_t nCopy = m_pStubData->m_nLength - nLength;
-
-                if ( strSource.m_pStubData->m_nLength < nCopy )
-                    nCopy = strSource.m_pStubData->m_nLength;
-                memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, nCopy );
-            }
-            else
-            {
-                memcpy( m_pStubData->m_strData + nLength, strSource.m_pStubData->m_strData, strSource.m_pStubData->m_nLength );
-                m_pStubData->m_strData[ m_pStubData->m_nLength ] = 0;
-            }
-        }
-
         return *this;
     }
 
                     // Assignment Operators (=) - Assigns a string
     CString &CString::operator =( const CString &strSource )
     {
-        if ( this != &strSource )
+        if ( this == &strSource || m_pStubData == strSource.m_pStubData )
         {
-            if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-            {
-                m_pStubData->ChangeSize( strSource.m_pStubData->m_nLength );
-                memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-            }
-            else
-            {
-                if ( m_pStubData )
-                    m_pStubData->RemoveRef();
-                m_pStubData = strSource.m_pStubData;
-
-                if ( m_pStubData )
-                    m_pStubData->AddRef();
-            }
+            return *this;
         }
 
+        if ( m_pStubData != NULL && m_pStubData->m_bFixedStub )
+        {
+                // A fixed string keeps its buffer and takes a copy.
+            Assign( strSource.c_str(), strSource.GetLength() );
+            return *this;
+        }
+
+        if ( strSource.m_pStubData != NULL )
+        {
+            strSource.m_pStubData->AddRef();
+        }
+        Release();
+        m_pStubData = strSource.m_pStubData;
+        return *this;
+    }
+
+    CString &CString::operator =( CString &&strSource )
+    {
+        if ( this == &strSource )
+        {
+            return *this;
+        }
+        if ( ( m_pStubData != NULL && m_pStubData->m_bFixedStub ) ||
+             ( strSource.m_pStubData != NULL && strSource.m_pStubData->m_bFixedStub ) )
+        {
+            return *this = (const CString &)strSource;
+        }
+        Release();
+        m_pStubData = strSource.m_pStubData;
+        strSource.m_pStubData = NULL;
         return *this;
     }
 
     CString &CString::operator =( const IASLibChar__ *strSource )
     {
-        if ( strSource )
-        {
-            if ( (m_pStubData) && ( m_pStubData->m_strData != strSource ) )
-            {
-                if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-                {
-                    m_pStubData->ChangeSize( (int)strlen( strSource ) );
-                    memcpy( m_pStubData->m_strData, strSource, m_pStubData->m_nLength );
-                }
-                else
-                {
-                    if ( m_pStubData )
-                        m_pStubData->RemoveRef();
-                    m_pStubData = new CStringStub( strSource, (int)strlen( strSource ) );
-                    m_pStubData->AddRef();
-                }
-            }
-            else
-            {
-                if ( ! m_pStubData )
-                {
-                    m_pStubData = new CStringStub( strSource, (int)strlen( strSource ) );
-                    m_pStubData->AddRef();
-                }
-            }
-        }
-        else
-        {
-            if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-            {
-                m_pStubData->ChangeSize( 0 );
-            }
-            else
-            {
-                if ( m_pStubData )
-                    m_pStubData->RemoveRef();
-                m_pStubData = NULL;
-            }
-        }
-
+        Assign( strSource, TextLength( strSource ) );
         return *this;
     }
 
     CString &CString::operator =( const IASLibChar__ chSource )
     {
-        if ( chSource != '\0' )
-        {
-            if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-            {
-                m_pStubData->ChangeSize( 1 );
-                m_pStubData->m_strData[0] = chSource;
-            }
-            else
-            {
-                IASLibChar__ strTemp[2];
-                strTemp[0] = chSource;
-                strTemp[1] = 0;
-
-                if ( m_pStubData )
-                {
-                    m_pStubData->RemoveRef();
-                }
-
-                m_pStubData = new CStringStub( strTemp, 1 );
-                m_pStubData->AddRef();
-            }
-        }
-        else
-        {
-            if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-            {
-                m_pStubData->ChangeSize( 0 );
-            }
-            else
-            {
-                if ( m_pStubData )
-                    m_pStubData->RemoveRef();
-                m_pStubData = NULL;
-            }
-        }
-
+        Assign( &chSource, ( chSource != 0 ) ? 1 : 0 );
         return *this;
     }
 
-    CString &CString::operator =( const unsigned int nSource )
+    CString &CString::operator =( const float fSource )
     {
-        CString strSource;
-        strSource.Format( "%u", nSource );
-
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( strSource.GetLength() );
-            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = strSource.m_pStubData;
-            m_pStubData->AddRef();
-        }
-        return *this;
-    }
-
-    CString &CString::operator =( const int nSource )
-    {
-        CString strSource;
-        strSource.Format( "%i", nSource );
-
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( strSource.GetLength() );
-            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = strSource.m_pStubData;
-            m_pStubData->AddRef();
-        }
-        return *this;
-    }
-
-    CString &CString::operator =( const long nSource )
-    {
-        CString strSource;
-        strSource.Format( "%ld", nSource );
-
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( strSource.GetLength() );
-            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = strSource.m_pStubData;
-            m_pStubData->AddRef();
-        }
-        return *this;
-    }
-
-    CString &CString::operator =( const short nSource )
-    {
-        CString strSource;
-        strSource.Format( "%d", nSource );
-
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( strSource.GetLength() );
-            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = strSource.m_pStubData;
-            m_pStubData->AddRef();
-        }
-        return *this;
-    }
-
-    CString &CString::operator =( const float nSource )
-    {
-        CString strSource;
-        strSource.Format( "%f", (double)nSource );
-
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( strSource.GetLength() );
-            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = strSource.m_pStubData;
-            m_pStubData->AddRef();
-        }
-        return *this;
-    }
-
-    CString &CString::operator =( const double nSource )
-    {
-        CString strSource;
-        strSource.Format( "%f", nSource );
-
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( strSource.GetLength() );
-            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = strSource.m_pStubData;
-            m_pStubData->AddRef();
-        }
+        std::string strNumber = FormatFloat( fSource );
+        Assign( strNumber.data(), strNumber.size() );
         return *this;
     }
 
     CString &CString::operator =( const bool bSource )
     {
-        CString strSource;
-        strSource = ( bSource ) ? "true" : "false";
-
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( strSource.GetLength() );
-            memcpy( m_pStubData->m_strData, strSource.m_pStubData->m_strData, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = strSource.m_pStubData;
-            m_pStubData->AddRef();
-        }
-        return *this;
+        return *this = ( bSource ) ? "true" : "false";
     }
 
-
-        // Equality Operators (==) - Compare a string
-    bool CString::operator ==( const CString &strString )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), (const IASLibChar__ *)strString ) == 0 )
-            return true;
-        return false;
-    }
-
-    bool CString::operator ==( const IASLibChar__ *strString2 )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), strString2 ) == 0 )
-            return true;
-        return false;
-    }
-
-    bool operator ==( IASLibChar__ *strString1, const CString &strString2 )
-    {
-        if ( strcmp( strString1, strString2 ) == 0 )
-            return true;
-        return false;
-    }
-
-
-                            // Inequality Operators (!=) - Compare a string
-    bool CString::operator !=( const CString &strString )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), (const IASLibChar__ *)strString ) == 0 )
-            return false;
-        return true;
-    }
-
-    bool CString::operator !=( const IASLibChar__ *strString2 )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), strString2 ) != 0 )
-            return true;
-        return false;
-    }
-
-    bool operator !=( IASLibChar__ *strString1, const CString &strString2 )
-    {
-        if ( strcmp( strString1, strString2 ) != 0 )
-            return true;
-        return false;
-    }
-
-
-                            // Greater than / Equal To Operators (>=) - Compare a string
-    bool CString::operator >=( const CString &strString )
-    {
-        if ( m_pStubData )
-        {
-            if ( strcmp( m_pStubData->m_strData, strString ) >= 0 )
-                return true;
-        }
-        else
-        {
-            if ( strString.GetLength() == 0 )
-                return true;
-        }
-        return false;
-    }
-
-    bool CString::operator >=( const IASLibChar__ *strString2 )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), strString2 ) >= 0 )
-            return true;
-        return false;
-    }
-
-    bool operator >=( IASLibChar__ *strString1, const CString &strString2 )
-    {
-        if ( strcmp( strString1, strString2 ) >= 0 )
-            return true;
-        return false;
-    }
-
-                            // Less than / Equal To Operators (<=) - Compare a string
-    bool CString::operator <=( const CString &strString )
-    {
-        if ( m_pStubData )
-        {
-            if ( strcmp( m_pStubData->m_strData, strString ) <= 0 )
-                return true;
-        }
-        else
-        {
-            if ( strString.GetLength() == 0 )
-                return true;
-        }
-        return false;
-    }
-
-    bool CString::operator <=( const IASLibChar__ *strString2 )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), strString2 ) <= 0 )
-            return true;
-        return false;
-    }
-
-    bool operator <=( IASLibChar__ *strString1, const CString &strString2 )
-    {
-        if ( strcmp( strString1, strString2 ) <= 0 )
-            return true;
-        return false;
-    }
-
-                            // Greater than Operators (>) - Compare a string
-    bool CString::operator >( const CString &strString )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), strString ) > 0 )
-            return true;
-        return false;
-    }
-
-    bool CString::operator >( const IASLibChar__ *strString2 )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), strString2 ) > 0 )
-            return true;
-        return false;
-    }
-
-    bool operator >( IASLibChar__ *strString1, const CString &strString2 )
-    {
-        if ( strcmp( strString1, strString2 ) > 0 )
-            return true;
-        return false;
-    }
-
-
-                            // Less than Operators (<) - Compare a string
-    bool CString::operator <( const CString &strString )
-    {
-        if ( m_pStubData )
-        {
-            if ( strcmp( (const IASLibChar__ *)(*this), strString ) < 0 )
-                return true;
-        }
-        return false;
-    }
-
-    bool CString::operator <( const IASLibChar__ *strString2 )
-    {
-        if ( strcmp( (const IASLibChar__ *)(*this), strString2 ) < 0 )
-            return true;
-        return false;
-    }
-
-    bool operator <( IASLibChar__ *strString1, const CString &strString2 )
-    {
-        if ( strcmp( strString1, strString2 ) < 0 )
-            return true;
-        return false;
-    }
-
-
-            // Lexical Comparison - Compares two strings and returns
-            // 0 if equal, -1 if this is less than the comparison, and
-            // +1 if this is greater than the comparison.
+            // Lexical Comparison
     int CString::Compare( const CString &strCompare, bool bCaseSensitive ) const
     {
-        if ( bCaseSensitive )
+        if ( m_pStubData == strCompare.m_pStubData )
         {
-            if ( m_pStubData )
-            {
-                return strcmp( m_pStubData->m_strData, strCompare );
-            }
-            else
-            {
-                if ( ( strCompare.m_pStubData == NULL ) || ( strCompare. m_pStubData->m_nLength == 0 ) )
-                    return 0;
-
-                    // A Zero length string is always less than any non-zero length string
-                return -1;
-            }
+            return 0;
         }
-        else
-        {
-            CString strTemp1 = (const IASLibChar__ *)(*this);
-            CString strTemp2 = (const IASLibChar__ *)strCompare;
-            strTemp1.ToUpperCase();
-            strTemp2.ToUpperCase();
-
-            if ( strTemp1.m_pStubData )
-            {
-                return strcmp( strTemp1. m_pStubData->m_strData, strTemp2 );
-            }
-            else
-            {
-                if ( ( strTemp2.m_pStubData == NULL ) || ( strTemp2. m_pStubData->m_nLength == 0 ) )
-                    return 0;
-
-                    // A Zero length string is always less than any non-zero length string
-                return -1;
-            }
-        }
+        return CompareText( c_str(), GetLength(), strCompare.c_str(), strCompare.GetLength(), bCaseSensitive );
     }
 
     int CString::Compare( const IASLibChar__ *strCompare, bool bCaseSensitive ) const
     {
-        if ( bCaseSensitive )
-        {
-            if ( ( strCompare ) && ( m_pStubData ) )
-            {
-                return strcmp( m_pStubData->m_strData, strCompare );
-            }
-            else
-            {
-                if ( ( strCompare == NULL ) || ( strlen( strCompare ) == 0 ) )
-                    return 0;
-
-                    // A Zero length string is always less than any non-zero length string
-                return -1;
-            }
-        }
-        else
-        {
-            CString strTemp1 = (const IASLibChar__ *)(*this);
-            CString strTemp2 = (const IASLibChar__ *)strCompare;
-            strTemp1.ToUpperCase();
-            strTemp2.ToUpperCase();
-
-            if ( strTemp1.m_pStubData )
-            {
-                return strcmp( strTemp1.m_pStubData->m_strData, (const IASLibChar__ *)strTemp2 );
-            }
-            else
-            {
-                if ( ( ! strTemp2.m_pStubData ) || ( strTemp2.m_pStubData->m_nLength == 0 ) )
-                    return 0;
-
-                    // A Zero length string is always less than any non-zero length string
-                return -1;
-            }
-        }
+        return CompareText( c_str(), GetLength(), ( strCompare != NULL ) ? strCompare : "", TextLength( strCompare ), bCaseSensitive );
     }
 
-            // Array Access Operator - Allows us to access the characters
-            // of the string as if they were a IASLibChar__[] buffer.
-    IASLibChar__ &CString::operator []( size_t nIndex ) const
+            // Array Access Operators
+    IASLibChar__ CString::operator []( size_t nIndex ) const
     {
-        static IASLibChar__ chDummy;
-
-        if ( (m_pStubData) && ( (size_t)nIndex < m_pStubData->m_nLength ) )
-            return m_pStubData->m_strData[ (size_t)nIndex ];
-
-        chDummy = '\0';
-        return chDummy;
-    }
-
-            // Array Access Operator - Allows us to access the characters
-            // of the string as if they were a char[] buffer.
-    IASLibChar__ &CString::operator []( int nIndex ) const
-    {
-        static IASLibChar__ chDummy;
-
-        if ( (m_pStubData) && ( nIndex >= 0 ) && ( (size_t)nIndex < m_pStubData->m_nLength ) )
+        if ( m_pStubData != NULL && nIndex < m_pStubData->m_nLength )
             return m_pStubData->m_strData[ nIndex ];
+        return '\0';
+    }
 
-        chDummy = '\0';
-        return chDummy;
+    IASLibChar__ CString::operator []( int nIndex ) const
+    {
+        if ( nIndex < 0 )
+            return '\0';
+        return (*this)[ (size_t)nIndex ];
+    }
+
+    IASLibChar__ &CString::operator []( size_t nIndex )
+    {
+        if ( m_pStubData != NULL && nIndex < m_pStubData->m_nLength )
+        {
+            ChangeStub();
+            return m_pStubData->m_strData[ nIndex ];
+        }
+
+            // Past the end: somewhere harmless to read or write.
+        static thread_local IASLibChar__ chScratch;
+        chScratch = '\0';
+        return chScratch;
+    }
+
+    IASLibChar__ &CString::operator []( int nIndex )
+    {
+        return (*this)[ ( nIndex < 0 ) ? (size_t)-1 : (size_t)nIndex ];
     }
 
                 // Standard Methods
 
-            // Get a sub-string of the string
     CString CString::Substring( size_t nStartIndex, int nLength ) const
     {
-        size_t nFixedLength;
-
-        if ( m_pStubData )
+        size_t nTotal = GetLength();
+        if ( nStartIndex >= nTotal || nLength == 0 )
         {
-            if (  nStartIndex < m_pStubData->m_nLength )
-            {
-                if ( ( nLength == - 1 ) || ( nLength > (int)((int) m_pStubData->m_nLength - (int)nStartIndex ) ) )
-                {
-                    nFixedLength = m_pStubData->m_nLength - nStartIndex;
-                }
-                else
-                {
-                    nFixedLength = (size_t)nLength;
-                }
-
-                CString strReturn( m_pStubData->m_strData + nStartIndex, nFixedLength );
-                return strReturn;
-            }
+            return CString();
         }
-        CString strEmpty;
 
-        return strEmpty;
+        size_t nAvailable = nTotal - nStartIndex;
+        size_t nCount = ( nLength < 0 || (size_t)nLength > nAvailable ) ? nAvailable : (size_t)nLength;
+        if ( nStartIndex == 0 && nCount == nTotal )
+        {
+            return *this;
+        }
+        return CString( m_pStubData->m_strData + nStartIndex, nCount );
     }
 
-            // Convert a string to upper case
     void CString::ToUpperCase( void )
     {
-        size_t nCount;
-
         if ( m_pStubData )
         {
             ChangeStub();
-
-            for (nCount = 0; nCount < m_pStubData->m_nLength; nCount++ )
+            for ( size_t nCount = 0; nCount < m_pStubData->m_nLength; nCount++ )
             {
-                if ( islower( m_pStubData->m_strData[ nCount ] ) )
-                {
-                    m_pStubData->m_strData[ nCount ] = (IASLibChar__)toupper( m_pStubData->m_strData[ nCount ] );
-                }
+                m_pStubData->m_strData[ nCount ] = (IASLibChar__)Upper( m_pStubData->m_strData[ nCount ] );
             }
         }
     }
 
-            // Convert a string to lower case
     void CString::ToLowerCase( void )
     {
-        size_t nCount;
-
         if ( m_pStubData )
         {
             ChangeStub();
-
-            for (nCount = 0; nCount < m_pStubData->m_nLength; nCount++ )
+            for ( size_t nCount = 0; nCount < m_pStubData->m_nLength; nCount++ )
             {
-                if ( isupper( m_pStubData->m_strData[ nCount ] ) )
-                {
-                    m_pStubData->m_strData[ nCount ] = (IASLibChar__)tolower( m_pStubData->m_strData[ nCount ] );
-                }
+                m_pStubData->m_strData[ nCount ] = (IASLibChar__)Lower( m_pStubData->m_strData[ nCount ] );
             }
         }
     }
 
-            // Convert a string to Hexadecimal (Used for Oracle)
     void CString::ToHex( void )
     {
-        static const IASLibChar__ *strHex = "0123456789ABCDEF";
-        size_t nCount;
-
-        if ( m_pStubData )
+        size_t nLength = GetLength();
+        if ( nLength == 0 )
         {
-            ChangeStub();
-
-            size_t nLength = m_pStubData->m_nLength;
-
-            m_pStubData->ChangeSize( nLength * 2 );
-
-            for (nCount = nLength; nCount != NOT_FOUND; nCount-- )
-            {
-               m_pStubData->m_strData[ nCount * 2 + 1 ] = strHex[ m_pStubData->m_strData[ nCount ] % 16 ];
-               m_pStubData->m_strData[ nCount * 2 ]     = strHex[ m_pStubData->m_strData[ nCount ] / 16 ];
-            }
+            return;
         }
+
+        std::string strHex;
+        strHex.reserve( nLength * 2 );
+        for ( size_t nCount = 0; nCount < nLength; nCount++ )
+        {
+            unsigned char ch = Byte( m_pStubData->m_strData[ nCount ] );
+            strHex += HEX_DIGITS[ ch >> 4 ];
+            strHex += HEX_DIGITS[ ch & 0x0F ];
+        }
+        Assign( strHex.data(), strHex.size() );
     }
 
-            // Convert a string From Hexadecimal (Used for Oracle)
     void CString::FromHex( void )
     {
-        size_t nCount;
-
-        if ( m_pStubData )
+        size_t nLength = GetLength();
+        if ( nLength == 0 )
         {
-            ChangeStub();
-
-            size_t nLength = m_pStubData->m_nLength;
-
-            for (nCount = 0; nCount < ( nLength / 2 ); nCount++ )
-            {
-               IASLibChar__ chTempLow = (IASLibChar__)(m_pStubData->m_strData[ nCount * 2 + 1 ]);
-               IASLibChar__ chTempHigh = m_pStubData->m_strData[ nCount * 2 ];
-
-               if ( ( chTempLow >= '0' ) && ( chTempLow <= '9' ) )
-               {
-                  chTempLow = chTempLow - '0';
-               }
-               else
-               {
-                  if ( ( chTempLow >= 'A' ) && ( chTempLow <= 'F' ) )
-                  {
-                     chTempLow = 10 + ( chTempLow - 'A' );
-                  }
-                  else
-                  {
-                     if ( ( chTempLow >= 'a' ) && ( chTempLow <= 'f' ) )
-                     {
-                        chTempLow = 10 + ( chTempLow - 'a' );
-                     }
-                     else
-                     {
-                        chTempLow = 0;
-                     }
-                  }
-               }
-
-               if ( ( chTempHigh >= '0' ) && ( chTempHigh <= '9' ) )
-               {
-                  chTempHigh = chTempHigh - '0';
-               }
-               else
-               {
-                  if ( ( chTempHigh >= 'A' ) && ( chTempHigh <= 'F' ) )
-                  {
-                     chTempHigh = 10 + ( chTempHigh - 'A' );
-                  }
-                  else
-                  {
-                     if ( ( chTempHigh >= 'a' ) && ( chTempHigh <= 'f' ) )
-                     {
-                        chTempHigh = 10 + ( chTempHigh - 'a' );
-                     }
-                     else
-                     {
-                        chTempHigh = 0;
-                     }
-                  }
-               }
-
-               m_pStubData->m_strData[ nCount ] = chTempLow + ( chTempHigh * 16 );
-               if ( m_pStubData->m_strData[ nCount ] == 0 )
-               {
-                  m_pStubData->m_strData[ nCount ] = '?';
-               }
-            }
-
-            m_pStubData->ChangeSize( nLength / 2 );
+            return;
         }
+
+        std::string strBytes;
+        strBytes.reserve( nLength / 2 );
+        for ( size_t nCount = 0; nCount + 1 < nLength; nCount += 2 )
+        {
+            int nHigh = HexDigit( m_pStubData->m_strData[ nCount ] );
+            int nLow = HexDigit( m_pStubData->m_strData[ nCount + 1 ] );
+            int nByte = ( ( nHigh < 0 ) ? 0 : nHigh ) * 16 + ( ( nLow < 0 ) ? 0 : nLow );
+            strBytes += ( nByte != 0 ) ? (char)nByte : '?';
+        }
+        Assign( strBytes.data(), strBytes.size() );
     }
 
-            // Trim leading white-space from a string
     CString &CString::LeftTrim( const IASLibChar__ *pszWhiteSpace )
     {
-        if ( m_pStubData )
-        {
-            CString strWhiteSpace = pszWhiteSpace;
+        if ( pszWhiteSpace == NULL )
+            pszWhiteSpace = DEFAULT_WHITESPACE;
 
-            size_t nCount;
+        size_t nLength = GetLength();
+        size_t nStart = 0;
+        while ( nStart < nLength && strchr( pszWhiteSpace, m_pStubData->m_strData[ nStart ] ) != NULL )
+            nStart++;
 
-            for (nCount = 0; ( nCount < 65535 ) && ( nCount < m_pStubData->m_nLength ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount++ );
-
-            if ( nCount != 0 )
-            {
-                *this = Substring( nCount );
-            }
-        }
+        if ( nStart > 0 )
+            Assign( m_pStubData->m_strData + nStart, nLength - nStart );
         return *this;
     }
 
-            // Trim trailing white-space from a string
     CString &CString::RightTrim( const IASLibChar__ *pszWhiteSpace )
     {
-        if ( m_pStubData )
-        {
-            CString strWhiteSpace = pszWhiteSpace;
+        if ( pszWhiteSpace == NULL )
+            pszWhiteSpace = DEFAULT_WHITESPACE;
 
-            size_t nCount;
+        size_t nLength = GetLength();
+        size_t nEnd = nLength;
+        while ( nEnd > 0 && strchr( pszWhiteSpace, m_pStubData->m_strData[ nEnd - 1 ] ) != NULL )
+            nEnd--;
 
-            for ( nCount = m_pStubData->m_nLength - 1;( nCount != NOT_FOUND ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount-- );
-
-            if ( nCount != NOT_FOUND )
-            {
-                if ( nCount != (m_pStubData->m_nLength - 1) )
-                {
-                    *this = Substring( 0, (int)nCount + 1 );
-                }
-            }
-            else
-            {
-                *this = "";
-            }
-        }
+        if ( nEnd < nLength )
+            SetLength( nEnd );
         return *this;
     }
 
-        // Trim leading/trailing white-space from a string
     CString &CString::Trim( const IASLibChar__ *pszWhiteSpace )
     {
-        if ( m_pStubData )
-        {
-            CString strWhiteSpace = pszWhiteSpace;
-
-            size_t nCount;
-
-            for (nCount = 0; ( nCount < 65535 ) && ( nCount < m_pStubData->m_nLength ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount++ );
-
-            if ( nCount != 0 )
-            {
-                *this = Substring( nCount );
-            }
-
-            if ( ! m_pStubData )
-                return *this;
-
-            for ( nCount = m_pStubData->m_nLength - 1;( nCount != NOT_FOUND ) && ( strWhiteSpace.IndexOf( m_pStubData->m_strData[ nCount ] ) != IASLib::NOT_FOUND ); nCount-- );
-
-            if ( nCount != (m_pStubData->m_nLength - 1) )
-            {
-                *this = Substring( 0, (int)nCount + 1 );
-            }
-        }
-        return *this;
+        RightTrim( pszWhiteSpace );
+        return LeftTrim( pszWhiteSpace );
     }
 
-            // Assign this string to a printf formatted string
     const IASLibChar__ *CString::Format( const IASLibChar__ *strFormat, ... )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        mutexStringProtect.Lock();
-#endif
-        va_list       vaArgList;
-        static IASLibChar__   szBuffer[65536];
-
-        /* format buf using fmt and arguments contained in ap */
+        va_list vaArgList;
         va_start( vaArgList, strFormat );
-#ifdef IASLIB_WIN32__
-        StringCbVPrintf( szBuffer, 65536, strFormat, vaArgList );
-#else
-        vsnprintf( szBuffer, 65536, strFormat, vaArgList );
-#endif
+        std::string strText = FormatV( strFormat, vaArgList );
         va_end( vaArgList );
 
-        if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->ChangeSize( (int)strlen( szBuffer ) );
-            memcpy( m_pStubData->m_strData, szBuffer, m_pStubData->m_nLength );
-        }
-        else
-        {
-            if ( m_pStubData )
-            {
-                m_pStubData->RemoveRef();
-            }
-
-            m_pStubData = new CStringStub( szBuffer, -1 );
-            m_pStubData->AddRef();
-        }
-
-#ifdef IASLIB_MULTI_THREADED__
-        mutexStringProtect.Unlock();
-#endif
-        return m_pStubData->m_strData;
+        Assign( strText.data(), strText.size() );
+        return c_str();
     }
 
-            // Find the occurance of a substring in a string
+    CString CString::FormatString( const char *strFormat, ... )
+    {
+        va_list vaArgList;
+        va_start( vaArgList, strFormat );
+        std::string strText = FormatV( strFormat, vaArgList );
+        va_end( vaArgList );
+
+        return CString( strText.data(), strText.size() );
+    }
+
+            // Searching
     size_t CString::IndexOf( const CString &strSearch, size_t nStart, bool bCaseInsensitive ) const
     {
-        return IndexOf( (const IASLibChar__ *)strSearch, nStart, bCaseInsensitive );
+        return FindText( c_str(), GetLength(), strSearch.c_str(), strSearch.GetLength(), ( nStart == NOT_FOUND ) ? 0 : nStart, ! bCaseInsensitive );
     }
 
     size_t CString::IndexOf( const IASLibChar__ *strSearch, size_t nStart, bool bCaseInsensitive ) const
     {
-        size_t     nReturn = IASLib::NOT_FOUND;
-
-        if ( m_pStubData )
-        {
-            if ( m_pStubData->m_strData )
-            {
-                if ( nStart == IASLib::NOT_FOUND )
-                {
-                    nStart = 0;
-                }
-
-                if ( nStart > m_pStubData->m_nLength )
-                {
-                    nStart = m_pStubData->m_nLength;
-                }
-
-                IASLibChar__ *pFound;
-
-                if ( bCaseInsensitive )
-                {
-                    CString strCopy = m_pStubData->m_strData;
-                    CString strSearchCopy = strSearch;
-
-                    strCopy.ToLowerCase();
-                    strSearchCopy.ToLowerCase();
-                    pFound = strstr( &(strCopy.m_pStubData->m_strData[nStart] ), (const IASLibChar__ *)strSearchCopy );
-                    if ( pFound != NULL )
-                    {
-                        nReturn = (size_t)(pFound - strCopy.m_pStubData->m_strData);
-                    }
-                }
-                else
-                {
-                    pFound = strstr( &(m_pStubData->m_strData[nStart] ), strSearch );
-                    if ( pFound != NULL )
-                    {
-                        nReturn = (size_t)(pFound - m_pStubData->m_strData);
-                    }
-                }
-            }
-        }
-
-        return nReturn;
+        if ( strSearch == NULL )
+            return NOT_FOUND;
+        return FindText( c_str(), GetLength(), strSearch, strlen( strSearch ), ( nStart == NOT_FOUND ) ? 0 : nStart, ! bCaseInsensitive );
     }
 
     size_t CString::IndexOf( const IASLibChar__ chSearch, size_t nStart, bool bCaseInsensitive ) const
     {
-        size_t nCount = IASLib::NOT_FOUND;
-        IASLibChar__ chMatch;
-
-        if ( m_pStubData )
-        {
-            if ( nStart == IASLib::NOT_FOUND )
-                nStart = 0;
-
-            if ( bCaseInsensitive )
-            {
-                chMatch = (IASLibChar__)toupper( chSearch );
-
-                for ( nCount = nStart; ( nCount < m_pStubData->m_nLength ) && ( toupper( m_pStubData->m_strData[ nCount ] ) != chMatch ); nCount++ );
-            }
-            else
-            {
-                for ( nCount = nStart; ( nCount < m_pStubData->m_nLength ) && ( m_pStubData->m_strData[ nCount ] != chSearch ); nCount++ );
-            }
-            if ( nCount == m_pStubData->m_nLength )
-                nCount = IASLib::NOT_FOUND;
-        }
-        return nCount;
+        if ( chSearch == 0 )
+            return NOT_FOUND;
+        return FindText( c_str(), GetLength(), &chSearch, 1, ( nStart == NOT_FOUND ) ? 0 : nStart, ! bCaseInsensitive );
     }
 
     size_t CString::LastIndexOf( const CString &strSearch, size_t nStart, bool bCaseInsensitive ) const
     {
-        return LastIndexOf( (const IASLibChar__ *)strSearch, nStart, bCaseInsensitive );
+        return LastIndexOf( strSearch.c_str(), nStart, bCaseInsensitive );
     }
 
-    size_t CString::LastIndexOf( const IASLibChar__ *strSearch, size_t nStart,  bool bCaseInsensitive ) const
+    size_t CString::LastIndexOf( const IASLibChar__ *strSearch, size_t nStart, bool bCaseInsensitive ) const
     {
-        size_t     nReturn = IASLib::NOT_FOUND;
-        IASLibChar__   *pLast;
-        IASLibChar__   *pFound;
-        size_t     pPos = IASLib::NOT_FOUND;
+        if ( strSearch == NULL )
+            return NOT_FOUND;
 
-        if ( m_pStubData )
+        size_t nLength = GetLength();
+        size_t nSearch = strlen( strSearch );
+        if ( nSearch > nLength )
+            return NOT_FOUND;
+
+        size_t nPos = nLength - nSearch;
+        if ( nStart < nPos )
+            nPos = nStart;
+
+        const IASLibChar__ *pText = c_str();
+        for ( ;; nPos-- )
         {
-            pFound = m_pStubData->m_strData;
-            if ( ( nStart > m_pStubData->m_nLength ) || ( nStart == IASLib::NOT_FOUND ) )
-            {
-                nStart = m_pStubData->m_nLength;
-            }
-
-            if ( m_pStubData->m_strData )
-            {
-
-                if ( bCaseInsensitive )
-                {
-                    CString strCopy = m_pStubData->m_strData;
-                    CString strSearchCopy = strSearch;
-                    strCopy.ToLowerCase();
-                    strSearchCopy.ToLowerCase();
-                    pFound = strCopy.m_pStubData->m_strData;
-                    do
-                    {
-                        pLast = pFound;
-                        pFound = strstr( pLast + 1, (const IASLibChar__ *)strSearchCopy );
-
-                        if ( pFound )
-                            pPos = (size_t)(pFound - strCopy.m_pStubData->m_strData);
-
-                    } while ( ( pFound ) && (pPos != NOT_FOUND) && ( pPos < nStart ) );
-
-                    if ( pLast != strCopy.m_pStubData->m_strData )
-                    {
-                        nReturn = (size_t)(pLast - strCopy.m_pStubData->m_strData);
-                    }
-                }
-                else
-                {
-                    do
-                    {
-                        pLast = pFound;
-                        pFound = strstr( pLast + 1, strSearch );
-
-                        if ( pFound )
-                            pPos = (int)(pFound - m_pStubData->m_strData);
-
-                    } while ( ( pFound ) && ( pPos < nStart ) );
-
-                    if ( pLast != m_pStubData->m_strData )
-                    {
-                        nReturn = (int)(pLast - m_pStubData->m_strData);
-                    }
-                }
-            }
+            if ( SameText( pText + nPos, strSearch, nSearch, ! bCaseInsensitive ) )
+                return nPos;
+            if ( nPos == 0 )
+                break;
         }
-
-        return nReturn;
+        return NOT_FOUND;
     }
 
-    size_t CString::LastIndexOf( const IASLibChar__ chSearch, size_t nStart,  bool bCaseInsensitive ) const
+    size_t CString::LastIndexOf( const IASLibChar__ chSearch, size_t nStart, bool bCaseInsensitive ) const
     {
-        size_t nCount;
+        if ( chSearch == 0 )
+            return NOT_FOUND;
+        IASLibChar__ achSearch[2] = { chSearch, 0 };
+        return LastIndexOf( achSearch, nStart, bCaseInsensitive );
+    }
 
-        if ( m_pStubData )
-        {
-            if ( ( nStart > m_pStubData->m_nLength ) || ( nStart == NOT_FOUND ) )
-            {
-                nStart = m_pStubData->m_nLength;
-            }
+    bool CString::StartsWith( const IASLibChar__ *strPrefix, bool bCaseSensitive ) const
+    {
+        size_t nPrefix = TextLength( strPrefix );
+        return nPrefix <= GetLength() && SameText( c_str(), strPrefix, nPrefix, bCaseSensitive );
+    }
 
-            for ( nCount = nStart; nCount != NOT_FOUND; nCount-- )
-            {
-                if ( bCaseInsensitive )
-                {
-                    if ( ( m_pStubData->m_strData[ nCount ] == chSearch ) || ( ( toupper( m_pStubData->m_strData[ nCount ] ) == toupper( chSearch ) ) ) )
-                        return (int)nCount;
-                }
-                else
-                {
-                    if ( m_pStubData->m_strData[ nCount ] == chSearch )
-                        return (int)nCount;
-                }
-            }
-        }
-        return IASLib::NOT_FOUND;
+    bool CString::EndsWith( const IASLibChar__ *strSuffix, bool bCaseSensitive ) const
+    {
+        size_t nSuffix = TextLength( strSuffix );
+        return nSuffix <= GetLength() && SameText( c_str() + GetLength() - nSuffix, strSuffix, nSuffix, bCaseSensitive );
+    }
+
+    bool CString::Contains( const CString &strSearch ) const
+    {
+        return IndexOf( strSearch ) != NOT_FOUND;
+    }
+
+    bool CString::Contains( const IASLibChar__ *strSearch ) const
+    {
+        return IndexOf( strSearch ) != NOT_FOUND;
+    }
+
+    bool CString::Contains( const IASLibChar__ chSearch ) const
+    {
+        return IndexOf( chSearch ) != NOT_FOUND;
     }
 
 #ifdef IASLIB_STD_STREAM_SUPPORT__
-            // Stream Methods
-
-                            // Output a string to a stream derived object.
-    std::ostream  &operator <<( std::ostream &oOutputStream, const CString &strSource )
+    std::ostream &operator <<( std::ostream &oOutputStream, const CString &strSource )
     {
-        size_t nCount;
-//        long nOutputLength = (long)strSource.GetLength();
-
-//        oOutputStream << nOutputLength;
-        for ( nCount = 0; nCount < strSource.GetLength(); nCount++ )
-        {
-            oOutputStream << strSource[ nCount ];
-        }
-
+        oOutputStream.write( strSource.c_str(), (std::streamsize)strSource.GetLength() );
         return oOutputStream;
     }
 
-                            // Input a string from a stream derived object.
-    std::istream  &operator >>( std::istream &oInputStream, CString &strTarget )
+    std::istream &operator >>( std::istream &oInputStream, CString &strTarget )
     {
-        size_t nCount;
-        unsigned long nInputLength;
-
-        oInputStream >> nInputLength;
-
-        if ( strTarget.m_pStubData )
-        {
-            strTarget.m_pStubData->RemoveRef();
-        }
-
-        strTarget.m_pStubData = new CStringStub( nInputLength );
-        strTarget.m_pStubData->AddRef();
-
-        for ( nCount = 0; nCount < strTarget.m_pStubData->m_nLength; nCount++ )
-        {
-            oInputStream >> strTarget.m_pStubData->m_strData[ nCount ];
-        }
-
+        std::string strWord;
+        oInputStream >> strWord;
+        strTarget = strWord.c_str();
         return oInputStream;
     }
-
 #endif
 
+            // Escaping
     void CString::Unescape( void )
     {
-        if ( m_pStubData )
+        size_t nLength = GetLength();
+        if ( nLength == 0 )
+            return;
+
+        const IASLibChar__ *pText = c_str();
+        std::string strResult;
+        strResult.reserve( nLength );
+        for ( size_t nCount = 0; nCount < nLength; nCount++ )
         {
-            IASLibChar__   *strRetVal = (IASLibChar__ *)malloc( m_pStubData->m_nLength + 1 ); // This is safe because unescape can never make the string longer
-            size_t  nCount = 0;
-            size_t  nInsert = 0;
-            IASLibChar__    strHexCode[5];
-            IASLibChar__    nResolved = 0;
-            strHexCode[0] = '0';
-            strHexCode[1] = 'x';
-            strHexCode[4] = 0;
-
-            while ( nCount < m_pStubData->m_nLength )
+            IASLibChar__ ch = pText[ nCount ];
+            if ( ch == '%' && nCount + 1 < nLength && pText[ nCount + 1 ] == '%' )
             {
-                if ( m_pStubData->m_strData[ nCount ] == '%' )
-                {
-                    if ( m_pStubData->m_strData[ nCount + 1 ] == '%' )
-                    {
-                        strRetVal[ nInsert ] = '%';
-                        nInsert++;
-                        nCount += 2;
-                        continue;
-                    }
-                    else
-                    {
-                        strHexCode[2] = m_pStubData->m_strData[ nCount + 1];
-                        strHexCode[3] = m_pStubData->m_strData[ nCount + 2];
-
-                        nResolved = (IASLibChar__)strtol(strHexCode, NULL, 0 );
-
-                        strRetVal[ nInsert ] = nResolved;
-                        nCount += 3;
-                        nInsert++;
-                        continue;
-                    }
-                }
-                else
-                {
-                    if ( m_pStubData->m_strData[ nCount ] == '+' )
-                    {
-                        strRetVal[ nInsert ] = ' ';
-                        nInsert++;
-                        nCount++;
-                    }
-                    else
-                    {
-                        strRetVal[ nInsert ] = m_pStubData->m_strData[ nCount ];
-                        nInsert++;
-                        nCount++;
-                    }
-                }
+                strResult += '%';
+                nCount++;
             }
-            strRetVal[ nInsert ] = 0;
-
-            if ( ! m_pStubData->m_bFixedStub )
+            else if ( ch == '%' && nCount + 2 < nLength && HexDigit( pText[ nCount + 1 ] ) >= 0 && HexDigit( pText[ nCount + 2 ] ) >= 0 &&
+                      ( HexDigit( pText[ nCount + 1 ] ) | HexDigit( pText[ nCount + 2 ] ) ) != 0 )
             {
-                m_pStubData->RemoveRef();
-                m_pStubData = new CStringStub( strRetVal, nInsert );
-                m_pStubData->AddRef();
+                strResult += (char)( HexDigit( pText[ nCount + 1 ] ) * 16 + HexDigit( pText[ nCount + 2 ] ) );
+                nCount += 2;
+            }
+            else if ( ch == '+' )
+            {
+                strResult += ' ';
             }
             else
             {
-                m_pStubData->ChangeSize( nInsert );
-                memcpy( m_pStubData->m_strData, strRetVal, m_pStubData->m_nLength );
+                    // Includes a '%' not followed by two hex digits (or by
+                    // "00", which would end the string), which stays as it is.
+                strResult += ch;
             }
-
-            free( strRetVal );
         }
+        Assign( strResult.data(), strResult.size() );
     }
 
     void CString::Escape( void )
     {
-        CString strEscapedVersion;
-        CString strHexChars = "0123456789ABCDEF";
-        CString strEscapableChars = "\"<>#%{}|\\~^[]`'";
-        size_t  nCount = 0;
+        size_t nLength = GetLength();
+        if ( nLength == 0 )
+            return;
 
-        if ( m_pStubData )
+        static const char *ESCAPABLE = "\"<>#%{}|\\~^[]`'+";
+        const IASLibChar__ *pText = c_str();
+        std::string strResult;
+        strResult.reserve( nLength + nLength / 2 );
+        for ( size_t nCount = 0; nCount < nLength; nCount++ )
         {
-            for ( nCount = 0; nCount < m_pStubData->m_nLength ; nCount++ )
+            unsigned char ch = Byte( pText[ nCount ] );
+            if ( ch < 32 || ch > 126 || strchr( ESCAPABLE, ch ) != NULL )
             {
-                if ( ( m_pStubData->m_strData[ nCount ] < (IASLibChar__)32 ) ||
-                     ( m_pStubData->m_strData[nCount] > 126 ) ||
-                     ( strEscapableChars.IndexOf( m_pStubData->m_strData[ nCount ] ) != NOT_FOUND ) )
-                {
-                    strEscapedVersion += "%";
-                    strEscapedVersion += strHexChars[ m_pStubData->m_strData[nCount] / 16 ];
-                    strEscapedVersion += strHexChars[ m_pStubData->m_strData[nCount] % 16 ];
-                }
-                else
-                {
-                        // Space is a special case
-                    if ( m_pStubData->m_strData[ nCount ] == ' ' )
-                    {
-                        strEscapedVersion += '+';
-                    }
-                    else
-                    {
-                        strEscapedVersion += m_pStubData->m_strData[ nCount ];
-                    }
-                }
+                strResult += '%';
+                strResult += HEX_DIGITS[ ch >> 4 ];
+                strResult += HEX_DIGITS[ ch & 0x0F ];
             }
-
-            *this = strEscapedVersion;
+            else if ( ch == ' ' )
+            {
+                strResult += '+';
+            }
+            else
+            {
+                strResult += (char)ch;
+            }
         }
+        Assign( strResult.data(), strResult.size() );
     }
 
     void CString::Replace( const IASLibChar__ chReplace, const IASLibChar__ chTo )
     {
-        ChangeStub();
-
-        if ( m_pStubData )
+        if ( chTo == 0 )
         {
-            for ( size_t nCount = 0; nCount < m_pStubData->m_nLength ; nCount++ )
-            {
-                if ( m_pStubData->m_strData[ nCount ] == chReplace )
-                    m_pStubData->m_strData[ nCount ] = chTo;
-            }
+            Remove( chReplace );
+            return;
+        }
+        if ( chReplace == 0 || IndexOf( chReplace ) == NOT_FOUND )
+            return;
+
+        ChangeStub();
+        for ( size_t nCount = 0; nCount < m_pStubData->m_nLength; nCount++ )
+        {
+            if ( m_pStubData->m_strData[ nCount ] == chReplace )
+                m_pStubData->m_strData[ nCount ] = chTo;
         }
     }
 
     void CString::Replace( const IASLibChar__ *strReplace, const IASLibChar__ *strTo )
     {
-        size_t nReplacePoint;
-        size_t nReplaceLength = strlen( strReplace );
-        CString strTemp;
+        size_t nReplace = TextLength( strReplace );
+        if ( nReplace == 0 )
+            return;
 
-        while ( ( nReplacePoint = IndexOf( strReplace ) ) != IASLib::NOT_FOUND )
+        size_t nFound = IndexOf( strReplace );
+        if ( nFound == NOT_FOUND )
+            return;
+
+        if ( strTo == NULL )
+            strTo = "";
+        size_t nTo = strlen( strTo );
+
+        const IASLibChar__ *pText = c_str();
+        size_t nLength = GetLength();
+        std::string strResult;
+        size_t nFrom = 0;
+        while ( nFound != NOT_FOUND )
         {
-            strTemp = Substring( 0, (int)nReplacePoint );
-            strTemp += strTo;
-            strTemp += Substring( nReplacePoint + nReplaceLength );
-            *this = strTemp;
+            strResult.append( pText + nFrom, nFound - nFrom );
+            strResult.append( strTo, nTo );
+            nFrom = nFound + nReplace;
+            nFound = FindText( pText, nLength, strReplace, nReplace, nFrom, true );
         }
+        strResult.append( pText + nFrom, nLength - nFrom );
+        Assign( strResult.data(), strResult.size() );
     }
 
     void CString::Remove( const IASLibChar__ chRemove )
     {
-        size_t nCount = 0;
+        if ( chRemove == 0 || IndexOf( chRemove ) == NOT_FOUND )
+            return;
+
+        ChangeStub();
         size_t nInsert = 0;
-        CString strTemp;
-
-        if ( m_pStubData )
+        for ( size_t nCount = 0; nCount < m_pStubData->m_nLength; nCount++ )
         {
-            CStringStub *pTemp = new CStringStub( m_pStubData->m_nLength );
-            pTemp->AddRef();
-            while ( nCount < m_pStubData->m_nLength )
-            {
-                if ( m_pStubData->m_strData[ nCount ] != chRemove )
-                {
-                    pTemp->m_strData[ nInsert ] = m_pStubData->m_strData[ nCount ];
-                    nInsert++;
-                }
-                nCount++;
-            }
-
-            m_pStubData->RemoveRef();
-            m_pStubData = pTemp;
+            if ( m_pStubData->m_strData[ nCount ] != chRemove )
+                m_pStubData->m_strData[ nInsert++ ] = m_pStubData->m_strData[ nCount ];
         }
+        SetLength( nInsert );
     }
 
     void CString::Remove( const IASLibChar__ *strRemove )
     {
-        size_t nRemovePoint;
-        size_t nRemoveLength = strlen( strRemove );
-        CString strTemp;
-
-        while ( ( nRemovePoint = IndexOf( strRemove ) ) != IASLib::NOT_FOUND )
-        {
-            strTemp = Substring( 0, (int)nRemovePoint );
-            strTemp += Substring( nRemovePoint + nRemoveLength );
-            *this = strTemp;
-        }
+        Replace( strRemove, "" );
     }
 
-
-    bool CString::WildcardCompare( const IASLibChar__ *strPattern, bool bCaseSensitive )
+    bool CString::WildcardCompare( const IASLibChar__ *strPattern, bool bCaseSensitive ) const
     {
         if ( strPattern == NULL )
             return false;
-
-        if ( strcmp( strPattern, "*" ) == 0 )
+        size_t nPattern = strlen( strPattern );
+        if ( nPattern == 0 )
             return true;
-
-        if ( strlen( strPattern ) == 0 )
-            return true;
-
-        if ( m_pStubData == NULL )
-            return false;
-
-        size_t  nCount = 0;
-        int     nPattern = 0;
-        CString strSubString;
-        CString strSubPattern;
-        int     nTemp;
-        bool    bMatched;
-        size_t  nPatternSize;
-        int     nMinimumSize;
-
-        while ( ( nCount < m_pStubData->m_nLength ) && ( nPattern < (int)strlen( strPattern ) ) )
-        {
-            switch ( strPattern[nPattern] )
-            {
-                case '*':
-                    nTemp = (int)nCount;
-                    bMatched = false;
-
-                    nPattern++;
-                    strSubPattern = strPattern;
-                    strSubPattern = strSubPattern.Substring( nPattern );
-                    nPatternSize = strlen( strPattern ) - nPattern;
-                    nMinimumSize = (int)(m_pStubData->m_nLength - nPatternSize);
-                    while ( nTemp <= nMinimumSize )
-                    {
-                        strSubString = Substring( nTemp );
-                        if ( strSubString.WildcardCompare( strSubPattern, bCaseSensitive ) )
-                        {
-                            bMatched = true;
-                            break;
-                        }
-                        nTemp++;
-                    }
-                    return bMatched;
-
-                case '?':
-                        // Skip the next character
-                    nCount++;
-                    nPattern++;
-                    break;
-
-                default:
-                    if ( bCaseSensitive )
-                    {
-                        if ( m_pStubData->m_strData[ nCount ] != strPattern[ nPattern ] )
-                        {
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        if ( toupper( m_pStubData->m_strData[ nCount ] ) != toupper( strPattern[ nPattern ] ) )
-                        {
-                            return false;
-                        }
-                    }
-                    nCount++;
-                    nPattern++;
-                    break;
-            }
-        }
-
-        if ( ( nCount == m_pStubData->m_nLength ) && ( nPattern < (int)strlen( strPattern ) ) )
-        {
-            return false;
-        }
-
-        if ( nCount < m_pStubData->m_nLength )
-        {
-            return false;
-        }
-
-        return true;
+        return WildcardMatch( c_str(), GetLength(), strPattern, nPattern, bCaseSensitive );
     }
 
     void CString::OracleEscape( void )
     {
-        CString strTemp;
-        size_t  nCount;
-
-        if ( m_pStubData )
-        {
-            for ( nCount = 0; nCount < m_pStubData->m_nLength ; nCount++ )
-            {
-                if ( m_pStubData->m_strData[nCount] == '\'')
-                {
-                    strTemp += '\'';
-                }
-
-                strTemp += m_pStubData->m_strData[nCount];
-            }
-
-            if ( m_pStubData->m_bFixedStub )
-            {
-                memcpy( m_pStubData->m_strData, strTemp.m_pStubData->m_strData, m_pStubData->m_nLength );
-            }
-            else
-            {
-                m_pStubData->RemoveRef();
-                m_pStubData = strTemp.m_pStubData;
-                m_pStubData->AddRef();
-            }
-        }
+        if ( IndexOf( '\'' ) != NOT_FOUND )
+            Replace( "'", "''" );
     }
 
     void CString::OracleUnescape( void )
     {
-        CString strTemp;
-        size_t  nCount;
-
-        if ( m_pStubData )
-        {
-            for ( nCount = 0; nCount < m_pStubData->m_nLength ; nCount++ )
-            {
-                if ( ( m_pStubData->m_strData[nCount] == '\'') && ( m_pStubData->m_strData[nCount + 1] == '\'' ) )
-                {
-                    nCount++;
-                }
-
-                strTemp += m_pStubData->m_strData[nCount];
-            }
-
-            if ( m_pStubData->m_bFixedStub )
-            {
-                memcpy( m_pStubData->m_strData, strTemp.m_pStubData->m_strData, m_pStubData->m_nLength );
-            }
-            else
-            {
-                m_pStubData->RemoveRef();
-                m_pStubData = strTemp.m_pStubData;
-                m_pStubData->AddRef();
-            }
-        }
+        if ( IndexOf( "''" ) != NOT_FOUND )
+            Replace( "''", "'" );
     }
 
     CString CString::Pad( size_t nLength, IASLibChar__ chPadChar, bool bLeftAlign ) const
     {
-        int     nRemain = (int)nLength - (int)GetLength();
-        IASLibChar__   *achPadding;
+        size_t nCurrent = GetLength();
+        if ( nLength <= nCurrent || chPadChar == 0 )
+            return *this;
+
+        std::string strPadding( nLength - nCurrent, chPadChar );
         CString strRetVal;
-
-        if ( nRemain > 0 )
+        strRetVal.Reserve( nLength );
+        if ( bLeftAlign )
         {
-            achPadding = new IASLibChar__[ nRemain + 1 ];
-            memset( achPadding, chPadChar, nRemain );
-            achPadding[ nRemain ] = 0;
-
-            if ( bLeftAlign )
-            {
-                strRetVal = (*this);
-                strRetVal += achPadding;
-            }
-            else
-            {
-                strRetVal = achPadding;
-                strRetVal += (*this);
-            }
-
-            delete [] achPadding;
+            strRetVal += *this;
+            strRetVal += strPadding.c_str();
         }
         else
         {
-            strRetVal = *this;
+            strRetVal += strPadding.c_str();
+            strRetVal += *this;
         }
-
         return strRetVal;
-    }
-
-    bool  CString::Contains (const CString &strSearch) const
-    {
-        bool bRetVal = false;
-
-        if ( IndexOf( strSearch) != NOT_FOUND )
-            bRetVal = true;
-
-        return bRetVal;
-    }
-
-    bool  CString::Contains (const IASLibChar__ *strSearch) const
-    {
-        bool bRetVal = false;
-
-        if ( IndexOf( strSearch) != NOT_FOUND )
-            bRetVal = true;
-
-        return bRetVal;
-    }
-
-    bool  CString::Contains (const IASLibChar__ chSearch) const
-    {
-        bool bRetVal = false;
-
-        if ( IndexOf( chSearch) != NOT_FOUND )
-            bRetVal = true;
-
-        return bRetVal;
     }
 
     int CString::ConvertToToken( const IASLibChar__ *strToken, const IASLibChar__ *astrTokenList[], int nTokenList[], int nTokens, bool bCaseSensitive, bool bUseWildcards )
     {
-        int nCount = 0;
-        int nRetVal = -9999;
-        bool bDone = false;
-
-        if ( nTokens == -1 )
-        {
+        if ( astrTokenList == NULL || nTokenList == NULL )
+            return -9999;
+        if ( nTokens < 0 )
             nTokens = 65535;
-        }
-
 
         CString strCompare = strToken;
-        CString strWork;
-
-        do
+        for ( int nCount = 0; nCount < nTokens && astrTokenList[ nCount ] != NULL; nCount++ )
         {
-            strWork = astrTokenList[ nCount ];
+            const IASLibChar__ *strWork = astrTokenList[ nCount ];
 
-                // Look for the end code in the token list
-            if ( strWork == "**" )
-            {
-                bDone = true;
-                nRetVal = nTokenList[ nCount ];
-            }
-            else
-            {
-                if ( bUseWildcards )
-                {
-                    if ( strCompare.WildcardCompare( strWork, bCaseSensitive ) )
-                    {
-                        bDone = true;
-                        nRetVal = nTokenList[ nCount ];
-                    }
-                }
-                else
-                {
-                    if ( strCompare.Compare( strWork, bCaseSensitive ) == 0 )
-                    {
-                        bDone = true;
-                        nRetVal = nTokenList[ nCount ];
-                    }
-                }
-            }
+                // The end of the list, with the default token.
+            if ( strcmp( strWork, "**" ) == 0 )
+                return nTokenList[ nCount ];
 
-            nCount++;
-        } while ( ( ! bDone ) && ( nCount < nTokens ) );
-
-        return nRetVal;
+            bool bMatch = bUseWildcards ? strCompare.WildcardCompare( strWork, bCaseSensitive )
+                                        : ( strCompare.Compare( strWork, bCaseSensitive ) == 0 );
+            if ( bMatch )
+                return nTokenList[ nCount ];
+        }
+        return -9999;
     }
 
     void CString::Copy( const IASLibChar__ *strSource, int nLength )
     {
-        if ( ( m_pStubData ) && ( strSource != m_pStubData->m_strData ) )
+        if ( strSource == NULL || nLength == 0 )
         {
-            if ( ( m_pStubData ) && ( m_pStubData->m_bFixedStub ) )
-            {
-                m_pStubData->ChangeSize( nLength );
-                memcpy( m_pStubData->m_strData, strSource, m_pStubData->m_nLength );
-            }
-            else
-            {
-                if ( m_pStubData )
-                {
-                    m_pStubData->RemoveRef();
-                }
-
-                if ( ( strSource == NULL ) || ( nLength == 0 ) )
-                {
-                    m_pStubData = NULL;
-                }
-                else
-                {
-                    m_pStubData = new CStringStub( strSource, nLength );
-                    m_pStubData->AddRef();
-                }
-            }
+            Assign( "", 0 );
+            return;
         }
+        Assign( strSource, ( nLength < 0 ) ? strlen( strSource ) : BoundedLength( strSource, (size_t)nLength ) );
     }
 
     void CString::Clear( void )
     {
-        if ( ( m_pStubData ) && ( ! m_pStubData->m_bFixedStub ) )
-        {
-            m_pStubData->RemoveRef();
-            m_pStubData = NULL;
-        }
-        else
-        {
-                // If there is a stub, then it's a fixed stub and
-                // clearing it takes on a different meaning.
-            if ( m_pStubData )
-            {
-                m_pStubData->m_nLength = 0;
-                m_pStubData->m_strData[0] = 0;
-            }
-        }
+        Assign( "", 0 );
     }
 
-    void CString::ChangeStub( void )
+    bool CString::IsDigits( void ) const
     {
-        CStringStub    *stubTemp;
-
-        if ( ( m_pStubData ) && ( ! m_pStubData->m_bFixedStub ) )
-        {
-            if ( 1 < m_pStubData->m_nReferences )
-            {
-                stubTemp = m_pStubData;
-                m_pStubData = new CStringStub( stubTemp->m_strData, stubTemp->m_nLength );
-
-                stubTemp->RemoveRef();
-
-                m_pStubData->AddRef();
-            }
-        }
-    }
-
-    bool CString::IsDigits( void )
-    {
-        if ( ! m_pStubData )
+        size_t nLength = GetLength();
+        if ( nLength == 0 )
             return false;
 
-        size_t nCount = 0;
-
-        while ( nCount < m_pStubData->m_nLength )
+        for ( size_t nCount = 0; nCount < nLength; nCount++ )
         {
-            if ( ! ::isdigit( m_pStubData->m_strData[ nCount ] ) )
+            if ( ! isdigit( Byte( m_pStubData->m_strData[ nCount ] ) ) )
                 return false;
-            nCount++;
         }
         return true;
     }
 
-    CString CString::FormatString( const char *strFormat, ... )
+        // The same values the library has always given (each character as
+        // a signed byte), computed without signed overflow.
+    int CString::hashCode( void ) const
     {
-        va_list       vaArgList;
-        IASLibChar__ *szBuffer = (IASLibChar__ *)CObject::allocate( 65536, "CString::FormatString" );
-
-        /* format buf using fmt and arguments contained in ap */
-        va_start( vaArgList, strFormat );
-#ifdef IASLIB_WIN32__
-        StringCbVPrintf( szBuffer, 65536, strFormat, vaArgList );
-#else
-        vsnprintf( szBuffer, 65536, strFormat, vaArgList );
-#endif
-        va_end( vaArgList );
-
-        CString retVal( szBuffer, strlen(szBuffer) );
-
-        CObject::deallocate( szBuffer, "CString::FormatString" );
-
-        return retVal;
-    }
-
-    // For proper hashing of strings, we redefine the hashcode function so
-    // that the hash of a string is equivalent to the hash of its contents.
-    // Thus two strings with the same value, "Hello" and "Hello" will hash
-    // to the same hashcode, even though they are different values.
-    int CString::hashcode( void )
-    {
-        int result = 131;
-
-        for ( size_t x = 0; x < m_pStubData->m_nLength; x++ )
+        unsigned int nResult = 131;
+        size_t nLength = GetLength();
+        for ( size_t x = 0; x < nLength; x++ )
         {
-            result = 37 * result + m_pStubData->m_strData[x];
+            nResult = 37u * nResult + (unsigned int)(int)(signed char)m_pStubData->m_strData[x];
         }
-
-        return result;
+        return (int)nResult;
     }
 
-    void CString::dumpStubMemory( void )
+    bool CString::hasDelimitedTokens( const char *startDelimiter, const char *endDelimiter ) const
     {
-        if ( m_pStubData )
-        {
-            char *p = (char *)m_pStubData;
-            p -= 128;
-            while ( p < (char *)m_pStubData )
-            {
-                char t = *p++;
-                printf( "%c %02x\n", t, t & 0xff );
-            }
-        }
+        size_t nStart = IndexOf( startDelimiter );
+        if ( nStart == NOT_FOUND )
+            return false;
+        return IndexOf( endDelimiter, nStart + TextLength( startDelimiter ) ) != NOT_FOUND;
     }
 
-    unsigned char *CString::getBytes( void )
+    CString &CString::replaceDelimitedToken( const char *startDelimiter, const char *endDelimiter, const char *name, const char *value )
     {
-        if ( m_pStubData )
-        {
-            return (unsigned char *)(m_pStubData->m_strData);
-        }
-
-        return (unsigned char *)"";
+        std::string strToken;
+        strToken += ( startDelimiter != NULL ) ? startDelimiter : "";
+        strToken += ( name != NULL ) ? name : "";
+        strToken += ( endDelimiter != NULL ) ? endDelimiter : "";
+        Replace( strToken.c_str(), value );
+        return *this;
     }
 
+    const unsigned char *CString::getBytes( void ) const
+    {
+        return (const unsigned char *)c_str();
+    }
 
-} // namespace ISALib
+} // namespace IASLib

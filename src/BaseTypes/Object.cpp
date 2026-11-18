@@ -14,150 +14,164 @@
  */
 
 #include "Object.h"
-#include "String_.h"
-#ifdef IASLIB_MULTI_THREADED__
-#include "Mutex.h"
-#endif
+
+#include <atomic>
+#include <new>
 
 namespace IASLib
 {
-    unsigned long   CObject::m_ulCurrentID = 0;
-#ifdef IASLIB_MULTI_THREADED__
-    CMutex          CObject::m_mutexCreation( false );
-#endif
+    namespace
+    {
+        std::atomic<unsigned long>              g_ulCurrentID( 0 );
+
+        void DefaultAssertHandler( const char *strFile, int nLine, const char *strCondition )
+        {
+            fprintf( stderr, "Assertion failed: (%s) - %s:%d\n", strCondition, strFile, nLine );
+            fflush( stderr );
+        }
+
+        std::atomic<CObject::AssertHandler>     g_pfnAssertHandler( &DefaultAssertHandler );
+
+            // The memory-debugging layout:
+            //
+            //      [ header: size, magic, name ][ front fence ] user data [ back fence ]
+            //      |<---------------- FRONT bytes -------------->|        |<-- FENCE -->|
+            //
+            // The user data starts FRONT bytes in (a multiple of 16, so it is
+            // as aligned as malloc's memory), and is followed by FENCE bytes
+            // of zeros, plus the padding up to a multiple of 16.
+        const size_t    ALLOCATION_MAGIC = 1784324;
+        const size_t    FRONT = 32;
+        const size_t    FENCE = 16;
+
+        struct CAllocationHeader
+        {
+            size_t          nSize;
+            size_t          nMagic;
+            const char     *pszName;
+        };
+
+        static_assert( sizeof( CAllocationHeader ) < FRONT, "the header must leave room for a front fencepost" );
+
+        size_t PaddedSize( size_t nSize )
+        {
+            return ( nSize + 15 ) & ~(size_t)15;
+        }
+    }
 
     CObject::CObject( void )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexCreation.Lock();
-#endif
-        m_nObjectID = ++m_ulCurrentID;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexCreation.Unlock();
-#endif
+        m_nObjectID = ++g_ulCurrentID;
+    }
+
+    CObject::CObject( const CObject & )
+    {
+        m_nObjectID = ++g_ulCurrentID;
     }
 
     CObject::~CObject( void )
     {
-        m_nObjectID = 0xFFFFFFFF;
+        m_nObjectID = (unsigned long)-1;
     }
 
 #ifdef IASLIB_RTTI__
-    const char *CObject::GetType( void )
+    const char *CObject::GetType( void ) const
     {
         return "CObject";
     }
 
-    bool CObject::IsType( const char *strName )
+    bool CObject::IsType( const char *strName ) const
     {
-        if (strcmp( strName, "CObject" ) == 0)
-            return true;
-        return false;
+        return ( strName != NULL ) && ( strcmp( strName, "CObject" ) == 0 );
     }
 #endif
 
-    void CObject::SetAssertHandler( )
+    CObject::AssertHandler CObject::SetAssertHandler( AssertHandler pfnHandler )
     {
-        // TODO: Implement Assertion Handlers
+        return g_pfnAssertHandler.exchange( ( pfnHandler != NULL ) ? pfnHandler : &DefaultAssertHandler );
     }
 
-
-    void CObject::CallAssertHandler( const char *strFile,
-                                     int nLine,
-                                     const char *strCondition )
+    void CObject::CallAssertHandler( const char *strFile, int nLine, const char *strCondition )
     {
-        // TODO: Implement Assertion Handlers
-        printf( "Assertion failed: (%s) - %s:%d", strCondition, strFile, nLine );
+        AssertHandler pfnHandler = g_pfnAssertHandler.load();
+        pfnHandler( strFile, nLine, strCondition );
     }
 
     void *CObject::allocate( size_t size, const char *name )
     {
-        size_t magic = 1784324;
-        size_t blocks = (size / 16);
-        if ( ( size - (blocks * 16) ) > 0 )
+        size_t nPadded = PaddedSize( size );
+        if ( nPadded < size || nPadded > (size_t)-1 - FRONT - FENCE )
         {
-            // Ensure we have an even padding of 16 bytes and cover any overage.
-            blocks++;
+            throw std::bad_alloc();
         }
-        // Allocate an extra 32 bytes
-        blocks += 3;
 
-        void *p = malloc( blocks * 16 );
-        // printf( "New: %u (%u)\n", (unsigned long)p, (unsigned long)size );
-        // Pre-allocate the memory to zero.
-        memset( p, 0, blocks * 16 );
+        size_t nTotal = FRONT + nPadded + FENCE;
+        char *pBase = (char *)malloc( nTotal );
+        if ( pBase == NULL )
+        {
+            throw std::bad_alloc();
+        }
+        memset( pBase, 0, nTotal );
 
-        // Store the block size in the front of the fencepost.
-        size_t *pSize = (size_t *)p;
-        size_t *pMagic = pSize + 1;
-        *pSize = size;
-        *pMagic = magic;
-        const char **pName = (const char **)(pMagic + 1);
-        *pName = name;
+        CAllocationHeader *pHeader = (CAllocationHeader *)pBase;
+        pHeader->nSize = size;
+        pHeader->nMagic = ALLOCATION_MAGIC;
+        pHeader->pszName = name;
 
-        // Move forward 32 bytes to create a front fencepost at least 16 bytes long
-        p = ((char *)p) + 32;
-
-        // Return the now offset block of memory so we can check fenceposts later.
-        return p;
+        return pBase + FRONT;
     }
 
     void CObject::deallocate( void *p, const char *name )
     {
-        size_t magic = 1784324;
-         // Back up 32 bytes
-        void *pBase = ((char *)p) - 32;
-
-        size_t *pSize = (size_t *)pBase;
-        size_t *pMagic = pSize + 1;
-        if ( *pMagic != magic )
+        if ( p == NULL )
         {
-            printf( "MAGIC NUMBER MISMATCH! [%s]\n", name );
-        }
-        const char **pName = (const char **)(pMagic + 1);
-        char *pTest = (char *)(pName + 1 );
-        size_t size = *pSize;
-        size_t blocks = (size / 16);
-        if ( ( size - (blocks * 16) ) > 0 )
-        {
-            // account for padding
-            blocks++;
+            return;
         }
 
-        if ( strcmp( name, *pName ) != 0 )
+        char *pBase = ((char *)p) - FRONT;
+        CAllocationHeader *pHeader = (CAllocationHeader *)pBase;
+
+        if ( pHeader->nMagic != ALLOCATION_MAGIC )
         {
-            printf( "Delete mismatch. Expected [%s], got [%s]\n", name, *pName );
+                // Not memory from allocate() (or its header was overwritten):
+                // nothing else in it can be trusted.
+            fprintf( stderr, "MAGIC NUMBER MISMATCH! [%s]\n", name );
+            fflush( stderr );
+            free( pBase );
+            return;
         }
 
-        int nCount = 0;
-        while ( pTest < p )
+        const char *pszAllocatedAs = ( pHeader->pszName != NULL ) ? pHeader->pszName : "?";
+        if ( name != NULL && strcmp( name, pszAllocatedAs ) != 0 )
         {
-            if ( *pTest != '\0' )
+            fprintf( stderr, "Delete mismatch. Expected [%s], got [%s]\n", name, pszAllocatedAs );
+        }
+
+        const unsigned char *pFront = (const unsigned char *)( pHeader + 1 );
+        for ( size_t nCount = 0; pFront + nCount < (const unsigned char *)p; nCount++ )
+        {
+            if ( pFront[ nCount ] != 0 )
             {
-                printf( "[%s] Front fencepost byte %d damaged: %02hhx\n", *pName, nCount, *pTest );
+                fprintf( stderr, "[%s] Front fencepost byte %u damaged: %02x\n", pszAllocatedAs, (unsigned)nCount, pFront[ nCount ] );
             }
-            *pTest = 'X';
-            pTest++;
-            nCount++;
         }
 
-        char *pEnd = ((char *)p) + (blocks * 16 );
-        pTest = pEnd;
-        pEnd += 16;
-
-        nCount = 0;
-        while ( pTest < pEnd )
+            // The padding after the object is checked along with the fence:
+            // the object should not have written there either.
+        size_t nPadded = PaddedSize( pHeader->nSize );
+        const unsigned char *pBack = (const unsigned char *)p + pHeader->nSize;
+        size_t nBack = ( nPadded - pHeader->nSize ) + FENCE;
+        for ( size_t nCount = 0; nCount < nBack; nCount++ )
         {
-            if ( *pTest != '\0' )
+            if ( pBack[ nCount ] != 0 )
             {
-                printf( "[%s] Back fencepost byte %d damaged: %02hhx\n", *pName, nCount, *pTest );
+                fprintf( stderr, "[%s] Back fencepost byte %u damaged: %02x\n", pszAllocatedAs, (unsigned)nCount, pBack[ nCount ] );
             }
-            *pTest = 'X';
-            pTest++;
-            nCount++;
         }
+        fflush( stderr );
 
-        // Release the memory
+            // Spoil the memory, so use after free shows up.
+        memset( pBase, 'X', FRONT + nPadded + FENCE );
         free( pBase );
     }
 } // End of Namespace

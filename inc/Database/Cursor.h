@@ -54,7 +54,7 @@ namespace IASLib
                                 {
                                     if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
                                     {
-                                        m_astrNewValues[ nColumn ].Format( "%d", nValue );
+                                        m_astrNewValues[ nColumn ] = nValue;
                                         return 1;
                                     }
                                     return 0;

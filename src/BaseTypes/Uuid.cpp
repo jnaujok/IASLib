@@ -1,92 +1,98 @@
 /**
  * UUID class
- * 
- * This class generates and stores UUIDs that meet requirements for uniqueness.
- * 
+ *
+ * This class generates and stores UUIDs (RFC 9562).
+ *
  * Author: Jeffrey R. Naujok
  * Created: August 25, 2019
- * 
+ *
  * Copyright (c) 2019, Irene Adler Software, All Rights Reserved.
  */
 
 #include "Uuid.h"
-#ifdef IASLIB_WIN32__
-#include "Platform.h"
-#else
-#include <arpa/inet.h>
-#endif
-#include <ctime>
-#include <cctype>
 
-namespace IASLib 
+#include <random>
+
+namespace IASLib
 {
     IMPLEMENT_OBJECT( CUUID, CObject );
 
-    bool CUUID::bSeeded = false;
-#ifdef IASLIB_MULTI_THREADED__
-    CMutex CUUID::randomMutex;
-#endif
-    TRandom< (8), uint32_t > *CUUID::m_pRandomGenerator = NULL;
-
-    CUUID::CUUID( void ) 
+    namespace
     {
-        m_IsValid = true;
+        int HexValue( char ch )
+        {
+            if ( ch >= '0' && ch <= '9' ) return ch - '0';
+            if ( ch >= 'a' && ch <= 'f' ) return 10 + ( ch - 'a' );
+            if ( ch >= 'A' && ch <= 'F' ) return 10 + ( ch - 'A' );
+            return -1;
+        }
+    }
+
+    CUUID::CUUID( void )
+    {
         generateRandomUUID();
-        strUUID = bytesToString( bytes );
+        m_IsValid = true;
     }
 
     CUUID::CUUID( const char *uuid )
     {
-        m_IsValid = false;
-
-        if ( stringToBytes( uuid, bytes ) )
-        {
-            m_IsValid = true;
-            strUUID = bytesToString( bytes );
-        }
+        memset( m_achBytes, 0, SIZE );
+        m_IsValid = stringToBytes( uuid, m_achBytes );
     }
 
-    CUUID::CUUID( const CUUID &oSource )
+    CUUID::CUUID( const unsigned char achBytes[ SIZE ] )
+    {
+        m_IsValid = ( achBytes != NULL );
+        if ( m_IsValid )
+            memcpy( m_achBytes, achBytes, SIZE );
+        else
+            memset( m_achBytes, 0, SIZE );
+    }
+
+    CUUID::CUUID( const CUUID &oSource ) : CObject( oSource )
     {
         m_IsValid = oSource.m_IsValid;
-        for ( size_t nX = 0; nX < 32; nX++ )
-        {
-            bytes[nX] = oSource.bytes[nX];
-        }
-        if ( m_IsValid )
-        {
-            strUUID = bytesToString( bytes );
-        }
+        memcpy( m_achBytes, oSource.m_achBytes, SIZE );
     }
 
     CUUID::~CUUID( void )
     {
-        // Nothing to do or clean-up here.
     }
 
-    unsigned char *CUUID::getBytes( void )
+    const unsigned char *CUUID::getBytes( void ) const
     {
-        if ( m_IsValid )
-        {
-            return bytes;
-        }
-        return NULL;
+        return m_IsValid ? m_achBytes : NULL;
     }
 
-    CString CUUID::toString( void )
+    CString CUUID::toString( void ) const
     {
-        if ( m_IsValid )
-        {
-            return strUUID;
-        }
-        return CString( "" );
+        return m_IsValid ? bytesToString( m_achBytes ) : CString();
+    }
+
+    int CUUID::getVersion( void ) const
+    {
+        return m_IsValid ? ( m_achBytes[6] >> 4 ) : -1;
+    }
+
+    bool CUUID::isNil( void ) const
+    {
+        if ( ! m_IsValid )
+            return false;
+        for ( size_t n = 0; n < SIZE; n++ )
+            if ( m_achBytes[n] != 0 )
+                return false;
+        return true;
+    }
+
+    CUUID CUUID::Nil( void )
+    {
+        unsigned char achZero[ SIZE ] = { 0 };
+        return CUUID( achZero );
     }
 
     CUUID CUUID::fromString( const char *uuid )
     {
-        CUUID temp = CUUID( uuid );
-
-        return temp;
+        return CUUID( uuid );
     }
 
     CUUID &CUUID::operator =( const CUUID &oSource )
@@ -94,130 +100,103 @@ namespace IASLib
         if ( this != &oSource )
         {
             m_IsValid = oSource.m_IsValid;
-            for ( size_t nX = 0; nX < 32; nX++ )
-            {
-                bytes[nX] = oSource.bytes[nX];
-            }
-            if ( m_IsValid )
-            {
-                strUUID = bytesToString( bytes );
-            }
+            memcpy( m_achBytes, oSource.m_achBytes, SIZE );
         }
-
         return *this;
+    }
+
+    bool CUUID::operator ==( const CUUID &oOther ) const
+    {
+        if ( m_IsValid != oOther.m_IsValid )
+            return false;
+        return ! m_IsValid || memcmp( m_achBytes, oOther.m_achBytes, SIZE ) == 0;
+    }
+
+    bool CUUID::operator <( const CUUID &oOther ) const
+    {
+        if ( m_IsValid != oOther.m_IsValid )
+            return ! m_IsValid;
+        return m_IsValid && memcmp( m_achBytes, oOther.m_achBytes, SIZE ) < 0;
+    }
+
+    int CUUID::hashCode( void ) const
+    {
+        unsigned int nHash = 2166136261u;           // FNV-1a
+        for ( size_t n = 0; n < SIZE; n++ )
+            nHash = ( nHash ^ m_achBytes[n] ) * 16777619u;
+        return (int)nHash;
     }
 
     void CUUID::generateRandomUUID( void )
     {
-        if ( ! bSeeded )
+            // One random_device per thread: it reads the operating system's
+            // random source (getrandom, arc4random or BCryptGenRandom).
+        static thread_local std::random_device device;
+        for ( size_t n = 0; n < SIZE; n += 4 )
         {
-#ifdef IASLIB_MULTI_THREADED__
-            randomMutex.Lock();
-            if ( ! bSeeded )
-            {
-#endif
-                if ( m_pRandomGenerator == NULL )
-                {
-                    m_pRandomGenerator = new TRandom< (8), uint32_t>( time(NULL), time(NULL) * time(NULL), (time(NULL) * 183601463UL) % 2147430101UL );
-                }
-                bSeeded = true;
-#ifdef IASLIB_MULTI_THREADED__
-            }
-            randomMutex.Unlock();
-#endif
+            uint32_t nRandom = (uint32_t)device();
+            m_achBytes[n]     = (unsigned char)( nRandom >> 24 );
+            m_achBytes[n + 1] = (unsigned char)( nRandom >> 16 );
+            m_achBytes[n + 2] = (unsigned char)( nRandom >> 8 );
+            m_achBytes[n + 3] = (unsigned char)nRandom;
         }
-
-#ifdef IASLIB_MULTI_THREADED__
-        randomMutex.Lock();
-#endif
-
-        uint32_t *pLong = (uint32_t *)bytes;
-        // First hextet of two random 32 bit values (64 bits). (8 bytes)
-        pLong[0] = m_pRandomGenerator->rand();
-        pLong[1] = m_pRandomGenerator->rand();
-
-        // Octet 1-3 (96 bits) [12 bytes]
-        pLong[2] = m_pRandomGenerator->rand();
-        pLong[3] = ((m_pRandomGenerator->rand() & 0x0fff) | 0x4000);
-        pLong[4] = (m_pRandomGenerator->rand() % 0x3fff) + 0x8000;
-
-        // Final 96 bit random value [12 bytes]
-        pLong[5] = m_pRandomGenerator->rand();
-        pLong[6] = m_pRandomGenerator->rand();
-        pLong[7] = m_pRandomGenerator->rand();
-
-#ifdef IASLIB_MULTI_THREADED__
-        randomMutex.Unlock();
-#endif
+        m_achBytes[6] = (unsigned char)( ( m_achBytes[6] & 0x0F ) | 0x40 );   // version 4
+        m_achBytes[8] = (unsigned char)( ( m_achBytes[8] & 0x3F ) | 0x80 );   // RFC 9562 variant
     }
 
-    CString CUUID::bytesToString( unsigned char *byteArray )
+    CString CUUID::bytesToString( const unsigned char *bytes )
     {
-        uint32_t *pLong = (uint32_t *)byteArray;
-        CString retVal = "";
+        if ( bytes == NULL )
+            return CString();
 
-        retVal.Format( "%04x%04x-%04x-%04x-%04x-%04x%04x%04x", 
-            pLong[0], pLong[1],             // 64-bit Hex number
-            pLong[2],                       // 32-bit Hex number
-            pLong[3],                       // 32-bit Hex number of the form 4xxx (4 indicates the UUID version)
-            pLong[4],                       // 32-bit Hex number in the range [0x8000, 0xbfff]
-            pLong[5],                       // 96-bit Hex number
-            pLong[6], 
-            pLong[7] );
-        return retVal;
+        static const char *HEX = "0123456789abcdef";
+        char achText[ 37 ];
+        size_t nOut = 0;
+        for ( size_t n = 0; n < SIZE; n++ )
+        {
+            if ( n == 4 || n == 6 || n == 8 || n == 10 )
+                achText[ nOut++ ] = '-';
+            achText[ nOut++ ] = HEX[ bytes[n] >> 4 ];
+            achText[ nOut++ ] = HEX[ bytes[n] & 0x0F ];
+        }
+        achText[ nOut ] = 0;
+        return CString( achText );
     }
 
     bool CUUID::stringToBytes( const char *uuid, unsigned char *bytes )
     {
-        unsigned char temp[32];
-        size_t nX = 0;
-        while ( *uuid && nX < 32 )
-        {
-            if ( *uuid != '-' )
-            {
-                // We have a hex byte pair (hopefully)
-                temp[nX] = ( hexToByte( *uuid ) * 16 ) + ( hexToByte( *uuid + 1 ) );
-                uuid++;
-                nX++;
-            }
-            uuid++;
-        }
-        if ( nX < 32 || *uuid )
-        {
+        if ( uuid == NULL || bytes == NULL )
             return false;
-        }
 
-        // We need to make sure the bytes are in the correct order for the machine.
-        uint32_t *pLong = (uint32_t *)temp;
-        uint32_t *pBytes = (uint32_t *)bytes;
-
-        for ( nX = 0; nX < 8; nX++ )
+        size_t nLength = strlen( uuid );
+        if ( nLength >= 2 && uuid[0] == '{' && uuid[ nLength - 1 ] == '}' )
         {
-            pBytes[nX] = ntohl( pLong[nX] );
+            uuid++;
+            nLength -= 2;
         }
 
+        bool bDashed = ( nLength == 36 );
+        if ( ! bDashed && nLength != 32 )
+            return false;
+
+        unsigned char achParsed[ SIZE ];
+        size_t nIn = 0;
+        for ( size_t n = 0; n < SIZE; n++ )
+        {
+            if ( bDashed && ( n == 4 || n == 6 || n == 8 || n == 10 ) )
+            {
+                if ( uuid[ nIn++ ] != '-' )
+                    return false;
+            }
+            int nHigh = HexValue( uuid[ nIn++ ] );
+            int nLow = HexValue( uuid[ nIn++ ] );
+            if ( nHigh < 0 || nLow < 0 )
+                return false;
+            achParsed[n] = (unsigned char)( nHigh * 16 + nLow );
+        }
+
+        memcpy( bytes, achParsed, SIZE );
         return true;
     }
 
-    unsigned char CUUID::hexToByte( char val )
-    {
-        const char *translate = "0123456789abcdef";
-        char low = tolower( val );
-        unsigned char nX = 0;
-        while ( translate[ nX ] )
-        {
-            if ( translate[nX] == low )
-            {
-                return nX;
-            }
-            nX++;
-        }
-        return 0;
-    }
-
-}; // Namespace IASLib
-
-
-
-
-
+} // Namespace IASLib

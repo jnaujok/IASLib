@@ -3,12 +3,7 @@
 **  CStringStub Class
 **
 **      This class encodes a "string stub" which is where actual string
-** data is stored for the CString class. This allows us to have strings
-** that are "copied" merely by pointing at the same string stub. If fifty
-** copies are made of a string, then they merely all point at the same
-** stub in memory. Only when a string is changed does it get its own copy
-** of the string stub. This will cut down on a large amount of un-needed
-** (and extremely slow) memory allocation and copying.
+** data is stored for the CString class. See StringStub.h.
 **
 **  Created:
 **      8/19/2000
@@ -19,428 +14,157 @@
 **
 ************************************************************************/
 
-#include <memory>
-#include <string>
-
 #include "StringStub.h"
-#include "StringException.h"
-#include "LogSink.h"
 
-#ifdef IASLIB_MEMORY_MANAGER__
-#include "MemoryManager.h"
-#endif
+#include <new>
 
-// using namespace IASLib
 namespace IASLib
 {
-    CStringStub::CStringStub( void )
+    namespace
     {
-        m_bFixedStub = false;
-        m_bDeletable = false;
-        m_strData = NULL;
-        m_nLength = 0;
-        m_nSize = 0;
-        m_nReferences = 0;
-    }
-
-    CStringStub::CStringStub( int nLength ) // throw (CStringException)
-    {
-        m_bFixedStub = false;
-        m_bDeletable = true;
-        if ( nLength <= 0 )
+        IASLibChar__ *AllocateCharacters( size_t nCapacity )
         {
-            ERROR_LOG( "Sized String Stub set to zero (or negative) length!" );
-            throw CStringException( "Sized String Stub set to zero (or negative) length!", CException::NORMAL );
+            if ( nCapacity >= ( (size_t)-1 ) / sizeof( IASLibChar__ ) - 1 )
+            {
+                throw std::bad_alloc();
+            }
+            IASLibChar__ *pData = (IASLibChar__ *)malloc( ( nCapacity + 1 ) * sizeof( IASLibChar__ ) );
+            if ( pData == NULL )
+            {
+                throw std::bad_alloc();
+            }
+            return pData;
         }
-
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-        m_strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( nLength * sizeof( IASLibChar__ ) + 1, __FILE__, __LINE__ );
-    #else
-        m_strData = (IASLibChar__ *)CMemoryManager::Allocate( nLength * sizeof( IASLibChar__ ) + 1 );
-    #endif
-        m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-        m_strData = (IASLibChar__ *)malloc( (size_t)(nLength * sizeof( IASLibChar__ ) + 1) );
-        m_nSize = nLength * sizeof( IASLibChar__ ) + 1;
-#endif
-        m_nLength = nLength;
-        memset( m_strData, 0, m_nLength * sizeof( IASLibChar__ ) + 1 );
-        m_nReferences = 0;
     }
 
-    CStringStub::CStringStub( size_t nLength ) // throw (CStringException)
+    CStringStub::CStringStub( const IASLibChar__ *strData, size_t nLength, size_t nCapacity )
+        : m_nReferences( 0 )
     {
-        m_bFixedStub = false;
-        m_bDeletable = true;
-        if ( nLength <= 0 )
+        if ( nCapacity < nLength )
         {
-            ERROR_LOG( "Sized String Stub set to zero (or negative) length!" );
-            throw CStringException( "Sized String Stub set to zero (or negative) length!", CException::NORMAL );
+            nCapacity = nLength;
         }
-
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-        m_strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( nLength * sizeof( IASLibChar__ ) + 1, __FILE__, __LINE__ );
-    #else
-        m_strData = (IASLibChar__ *)CMemoryManager::Allocate( nLength * sizeof( IASLibChar__ ) + 1 );
-    #endif
-        m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-        m_strData = (IASLibChar__ *)malloc( (size_t)(nLength * sizeof( IASLibChar__ ) + 1) );
-        m_nSize = nLength * sizeof( IASLibChar__ ) + 1;
-#endif
+        m_strData = AllocateCharacters( nCapacity );
+        m_nCapacity = nCapacity;
         m_nLength = nLength;
-        memset( m_strData, 0, m_nLength * sizeof( IASLibChar__ ) + 1 );
-        m_nReferences = 0;
-    }
-
-    CStringStub::CStringStub( const IASLibChar__ *strData, int nLength ) // throw (...)
-    {
         m_bFixedStub = false;
         m_bDeletable = true;
-        if ( ( NULL != strData ) && ( nLength != 0 ) )
-        {
-            if ( nLength < 0 )
-            {
-                nLength = (int)strlen( strData );
-            }
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-            m_strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( nLength * sizeof( IASLibChar__ ) + 1, __FILE__, __LINE__ );
-    #else
-            m_strData = (IASLibChar__ *)CMemoryManager::Allocate( nLength * sizeof( IASLibChar__ ) + 1 );
-    #endif
-            m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-            m_strData = (IASLibChar__ *)::malloc( nLength * sizeof( IASLibChar__ ) + 1 );
-            m_nSize = nLength * sizeof( IASLibChar__ ) + 1;
-#endif
-                // And save the length of the string.
-            m_nLength = nLength;
-                // And the size of the memory block allocated
 
-            if ( m_strData )
-            {
-                    // Copy the string.
-                memcpy( m_strData, strData, nLength );
-                    // Apply the nul terminator
-                m_strData[ m_nLength ] = 0;
-            }
-            else
-            {
-                ERROR_LOG( "Out of memory while allocating String Stub of length %d", nLength );
-                throw CException( "Out of memory while allocating String Stub", CException::FATAL );
-            }
+        if ( strData != NULL )
+        {
+            memcpy( m_strData, strData, nLength * sizeof( IASLibChar__ ) );
         }
         else
         {
-            m_nLength = 0;
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-            m_strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( 1, __FILE__, __LINE__ );
-    #else
-            m_strData = (IASLibChar__ *)CMemoryManager::Allocate( 1 );
-    #endif
-            m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-            m_strData = (IASLibChar__ *)::malloc( 1 );
-            m_nSize = 1;
-#endif
-            m_strData[0] = 0;
+            memset( m_strData, 0, nLength * sizeof( IASLibChar__ ) );
         }
-        m_nReferences = 0;
+        m_strData[ nLength ] = 0;
     }
 
-    CStringStub::CStringStub( const IASLibChar__ *strData, size_t nLength ) // throw (...)
+    CStringStub::CStringStub( IASLibChar__ *strBuffer, size_t nLength, size_t nSize, bool bDeletable )
+        : m_nReferences( 0 )
     {
-        m_bFixedStub = false;
-        m_bDeletable = true;
-        if ( ( NULL != strData ) && ( nLength != 0 ) )
-        {
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-            m_strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( nLength * sizeof( IASLibChar__ ) + 1, __FILE__, __LINE__ );
-    #else
-            m_strData = (IASLibChar__ *)CMemoryManager::Allocate( nLength * sizeof( IASLibChar__ ) + 1 );
-    #endif
-            m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-            m_strData = (IASLibChar__ *)::malloc( nLength * sizeof( IASLibChar__ ) + 1 );
-            m_nSize = nLength * sizeof( IASLibChar__ ) + 1;
-#endif
-                // And save the length of the string.
-            m_nLength = nLength;
-                // And the size of the memory block allocated
-
-            if ( m_strData )
-            {
-                    // Copy the string
-                memcpy( m_strData, strData, m_nLength );
-                    // Apply the nul terminator
-                m_strData[ m_nLength ] = 0;
-            }
-            else
-            {
-                ERROR_LOG( "Out of memory while allocating String Stub of length %d", nLength );
-                throw CException( "Out of memory while allocating String Stub", CException::FATAL );
-            }
-        }
-        else
-        {
-            m_nLength = 0;
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-            m_strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( 1, __FILE__, __LINE__ );
-    #else
-            m_strData = (IASLibChar__ *)CMemoryManager::Allocate( 1 );
-    #endif
-            m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-            m_strData = (IASLibChar__ *)::malloc( 1 );
-            m_nSize = 1;
-#endif
-            m_strData[0] = 0;
-        }
-        m_nReferences = 0;
-    }
-
-        // Fixed location String Stub. Cannot be resized or moved.
-    CStringStub::CStringStub( IASLibChar__ *strData, int nLength, int nSize, bool bDeletable )
-    {
-        if ( strData == NULL )
-        {
-            ERROR_LOG( "Cannot set a fixed string stub to NULL!" );
-            throw CStringException( "Cannot set a fixed string stub to NULL!", CException::NORMAL );
-        }
-
-        if ( nLength < 0 )
-        {
-            nLength = (int)strlen( strData );
-        }
-
-        m_strData = strData;
-        m_nLength = nLength;
-        m_nSize = nSize;
+        m_strData = strBuffer;
+        m_nCapacity = ( nSize > 0 ) ? nSize - 1 : 0;
+        m_nLength = ( nLength < m_nCapacity ) ? nLength : m_nCapacity;
         m_bFixedStub = true;
         m_bDeletable = bDeletable;
-        m_nReferences = 0;
+        if ( nSize > 0 )
+        {
+            m_strData[ m_nLength ] = 0;
+        }
     }
 
-    CStringStub::CStringStub( const CStringStub &oSource ) // throw (CException)
+    CStringStub::~CStringStub( void )
     {
-        m_bFixedStub = false;
-        m_bDeletable = true;
-        if ( oSource.m_nLength )
+        if ( m_bDeletable && m_strData != NULL )
         {
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-            m_strData = CMemoryManager::AllocateDebug( oSource.m_nLength * sizeof( IASLibChar__ ) + 1, __FILE__, __LINE__ );
-    #else
-            m_strData = CMemoryManager::Allocate( oSource.m_nLength * sizeof( IASLibChar__ ) + 1 );
-    #endif
-            m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-            m_strData = (IASLibChar__ *)malloc( oSource.m_nLength * sizeof( IASLibChar__ ) + 1 );
-            m_nSize = oSource.m_nLength * sizeof( IASLibChar__ ) + 1;
-#endif
-            if ( m_strData )
-            {
-                memcpy( m_strData, oSource.m_strData, oSource.m_nLength * sizeof( IASLibChar__ ) + 1 );
-            }
-            else
-            {
-                ERROR_LOG( "Out of memory while allocating String Stub of length %d.", oSource.m_nLength );
-                throw CException( "Out of memory while allocating String Stub", CException::FATAL );
-            }
-            m_nLength = oSource.m_nLength;
-        }
-        else
-        {
-            m_bDeletable = false;
-            m_strData = NULL;
-            m_nLength = 0;
-            m_nSize = 0;
-        }
-        m_nReferences = 0;
-    }
-
-    CStringStub::~CStringStub( void ) // throw (CStringException)
-    {
-        if ( m_nReferences != 0 )
-        {
-            ERROR_LOG( "String Stub deleted while still referenced!" );
-            //throw CStringException( "String Stub deleted while still referenced!", CException::NORMAL );
-        }
-
-        if ( ( m_bDeletable ) && ( m_strData != NULL ) )
-        {
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-            CMemoryManager::ReleaseDebug( m_strData, __FILE__, __LINE__ );
-    #else
-            CMemoryManager::Release( m_strData );
-    #endif
-#else
             free( m_strData );
-#endif
         }
         m_strData = NULL;
-        m_nSize = 0;
+        m_nCapacity = 0;
         m_nLength = 0;
     }
 
-    void CStringStub::AddRef( void )
+    void CStringStub::RemoveRef( void )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutex.Lock();
-#endif
-        m_nReferences++;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutex.Unlock();
-#endif
-    }
-
-    void CStringStub::RemoveRef( void ) // throw (CStringException)
-    {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutex.Lock();
-#endif
-
-        if ( m_nReferences > 0 )
+        if ( m_nReferences.fetch_sub( 1, std::memory_order_acq_rel ) == 1 )
         {
-            m_nReferences--;
-        }
-        else
-        {
-            ERROR_LOG( "String stub containing data %s dropped below zero references!", this->m_strData );
-            throw CStringException( "String Stub dropped below zero references!", CException::NORMAL );
-        }
-
-        if ( ( m_nReferences == 0 ) && ( ! m_bFixedStub ) )
-        {
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutex.Unlock();
-#endif
             delete this;
         }
-#ifdef IASLIB_MULTI_THREADED__
-        else
-        {
-            m_mutex.Unlock();
-        }
-#endif
     }
 
-    void CStringStub::ChangeSize( size_t nLength ) // throw (CStringException)
+    size_t CStringStub::ChangeSize( size_t nLength )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutex.Lock();
-#endif
-        if ( ( m_nReferences > 1 ) && ( ! m_bFixedStub ) )
+        if ( nLength > m_nCapacity )
         {
-            ERROR_LOG( "Cannot change size of String Stub with multiple references!" );
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutex.Unlock();
-#endif
-            throw CStringException( "Cannot change size of String Stub with multiple references!", CException::NORMAL );
-        }
-
-        if ( m_bFixedStub )
-        {
-            if ( m_nLength <= m_nSize )
+            if ( m_bFixedStub )
             {
-                if ( nLength < m_nLength )
-                {
-                    m_strData[ nLength ] = 0;
-                }
-
-                m_nLength = nLength;
+                nLength = m_nCapacity;
             }
             else
             {
-                m_nLength = m_nSize;
+                Reallocate( nLength + GrowthSlack( nLength ) );
+            }
+        }
+
+        if ( m_strData != NULL && ( m_nCapacity > 0 || ! m_bFixedStub ) )
+        {
+            m_strData[ nLength ] = 0;
+        }
+        m_nLength = nLength;
+        return nLength;
+    }
+
+    size_t CStringStub::GrowthSlack( size_t nLength )
+    {
+        size_t nSlack = nLength / 2;
+        return ( nSlack < MAX_GROWTH_SLACK ) ? nSlack : MAX_GROWTH_SLACK;
+    }
+
+    void CStringStub::Reserve( size_t nCapacity )
+    {
+        if ( ! m_bFixedStub && nCapacity > m_nCapacity )
+        {
+            Reallocate( nCapacity );
+        }
+    }
+
+    void CStringStub::Compact( void )
+    {
+        if ( ! m_bFixedStub && m_nCapacity > m_nLength )
+        {
+            Reallocate( m_nLength );
+        }
+    }
+
+    void CStringStub::Reallocate( size_t nCapacity )
+    {
+        if ( nCapacity < m_nLength )
+        {
+            nCapacity = m_nLength;
+        }
+        IASLibChar__ *pData;
+        if ( m_bDeletable )
+        {
+                // realloc can often grow (or shrink) the block in place.
+            if ( nCapacity >= ( (size_t)-1 ) / sizeof( IASLibChar__ ) - 1 )
+            {
+                throw std::bad_alloc();
+            }
+            pData = (IASLibChar__ *)realloc( m_strData, ( nCapacity + 1 ) * sizeof( IASLibChar__ ) );
+            if ( pData == NULL )
+            {
+                throw std::bad_alloc();     // m_strData is still valid
             }
         }
         else
         {
-            if ( nLength == 0 )
-            {
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-                CMemoryManager::ReleaseDebug( m_strData, __FILE__, __LINE__ );
-    #else
-                CMemoryManager::Release( m_strData );
-    #endif
-                m_nSize = 0;
-#else
-                free( m_strData );
-                m_nSize = 0;
-#endif
-                m_bDeletable = false;
-            }
-            else
-            {
-                if ( m_strData )
-                {
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-                    m_strData = (IASLibChar__ *)CMemoryManager::ReallocateDebug( m_strData, nLength * sizeof( IASLibChar__ ) + 1, __FILE__, __LINE__ );
-    #else
-                    m_strData = (IASLibChar__ *)CMemoryManager::Reallocate( m_strData, nLength * sizeof( IASLibChar__ ) + 1 );
-    #endif
-                    m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-                    m_strData = (IASLibChar__ *)realloc( m_strData, nLength * sizeof( IASLibChar__ ) + 1 );
-                    m_nSize = nLength * sizeof( IASLibChar__ ) + 1;
-#endif
-                    m_bDeletable = true;
-                }
-                else
-                {
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-                    m_strData = (IASLibChar__ *)CMemoryManager::AllocateDebug( nLength * sizeof( IASLibChar__ ) + 1, __FILE__, __LINE__ );
-    #else
-                    m_strData = (IASLibChar__ *)CMemoryManager::Allocate( nLength * sizeof( IASLibChar__ ) + 1 );
-    #endif
-                    m_nSize = CMemoryManager::GetBlockSize( m_strData );
-#else
-                    m_strData = (IASLibChar__ *)malloc( nLength * sizeof( IASLibChar__ ) + 1 );
-                    m_nSize = nLength * sizeof( IASLibChar__ ) + 1;
-#endif
-                    m_bDeletable = true;
-                }
-                if ( ! m_strData )
-                {
-#ifdef IASLIB_MULTI_THREADED__
-                    m_mutex.Unlock();
-#endif
-                    ERROR_LOG( "Out of memory while allocating String Stub of length %d", nLength );
-                    throw CException( "Could not allocate memory for String Stub!", CException::FATAL );
-                }
-            }
-            m_nLength = nLength;
-            m_strData[ m_nLength ] = 0;
+            pData = AllocateCharacters( nCapacity );
+            memcpy( pData, m_strData, ( m_nLength + 1 ) * sizeof( IASLibChar__ ) );
         }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutex.Unlock();
-#endif
+        m_strData = pData;
+        m_nCapacity = nCapacity;
+        m_bDeletable = true;
     }
-
-    int CStringStub::GetRefCount( void )
-    {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutex.Lock();
-        int retVal = m_nReferences;
-        m_mutex.Unlock();
-        return retVal;
-#else
-        return m_nReferences;
-#endif
-
-    }
-
-
 }   // namespace IASLib
-

@@ -72,7 +72,7 @@ namespace IASLib
     {
         CString strValue;
 
-        strValue.Format( "%uld", lPut );
+        strValue.Format( "%lu", lPut );
         int nCount = 0;
         while ( nCount < (int)strValue.GetLength() )
         {

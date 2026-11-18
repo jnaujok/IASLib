@@ -18,40 +18,79 @@
 #include "String_.h"
 #include "Array.h"
 
+#include <climits>
+#include <cmath>
+#include <cstdlib>
+
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CVariant, CObject );
 
-    CVariant::CVariant( void )
+    namespace
     {
-        valType = UNKNOWN;
+        double ReadNumber( const CString &strText )
+        {
+            CString strTrimmed = strText;
+            strTrimmed.Trim();
+            if ( strTrimmed.Compare( "true", false ) == 0 )
+                return 1.0;
+            if ( strTrimmed.Compare( "false", false ) == 0 )
+                return 0.0;
+            char *pEnd = NULL;
+            double dValue = strtod( strTrimmed.c_str(), &pEnd );
+            return ( pEnd != NULL && pEnd != strTrimmed.c_str() ) ? dValue : 0.0;
+        }
+
+        template <class T> T Clamp( double dValue, T nMin, T nMax )
+        {
+            if ( dValue != dValue )
+                return 0;
+            if ( dValue <= (double)nMin )
+                return nMin;
+            if ( dValue >= (double)nMax )
+                return nMax;
+            return (T)dValue;
+        }
     }
 
-    CVariant::CVariant( const CVariant &oSource ) 
-    { 
-        init(); 
-        valType = oSource.valType; 
-        strVal = oSource.strVal;
-        dateVal = oSource.dateVal;
-        intVal = oSource.intVal;
-        longVal = oSource.longVal;
-        floatVal = oSource.floatVal;
-        doubleVal = oSource.doubleVal;
-        boolVal = oSource.boolVal;
-        arrayVal = oSource.arrayVal;
-        objVal = oSource.objVal;
+    CVariant::CVariant( const CVariant &oSource ) : CObject( oSource )
+    {
+        init();
+        *this = oSource;
     }
 
     CVariant::~CVariant( void )
     {
     }
 
-    CVariant &CVariant::operator =( const CVariant &oSource ) 
-    { 
+    void CVariant::init( void )
+    {
+        valType = UNKNOWN;
+        strVal.Clear();
+        dateVal = CDate();
+        intVal = 0;
+        longVal = 0L;
+        floatVal = 0.0f;
+        doubleVal = 0.0;
+        boolVal = false;
+        arrayVal = NULL;
+        objVal = NULL;
+    }
+
+    void CVariant::clear( VARIANT_TYPE newType )
+    {
+            // Only the string is worth freeing; the other values are
+            // overwritten or ignored.
+        if ( valType == STRING && newType != STRING )
+            strVal.Clear();
+        valType = newType;
+    }
+
+    CVariant &CVariant::operator =( const CVariant &oSource )
+    {
         if ( this != &oSource )
         {
-            init(); 
-            valType = oSource.valType; 
+            valType = oSource.valType;
             strVal = oSource.strVal;
             dateVal = oSource.dateVal;
             intVal = oSource.intVal;
@@ -65,15 +104,17 @@ namespace IASLib
         return *this;
     }
 
-    CString CVariant::getString( void )
+    bool CVariant::isNumber( void ) const
+    {
+        return valType == INTEGER || valType == LONG || valType == FLOAT || valType == DOUBLE;
+    }
+
+    CString CVariant::getString( void ) const
     {
         CString temp;
 
         switch ( valType )
         {
-            case UNKNOWN:
-                return CString("");
-
             case STRING:
                 return strVal;
 
@@ -101,121 +142,112 @@ namespace IASLib
                 return temp;
 
             case ARRAY:
-                temp = CString::FormatString( "[%d elements]", arrayVal->Length() );
-                return temp;
+                if ( arrayVal == NULL )
+                    return CString( "[null]" );
+                return CString::FormatString( "[%lu elements]", (unsigned long)arrayVal->Length() );
 
             case OBJECT:
+                if ( objVal == NULL )
+                    return CString( "Object[null]" );
             #ifdef IASLIB_RTTI__
-                temp = CString::FormatString( "Object[%s(%ld)]", objVal->GetType(), objVal->GetID() );
+                return CString::FormatString( "Object[%s(%lu)]", objVal->GetType(), objVal->GetID() );
             #else
-                temp = CString::FormatString( "Object[%ld]", objVal->GetID() );
+                return CString::FormatString( "Object[%lu]", objVal->GetID() );
             #endif
-                return temp;
 
+            case UNKNOWN:
             default:
-                temp = "";
-                return temp;
+                return CString();
         }
-        
     }
 
-    CDate CVariant::getDate( void )
+    CDate CVariant::getDate( void ) const
     {
-        if ( valType == DATE )
-        {
-            return dateVal;
-        }
-
-        return CDate();
+        return ( valType == DATE ) ? dateVal : CDate();
     }
 
-    int CVariant::getInt( void )
+    double CVariant::getDouble( void ) const
+    {
+        switch ( valType )
+        {
+            case INTEGER:   return (double)intVal;
+            case LONG:      return (double)longVal;
+            case FLOAT:     return (double)floatVal;
+            case DOUBLE:    return doubleVal;
+            case BOOLEAN:   return boolVal ? 1.0 : 0.0;
+            case STRING:    return ReadNumber( strVal );
+            default:        return 0.0;
+        }
+    }
+
+    long CVariant::getLong( void ) const
+    {
+        switch ( valType )
+        {
+            case INTEGER:   return (long)intVal;
+            case LONG:      return longVal;
+            case BOOLEAN:   return boolVal ? 1L : 0L;
+            case STRING:
+            {
+                    // Integers read exactly (a double would lose digits).
+                CString strTrimmed = strVal;
+                strTrimmed.Trim();
+                char *pEnd = NULL;
+                long nValue = strtol( strTrimmed.c_str(), &pEnd, 10 );
+                if ( pEnd != NULL && *pEnd == 0 && pEnd != strTrimmed.c_str() )
+                    return nValue;
+                return Clamp<long>( ReadNumber( strVal ), LONG_MIN, LONG_MAX );
+            }
+            default:        return Clamp<long>( getDouble(), LONG_MIN, LONG_MAX );
+        }
+    }
+
+    int CVariant::getInt( void ) const
     {
         if ( valType == INTEGER )
-        {
             return intVal;
-        }
-
-        return 0;
+        long nValue = getLong();
+        if ( nValue < INT_MIN )
+            return INT_MIN;
+        if ( nValue > INT_MAX )
+            return INT_MAX;
+        return (int)nValue;
     }
 
-    long CVariant::getLong( void )
+    float CVariant::getFloat( void ) const
     {
-        if ( valType == LONG )
-        {
-            return longVal;
-        }
-
-        if ( valType == FLOAT )
-        {
-            return (long)floatVal;
-        }
-
-        if ( valType == DOUBLE )
-        {
-            return (long)doubleVal;
-        }
-
-        if ( valType == INTEGER )
-        {
-            return (long)intVal;
-        }
-
-        if ( valType == BOOLEAN )
-        {
-            return (long)(boolVal ? 1L:0L);
-        }
-
-        return 0L;
+        return ( valType == FLOAT ) ? floatVal : (float)getDouble();
     }
 
-    float CVariant::getFloat( void )
+    bool CVariant::getBoolean( void ) const
     {
-        if ( valType == FLOAT )
+        switch ( valType )
         {
-            return floatVal;
+            case BOOLEAN:   return boolVal;
+            case INTEGER:   return intVal != 0;
+            case LONG:      return longVal != 0;
+            case FLOAT:     return floatVal != 0.0f;
+            case DOUBLE:    return doubleVal != 0.0;
+            case STRING:
+            {
+                CString strTrimmed = strVal;
+                strTrimmed.Trim();
+                if ( strTrimmed.Compare( "true", false ) == 0 || strTrimmed.Compare( "yes", false ) == 0 || strTrimmed.Compare( "on", false ) == 0 )
+                    return true;
+                return ReadNumber( strTrimmed ) != 0.0;
+            }
+            default:        return false;
         }
-
-        return (float)0.0;
-
     }
 
-    double CVariant::getDouble( void )
+    CArray *CVariant::getArray( void ) const
     {
-        if ( valType == DOUBLE )
-        {
-            return doubleVal;
-        }
-
-        return 0.0;
+        return ( valType == ARRAY ) ? arrayVal : NULL;
     }
 
-    bool CVariant::getBoolean( void )
+    CObject *CVariant::getObject( void ) const
     {
-        if ( valType == BOOLEAN )
-        {
-            return boolVal;
-        }
-
-        return false;
-    }
-
-    CArray *CVariant::getArray( void )
-    {
-        if ( valType == ARRAY )
-        {
-            return arrayVal;
-        }
-        return NULL;
-    }
-
-    CObject *CVariant::getObject( void )
-    {
-        if ( valType == OBJECT )
-        {
-            return objVal;
-        }
-        return NULL;
+        return ( valType == OBJECT ) ? objVal : NULL;
     }
 
 } // namespace IASLib

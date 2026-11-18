@@ -1,17 +1,24 @@
 /**
  * Random Class
- * 
- * This class generates cryptographically secure Pseudo-random numbers
- * using the ISAAC algorithm. Initial seed value is the clock value at
- * class creation. 
- * 
- * Code comes from Robert J. Jenkins Jr's port of the ISAAC Random Number
- * Generator code into a C++ template. All code except for class naming
- * has been retained.
- * 
+ *
+ * This class generates pseudo-random numbers with Robert J. Jenkins Jr.'s
+ * ISAAC algorithm (or ISAAC-64, for TRandom< 8, uint64_t >). ISAAC has no
+ * known practical weakness, but its output is only as unpredictable as its
+ * seed: seed it with SeedFromSystem() (the operating system's random
+ * source) where that matters, not with the clock.
+ *
+ * Based on Quinn Tyler Jackson's C++ template port of ISAAC (1998). The
+ * results are exactly those of Jenkins' reference code (rand.c, and
+ * isaac64.c with ALPHA 8).
+ *
+ *    The expected period, according to Jenkins, is
+ *        f(a,b) = 2**((a+b*(3+2^^a)-1)
+ *    (where a is ALPHA and b is bitwidth), so for 32 bits and an ALPHA
+ *    of 8, it is 2^^8295.
+ *
  * Author: Jeffrey R. Naujok
- * Created: Aufust 26, 2019
- * 
+ * Created: August 26, 2019
+ *
  * Copyright (C) 2019, Irene Adler Software. All Rights Reserved.
  */
 
@@ -19,303 +26,205 @@
 #define IASLIB_RANDOM_H__
 
 #include "Object.h"
-#include "Bool.h"
-#include <stdlib.h>
+
+#include <stdint.h>
+#include <random>
 
 namespace IASLib
 {
-/*
+    namespace RandomDetail
+    {
+            // What differs between ISAAC and ISAAC-64.
+        template <class T> struct TIsaacTraits;
 
-    C++ TEMPLATE VERSION OF Robert J. Jenkins Jr.'s
-    ISAAC Random Number Generator.
+        template <> struct TIsaacTraits<uint32_t>
+        {
+            static uint32_t GoldenRatio( void ) { return 0x9e3779b9UL; }
+            static uint32_t Mix( uint32_t a, int nStep )
+            {
+                switch ( nStep )
+                {
+                    case 0:  return a ^ ( a << 13 );
+                    case 1:  return a ^ ( a >> 6 );
+                    case 2:  return a ^ ( a << 2 );
+                    default: return a ^ ( a >> 16 );
+                }
+            }
+            static void Shuffle( uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t &f, uint32_t &g, uint32_t &h )
+            {
+                a ^= b << 11; d += a; b += c;
+                b ^= c >> 2;  e += b; c += d;
+                c ^= d << 8;  f += c; d += e;
+                d ^= e >> 16; g += d; e += f;
+                e ^= f << 10; h += e; f += g;
+                f ^= g >> 4;  a += f; g += h;
+                g ^= h << 8;  b += g; h += a;
+                h ^= a >> 9;  c += h; a += b;
+            }
+        };
 
-    Ported from vanilla C to to template C++ class
-    by Quinn Tyler Jackson on 16-23 July 1998.
+        template <> struct TIsaacTraits<uint64_t>
+        {
+            static uint64_t GoldenRatio( void ) { return 0x9e3779b97f4a7c13ULL; }
+            static uint64_t Mix( uint64_t a, int nStep )
+            {
+                switch ( nStep )
+                {
+                    case 0:  return ~( a ^ ( a << 21 ) );
+                    case 1:  return a ^ ( a >> 5 );
+                    case 2:  return a ^ ( a << 12 );
+                    default: return a ^ ( a >> 33 );
+                }
+            }
+            static void Shuffle( uint64_t &a, uint64_t &b, uint64_t &c, uint64_t &d, uint64_t &e, uint64_t &f, uint64_t &g, uint64_t &h )
+            {
+                a -= e; f ^= h >> 9;  h += a;
+                b -= f; g ^= a << 9;  a += b;
+                c -= g; h ^= b >> 23; b += c;
+                d -= h; a ^= c << 15; c += d;
+                e -= a; b ^= d >> 14; d += e;
+                f -= b; c ^= e << 20; e += f;
+                g -= c; d ^= f >> 17; f += g;
+                h -= d; e ^= g << 14; g += h;
+            }
+        };
+    }
 
-        quinn@qtj.net
+    typedef uint32_t ISAAC_INT;
 
-    The function for the expected period of this
-    random number generator, according to Jenkins is:
+        // T is uint32_t (ISAAC) or uint64_t (ISAAC-64). Copies continue
+        // the same sequence independently. Not thread-safe: use one
+        // generator per thread, or lock around it.
+    template <int ALPHA = (8), class T = ISAAC_INT>
+    class TRandom
+    {
+        public:
+            enum { N = ( 1 << ALPHA ) };
 
-        f(a,b) = 2**((a+b*(3+2^^a)-1)
+            typedef T result_type;
 
-        (where a is ALPHA and b is bitwidth)
-        
-    So, for a bitwidth of 32 and an ALPHA of 8,
-    the expected period of ISAAC is:
+                // Seeded with a, b, c and nothing else (the same values
+                // always give the same sequence).
+            explicit TRandom( T a = 0, T b = 0, T c = 0 )
+            {
+                srand( a, b, c );
+            }
+            virtual ~TRandom( void ) {}
 
-        2^^(8+32*(3+2^^8)-1) = 2^^8295
+            T rand( void )
+            {
+                if ( m_nCount == 0 )
+                {
+                    isaac();
+                    m_nCount = N;
+                }
+                return m_aResults[ --m_nCount ];
+            }
 
-    Jackson has been able to run implementations
-    with an ALPHA as high as 16, or
+            T operator ()( void ) { return rand(); }
+            static T min( void ) { return 0; }
+            static T max( void ) { return (T)~(T)0; }
 
-        2^^2097263
-*/
+                // Reseeds with a, b, c and the N values of s (zeros if s is
+                // NULL).
+            void srand( T a = 0, T b = 0, T c = 0, const T *s = NULL )
+            {
+                for ( int i = 0; i < N; i++ )
+                {
+                    m_aResults[i] = ( s != NULL ) ? s[i] : 0;
+                }
+                m_a = a;
+                m_b = b;
+                m_c = c;
+                randinit( true );
+            }
 
+                // Reseeds from the operating system's random source.
+            void SeedFromSystem( void )
+            {
+                std::random_device device;
+                T aSeed[ N ];
+                for ( int i = 0; i < N; i++ )
+                {
+                    aSeed[i] = 0;
+                    for ( size_t nBits = 0; nBits < sizeof( T ) * 8; nBits += 32 )
+                    {
+                        aSeed[i] = (T)( ( (uint64_t)aSeed[i] << 16 << 16 ) | (uint32_t)device() );
+                    }
+                }
+                srand( 0, 0, 0, aSeed );
+            }
 
-#ifndef __ISAAC64
-   typedef unsigned long int UINT32;
-   const UINT32 GOLDEN_RATIO = UINT32(0x9e3779b9);
-   typedef UINT32 ISAAC_INT;
-#else   // __ISAAC64
-    typedef unsigned __int64 UINT64;
-    const UINT64 GOLDEN_RATIO = UINT64(0x9e3779b97f4a7c13);
-    typedef UINT64 ISAAC_INT;
-#endif  // __ISAAC64
+        protected:
+            void randinit( bool bUseSeed )
+            {
+                typedef RandomDetail::TIsaacTraits<T> Traits;
+                T a, b, c, d, e, f, g, h;
+                a = b = c = d = e = f = g = h = Traits::GoldenRatio();
 
+                if ( ! bUseSeed )
+                {
+                    m_a = m_b = m_c = 0;
+                }
 
-template <int ALPHA = (8), class T = ISAAC_INT> 
-   class TRandom
-   {
-   public:
-   
-      typedef unsigned char byte;
-   
-      struct randctx
-      {
-         randctx(void)
-         {
-            randrsl = (T*)::malloc(N * sizeof(T));
-            randmem = (T*)::malloc(N * sizeof(T));
-         }
-      
-         ~randctx(void)
-         {
-            ::free((void*)randrsl);
-            ::free((void*)randmem);
-         }
-      
-         T randcnt;
-         T* randrsl;
-         T* randmem;
-         T randa;
-         T randb;
-         T randc;
-      };
-   
-      TRandom(T a = 0, T b = 0, T c = 0);
-      virtual ~TRandom(void);
-   
-      T rand(void);
-      virtual void randinit(randctx* ctx, bool bUseSeed);
-      virtual void srand(T a = 0, T b = 0, T c = 0, T* s = NULL);
-   
-      enum {N = (1<<ALPHA)};
-   
-   protected:
-   
-      virtual void isaac(randctx* ctx);
-   
-      T ind(T* mm, T x);
-      void rngstep(T mix, T& a, T& b, T*& mm, T*& m, T*& m2, T*& r, T& x, T& y);
-      virtual void shuffle(T& a, T& b, T& c, T& d, T& e, T& f, T& g, T& h);
-   
-   private:
-   
-      randctx m_rc;   
-   };
+                for ( int i = 0; i < 4; ++i )         // scramble it
+                {
+                    Traits::Shuffle( a, b, c, d, e, f, g, h );
+                }
 
+                    // Two passes over the seed (or, without one, the
+                    // scrambled constants alone) so all of it affects all of
+                    // the memory.
+                for ( int nPass = 0; nPass < ( bUseSeed ? 2 : 1 ); nPass++ )
+                {
+                    const T *pSource = ( nPass == 0 ) ? m_aResults : m_aMemory;
+                    for ( int i = 0; i < N; i += 8 )
+                    {
+                        if ( bUseSeed )
+                        {
+                            a += pSource[i  ]; b += pSource[i+1]; c += pSource[i+2]; d += pSource[i+3];
+                            e += pSource[i+4]; f += pSource[i+5]; g += pSource[i+6]; h += pSource[i+7];
+                        }
+                        Traits::Shuffle( a, b, c, d, e, f, g, h );
+                        m_aMemory[i  ] = a; m_aMemory[i+1] = b; m_aMemory[i+2] = c; m_aMemory[i+3] = d;
+                        m_aMemory[i+4] = e; m_aMemory[i+5] = f; m_aMemory[i+6] = g; m_aMemory[i+7] = h;
+                    }
+                }
 
-template<int ALPHA, class T>
-   TRandom<ALPHA,T>::TRandom(T a, T b, T c)
-   {
-      srand(a, b, c);
-   }
+                isaac();            // fill in the first set of results
+                m_nCount = N;       // prepare to use the first set of results
+            }
 
+            void isaac( void )
+            {
+                typedef RandomDetail::TIsaacTraits<T> Traits;
+                const int SHIFT = ( sizeof( T ) == 8 ) ? 3 : 2;   // log2 of the size of T
+                T a = m_a;
+                T b = m_b + ( ++m_c );
+                for ( int i = 0; i < N; i++ )
+                {
+                    T x = m_aMemory[i];
+                    a = Traits::Mix( a, i % 4 ) + m_aMemory[ ( i + N / 2 ) % N ];
+                    T y = m_aMemory[ ( x >> SHIFT ) & ( N - 1 ) ] + a + b;
+                    m_aMemory[i] = y;
+                    b = m_aMemory[ ( y >> ( ALPHA + SHIFT ) ) & ( N - 1 ) ] + x;
+                    m_aResults[i] = b;
+                }
+                m_a = a;
+                m_b = b;
+            }
 
-template<int ALPHA, class T>
-   TRandom<ALPHA,T>::~TRandom(void)
-   {
-    // DO NOTHING
-   }
+        private:
+            T       m_aResults[ N ];
+            T       m_aMemory[ N ];
+            T       m_a;
+            T       m_b;
+            T       m_c;
+            int     m_nCount;
 
-
-template<int ALPHA, class T>
-   void TRandom<ALPHA,T>::srand(T a, T b, T c, T* s)
-   {
-      for(int i = 0; i < N; i++)
-      {
-         m_rc.randrsl[i] = s != NULL ? s[i] : 0;
-      }
-   
-      m_rc.randa = a;
-      m_rc.randb = b;
-      m_rc.randc = c;
-   
-      randinit(&m_rc, true);
-   }
-
-
-template<int ALPHA, class T>
-   inline T TRandom<ALPHA,T>::rand(void)
-   {
-      return(!m_rc.randcnt-- ? (isaac(&m_rc), m_rc.randcnt=(N-1), m_rc.randrsl[m_rc.randcnt]) : m_rc.randrsl[m_rc.randcnt]);
-   }
-
-
-template<int ALPHA, class T>
-   void TRandom<ALPHA,T>::randinit(randctx* ctx, bool bUseSeed)
-   {
-      T a,b,c,d,e,f,g,h;
-      int i;
-   
-      a = b = c = d = e = f = g = h = GOLDEN_RATIO;
-   
-      T* m = (ctx->randmem);
-      T* r = (ctx->randrsl);
-   
-      if(!bUseSeed)
-      {
-         ctx->randa = 0;
-         ctx->randb = 0;
-         ctx->randc = 0;
-      }
-   
-        // scramble it
-      for(i=0; i < 4; ++i)         
-      {
-         shuffle(a,b,c,d,e,f,g,h);
-      }
-   
-      if(bUseSeed) 
-      {
-        // initialize using the contents of r[] as the seed
-      
-         for(i=0; i < N; i+=8)
-         {
-            a+=r[i  ]; b+=r[i+1]; c+=r[i+2]; d+=r[i+3];
-            e+=r[i+4]; f+=r[i+5]; g+=r[i+6]; h+=r[i+7];
-         
-            shuffle(a,b,c,d,e,f,g,h);
-         
-            m[i  ]=a; m[i+1]=b; m[i+2]=c; m[i+3]=d;
-            m[i+4]=e; m[i+5]=f; m[i+6]=g; m[i+7]=h;
-         }           
-      
-        //do a second pass to make all of the seed affect all of m
-      
-         for(i=0; i < N; i += 8)
-         {
-            a+=m[i  ]; b+=m[i+1]; c+=m[i+2]; d+=m[i+3];
-            e+=m[i+4]; f+=m[i+5]; g+=m[i+6]; h+=m[i+7];
-         
-            shuffle(a,b,c,d,e,f,g,h);
-         
-            m[i  ]=a; m[i+1]=b; m[i+2]=c; m[i+3]=d;
-            m[i+4]=e; m[i+5]=f; m[i+6]=g; m[i+7]=h;
-         }
-      }
-      else
-      {
-        // fill in mm[] with messy stuff
-      
-         shuffle(a,b,c,d,e,f,g,h);
-      
-         m[i  ]=a; m[i+1]=b; m[i+2]=c; m[i+3]=d;
-         m[i+4]=e; m[i+5]=f; m[i+6]=g; m[i+7]=h;
-      }
-   
-      isaac(ctx);         // fill in the first set of results 
-      ctx->randcnt = N;   // prepare to use the first set of results 
-   }
-
-
-template<int ALPHA, class T>
-   inline T TRandom<ALPHA,T>::ind(T* mm, T x)
-   {
-#ifndef __ISAAC64
-      return (*(T*)((byte*)(mm) + ((x) & ((N-1)<<2))));
-#else   // __ISAAC64
-    return (*(T*)((byte*)(mm) + ((x) & ((N-1)<<3))));
-#endif  // __ISAAC64
-   }
-
-
-template<int ALPHA, class T>
-   inline void TRandom<ALPHA,T>::rngstep(T mix, T& a, T& b, T*& mm, T*& m, T*& m2, T*& r, T& x, T& y)
-   {
-      x = *m;  
-      a = (a^(mix)) + *(m2++); 
-      *(m++) = y = ind(mm,x) + a + b; 
-      *(r++) = b = ind(mm,y>>ALPHA) + x; 
-   }
-
-
-template<int ALPHA, class T>
-   void TRandom<ALPHA,T>::shuffle(T& a, T& b, T& c, T& d, T& e, T& f, T& g, T& h)
-   { 
-#ifndef __ISAAC64
-      a^=b<<11; d+=a; b+=c; 
-      b^=c>>2;  e+=b; c+=d; 
-      c^=d<<8;  f+=c; d+=e; 
-      d^=e>>16; g+=d; e+=f; 
-      e^=f<<10; h+=e; f+=g; 
-      f^=g>>4;  a+=f; g+=h; 
-      g^=h<<8;  b+=g; h+=a; 
-      h^=a>>9;  c+=h; a+=b; 
-#else // __ISAAC64
-    a-=e; f^=h>>9;  h+=a;
-    b-=f; g^=a<<9;  a+=b;
-    c-=g; h^=b>>23; b+=c;
-    d-=h; a^=c<<15; c+=d;
-    e-=a; b^=d>>14; d+=e;
-    f-=b; c^=e<<20; e+=f;
-    g-=c; d^=f>>17; f+=g;
-    h-=d; e^=g<<14; g+=h;
-#endif // __ISAAC64
-   }
-
-
-template<int ALPHA, class T>
-   void TRandom<ALPHA,T>::isaac(randctx* ctx)
-   {
-      T x,y;
-   
-      T* mm = ctx->randmem;
-      T* r  = ctx->randrsl;
-   
-      T a = (ctx->randa);
-      T b = (ctx->randb + (++ctx->randc));
-   
-      T* m    = mm; 
-      T* m2   = (m+(N/2));
-      T* mend = m2;
-   
-      for(; m<mend; )
-      {
-#ifndef __ISAAC64
-         rngstep((a<<13), a, b, mm, m, m2, r, x, y);
-         rngstep((a>>6) , a, b, mm, m, m2, r, x, y);
-         rngstep((a<<2) , a, b, mm, m, m2, r, x, y);
-         rngstep((a>>16), a, b, mm, m, m2, r, x, y);
-#else   // __ISAAC64
-        rngstep(~(a^(a<<21)), a, b, mm, m, m2, r, x, y);
-        rngstep(  a^(a>>5)  , a, b, mm, m, m2, r, x, y);
-        rngstep(  a^(a<<12) , a, b, mm, m, m2, r, x, y);
-        rngstep(  a^(a>>33) , a, b, mm, m, m2, r, x, y);
-#endif  // __ISAAC64
-      }
-   
-      m2 = mm;
-   
-      for(; m2<mend; )
-      {
-#ifndef __ISAAC64
-         rngstep((a<<13), a, b, mm, m, m2, r, x, y);
-         rngstep((a>>6) , a, b, mm, m, m2, r, x, y);
-         rngstep((a<<2) , a, b, mm, m, m2, r, x, y);
-         rngstep((a>>16), a, b, mm, m, m2, r, x, y);
-#else   // __ISAAC64
-        rngstep(~(a^(a<<21)), a, b, mm, m, m2, r, x, y);
-        rngstep(  a^(a>>5)  , a, b, mm, m, m2, r, x, y);
-        rngstep(  a^(a<<12) , a, b, mm, m, m2, r, x, y);
-        rngstep(  a^(a>>33) , a, b, mm, m, m2, r, x, y);
-#endif  // __ISAAC64
-      }
-   
-      ctx->randb = b;
-      ctx->randa = a;
-   }
+            static_assert( sizeof( T ) == 4 || sizeof( T ) == 8, "TRandom works on 32- or 64-bit unsigned integers" );
+            static_assert( (T)-1 > 0, "TRandom works on unsigned integers" );
+    };
 
 } // namespace IASLib
 

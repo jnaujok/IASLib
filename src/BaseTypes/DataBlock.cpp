@@ -19,383 +19,215 @@
  */
 
 
-#include <memory>
 #include "DataBlock.h"
 #include "Exception.h"
-#include "MemoryManager.h"
+
+#include <new>
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CDataBlock, CObject );
 
-        /**
-        * /brief The standard CDataBlock constructor.
-        * Constructs a data block object of size <code>nSize</code>. The
-        * buffer contains random data by default and is not intialized.
-        * <p>
-        * For security purposes, data blocks can be built with "Guardposts"
-        * that protect the front and back of the data buffer. A guardpost is
-        * a continuous set of bytes that are filled with a specified pattern
-        * to determine if data has been written beyond the end (or before 
-        * the begining) of the data block. The size of the guardposts is set
-        * by the <code>nGuardpostSize</code> parameter. Note that there is 
-        * overhead associated with maintaining these guardposts, and production
-        * code usually should have these guardposts disabled. (A length of zero.)
-        *
-        * @param   nSize            The size of the buffer to create.
-        * @param   nGuardpostSize   The size of the guardposts to use. Debug 
-        *                           default = 16 bytes, release = 0 bytes.
-        *
-        */
     CDataBlock::CDataBlock( size_t nSize, size_t nGuardpostSize )
     {
         m_pBuffer = NULL;
-        m_nGuardpostSize = nGuardpostSize; 
+        m_nGuardpostSize = nGuardpostSize;
         m_nSize = 0;
         Resize( nSize, false );
     }
 
-        /**
-        * Constructs a data block object of size <code>nSize</code>. The
-        * buffer then has the contents of <code>pData</code> copied into
-        * it.
-        * <p>
-        * For security purposes, data blocks can be built with "Guardposts"
-        * that protect the front and back of the data buffer. A guardpost is
-        * a continuous set of bytes that are filled with a specified pattern
-        * to determine if data has been written beyond the end (or before 
-        * the begining) of the data block. The size of the guardposts is set
-        * by the <code>nGuardpostSize</code> parameter. Note that there is 
-        * overhead associated with maintaining these guardposts, and production
-        * code usually should have these guardposts disabled. (A length of zero.)
-        *
-        * @param   pData            The data to be copied into the buffer. It 
-        *                           must be at least <code>nSize</code> bytes in 
-        *                           length.
-        * @param   nSize            The size of the buffer to create.
-        * @param   nGuardpostSize   The size of the guardposts to use. Debug 
-        *                           default = 16 bytes, release = 0 bytes.
-        *
-        */
     CDataBlock::CDataBlock( const unsigned char *pData, size_t nSize, size_t nGuardpostSize )
     {
         m_pBuffer = NULL;
-        m_nGuardpostSize = nGuardpostSize; 
+        m_nGuardpostSize = nGuardpostSize;
         m_nSize = 0;
         Resize( nSize, false );
-        Copy( pData, nSize );
+        if ( pData != NULL && nSize > 0 )
+            memcpy( Data(), pData, nSize );
     }
 
-        /**
-        * Constructs a data block object of size <code>nSize</code>. The
-        * buffer then has the contents of <code>pData</code> copied into
-        * it.
-        * <p>
-        * For security purposes, data blocks can be built with "Guardposts"
-        * that protect the front and back of the data buffer. A guardpost is
-        * a continuous set of bytes that are filled with a specified pattern
-        * to determine if data has been written beyond the end (or before 
-        * the begining) of the data block. The size of the guardposts is set
-        * by the <code>nGuardpostSize</code> parameter. Note that there is 
-        * overhead associated with maintaining these guardposts, and production
-        * code usually should have these guardposts disabled. (A length of zero.)
-        *
-        * @param   pData            The data to be copied into the buffer. It 
-        *                           must be at least <code>nSize</code> bytes in 
-        *                           length.
-        * @param   nSize            The size of the buffer to create.
-        * @param   nGuardpostSize   The size of the guardposts to use. Debug 
-        *                           default = 16 bytes, release = 0 bytes.
-        *
-        */
     CDataBlock::CDataBlock( const char *pData, size_t nSize, size_t nGuardpostSize )
     {
         m_pBuffer = NULL;
-        m_nGuardpostSize = nGuardpostSize; 
+        m_nGuardpostSize = nGuardpostSize;
         m_nSize = 0;
         Resize( nSize, false );
-        Copy( pData, nSize );
+        if ( pData != NULL && nSize > 0 )
+            memcpy( Data(), pData, nSize );
     }
 
-        /**
-        * /brief Copy Constructor
-        * Constructs a data block object from the already existing object passed in 
-        * as <code>oSource</code>.
-        *
-        * @param   oSource          The original DataBlock object to be copied
-        *                           into this one.
-        *
-        */
-    CDataBlock::CDataBlock( const CDataBlock &oSource )
+    CDataBlock::CDataBlock( const CDataBlock &oSource ) : CObject( oSource )
     {
+        oSource.CheckGuardposts();
         m_pBuffer = NULL;
-        m_nGuardpostSize = oSource.m_nGuardpostSize; 
+        m_nGuardpostSize = oSource.m_nGuardpostSize;
         m_nSize = 0;
         Resize( oSource.m_nSize, false );
-        Copy( oSource.m_pBuffer, oSource.m_nSize );
+        if ( m_nSize > 0 )
+            memcpy( Data(), oSource.Data(), m_nSize );
     }
 
-        /**
-        * /brief CDataBlock Destructor
-        * This method frees the memory associated with the DataBlock object
-        * at the end of the Data Block's lifetime.
-        *
-        */
     CDataBlock::~CDataBlock( void )
     {
-        CheckGuardposts();
-        if ( m_pBuffer )
-            delete m_pBuffer;
+        if ( m_pBuffer != NULL && ! GuardpostsIntact() )
+        {
+            fprintf( stderr, "CDataBlock: guardpost corrupted (block of %lu bytes)\n", (unsigned long)m_nSize );
+        }
+        free( m_pBuffer );
         m_pBuffer = NULL;
         m_nSize = 0;
-        m_nGuardpostSize = 0;
     }
 
-        /**
-        * This method copies data from a buffer into the DataBlock. The data 
-        * can be copied at any offset into the block and can be of any length.
-        * If the new block is longer than the current block, the data buffer 
-        * is dynamically resized.
-        *
-        * @param    pSource         The data buffer to be copied to the Data Block
-        * @param    nLength         The size of the data buffer to be copied
-        * @param    nOffset         The offset within the DataBlock to begin the copy,
-        *                           the default is zero.
-        *
-        */
     void CDataBlock::Copy( const void *pSource, size_t nLength, size_t nOffset )
     {
         CheckGuardposts();
-
-        if ( (nOffset + nLength) > m_nSize )
-        {
-            Resize( nOffset + nLength, (bool)(nOffset != 0) );
-        }
-        memcpy( m_pBuffer + ( m_nGuardpostSize + nOffset ), pSource, nLength );
+        if ( nLength == 0 || pSource == NULL )
+            return;
+        if ( nOffset > (size_t)-1 - nLength )
+            throw std::bad_alloc();
+        if ( nOffset + nLength > m_nSize )
+            Resize( nOffset + nLength, true );
+        memmove( Data() + nOffset, pSource, nLength );
     }
 
-        /**
-        * This method sets a range of data within the DataBlock to the specified
-        * value, much as the <code>memset</code> function would be used. The main 
-        * difference is that if the <code>nLength</code> value is large enough to
-        * cause a write past the end of the block, then the block is dynamically
-        * resized.
-        *
-        * @param    chValue         The <code>unsigned char</code> to set the block of data to.
-        * @param    nLength         The size of the data area to be set
-        * @param    nOffset         The offset within the DataBlock to begin setting
-        *                           the data.
-        *
-        */
     void CDataBlock::Set( unsigned char chValue, size_t nLength, size_t nOffset )
     {
         CheckGuardposts();
-
-        if ( ( nOffset + nLength ) > m_nSize )
-        {
-            Resize( nLength, (bool)(nOffset != 0) );
-        }
-        memset( m_pBuffer + ( m_nGuardpostSize  + nOffset ), (int)chValue, nLength );
+        if ( nLength == 0 )
+            return;
+        if ( nOffset > (size_t)-1 - nLength )
+            throw std::bad_alloc();
+        if ( nOffset + nLength > m_nSize )
+            Resize( nOffset + nLength, true );
+        memset( Data() + nOffset, (int)chValue, nLength );
     }
 
-        /**
-        * This method sets a range of data within the DataBlock to the specified
-        * value, much as the <code>memset</code> function would be used. The main 
-        * difference is that if the <code>nLength</code> value is large enough to
-        * cause a write past the end of the block, then the block is dynamically
-        * resized.
-        *
-        * @param    chValue         The <code>char</code> to set the block of data to.
-        * @param    nLength         The size of the data area to be set
-        * @param    nOffset         The offset within the DataBlock to begin setting
-        *                           the data.
-        *
-        */
     void CDataBlock::Set( char chValue, size_t nLength, size_t nOffset )
     {
-        CheckGuardposts();
-
-        if ( ( nOffset + nLength ) > m_nSize )
-        {
-            Resize( nLength, (bool)(nOffset != 0) );
-        }
-        memset( m_pBuffer + ( m_nGuardpostSize  + nOffset ), (int)chValue, nLength );
+        Set( (unsigned char)chValue, nLength, nOffset );
     }
 
-        /**
-        * This operator is an automatic cast to the type "const char *".
-        *
-        */
     CDataBlock::operator const char *() const
     {
         CheckGuardposts();
-        return (const char *)( m_pBuffer + m_nGuardpostSize );
+        return (const char *)Data();
     }
 
-        /**
-        * This operator is an automatic cast to the type "char *".
-        *
-        */
     CDataBlock::operator char *() const
     {
         CheckGuardposts();
-        return (char *)( m_pBuffer + m_nGuardpostSize );
+        return (char *)Data();
     }
 
-        /**
-        * This operator is an automatic cast to the type "const unsigned char *".
-        *
-        */
     CDataBlock::operator const unsigned char *() const
     {
         CheckGuardposts();
-        return (const unsigned char *)( m_pBuffer + m_nGuardpostSize );
+        return Data();
     }
 
-       /**
-        * This operator is an automatic cast to the type "unsigned char *".
-        *
-        */
     CDataBlock::operator unsigned char *() const
     {
         CheckGuardposts();
-        return (unsigned char *)( m_pBuffer + m_nGuardpostSize );
+        return Data();
     }
 
-       /**
-        * This operator is an automatic cast to the type "const void *".
-        *
-        */
     CDataBlock::operator const void *() const
     {
         CheckGuardposts();
-        return (const void *)( m_pBuffer + m_nGuardpostSize );
+        return Data();
     }
 
-       /**
-        * This operator is an automatic cast to the type "void *".
-        *
-        */
     CDataBlock::operator void *() const
     {
         CheckGuardposts();
-        return (void *)( m_pBuffer + m_nGuardpostSize );
+        return Data();
     }
 
-       /**
-        * This operator allows access to the underlying data of the 
-        * buffer by exposing the individual bytes (<code>char</code>) to 
-        * the calling class. Note that if the index is out of range, then
-        * the buffer is expanded to meet the range.
-        *
-        */
     char &CDataBlock::operator []( size_t nIndex )
     {
-        if ( m_nSize < nIndex )
+        CheckGuardposts();
+        if ( nIndex >= m_nSize )
         {
-            Resize( nIndex, true );
+            if ( nIndex == (size_t)-1 )
+                throw std::bad_alloc();
+            Resize( nIndex + 1, true );
         }
-        return (char &)m_pBuffer[ nIndex ];
+        return (char &)Data()[ nIndex ];
     }
 
-        /**
-        * Copies a data block object from the already existing object passed in 
-        * as <code>oSource</code>.
-        *
-        * @param   oSource          The original DataBlock object to be copied
-        *                           into this one.
-        *
-        */
+    char CDataBlock::operator []( size_t nIndex ) const
+    {
+        CheckGuardposts();
+        return ( nIndex < m_nSize ) ? (char)Data()[ nIndex ] : '\0';
+    }
+
     CDataBlock &CDataBlock::operator =( const CDataBlock &oSource )
     {
         if ( this != &oSource )
         {
-            m_nGuardpostSize = oSource.m_nGuardpostSize; 
-            Resize( oSource.m_nSize, false );
-            Copy( oSource.m_pBuffer, oSource.m_nSize );
+            oSource.CheckGuardposts();
+            CheckGuardposts();
+
+                // Build the copy first, so a failure leaves this block as it was.
+            CDataBlock oCopy( oSource );
+            unsigned char *pSwap = m_pBuffer;
+            m_pBuffer = oCopy.m_pBuffer;
+            oCopy.m_pBuffer = pSwap;
+            size_t nSwap = m_nSize;
+            m_nSize = oCopy.m_nSize;
+            oCopy.m_nSize = nSwap;
+            nSwap = m_nGuardpostSize;
+            m_nGuardpostSize = oCopy.m_nGuardpostSize;
+            oCopy.m_nGuardpostSize = nSwap;
         }
         return *this;
     }
 
-        /**
-        * This method is called to change the current size of the DataBlock object.
-        * If the new size is smaller, the data blck is sized down. If the new size 
-        * (plus the offset) is larget, than the buffer is reallocated.
-        *
-        * @param   nLength          the new size of the Datablock. 
-        * @param   bPreserveData    if <code>bPreserveData</code> is set to true,
-        *                           the default, then data stored in the memory is
-        *                           maintained (ie. copied) when the size is changed.
-        *
-        */
     void CDataBlock::ChangeSize( size_t nLength, bool bPreserveData )
     {
         CheckGuardposts();
         Resize( nLength, bPreserveData );
     }
 
-        /**
-        * This private method is actually responsible for dynamically resizing
-        * the buffer used for storing data.
-        *
-        * @param   nLength          the new size of the Datablock. 
-        * @param   bCopy            if <code>bCopy</code> is set to true,
-        *                           the default, then data stored in the memory is
-        *                           maintained (ie. copied) when the size is changed.
-        *                           Note: This is for future use only, as currently
-        *                           the data is always copied by the memory re-allocation
-        *                           routines.
-        *
-        */
-    void CDataBlock::Resize( size_t nLength, bool bCopy  )
+    void CDataBlock::Resize( size_t nLength, bool bPreserveData )
     {
-#ifdef IASLIB_MEMORY_MANAGER__
-    #ifdef IASLIB_DEBUG__
-        m_pBuffer = (unsigned char *)CMemoryManager::ReallocateDebug( m_pBuffer, nLength + (m_nGuarpostSize * 2), __FILE__, __LINE__ );
-    #else
-        m_pBuffer = (unsigned char *)CMemoryManager::Reallocate( m_pBuffer, nLength + (m_nGuarpostSize * 2) );
-    #endif
-#else
-        m_pBuffer = (unsigned char *)realloc( m_pBuffer, (size_t)(nLength  + (m_nGuardpostSize * 2)) );
-#endif
-            // The copy flag is really ignored. It shouldn't be, but since
-            // all of the Realloc calls move the data intrinisically, it becomes
-            // tricky to make it work. It's really here for the future, in case
-            // we ever get clever enough to use it.
-        bCopy = bCopy;
+        if ( nLength > (size_t)-1 - 2 * m_nGuardpostSize || m_nGuardpostSize > (size_t)-1 / 2 )
+            throw std::bad_alloc();
 
-        if ( m_nGuardpostSize )
+        size_t nTotal = nLength + 2 * m_nGuardpostSize;
+        unsigned char *pNew = (unsigned char *)malloc( ( nTotal > 0 ) ? nTotal : 1 );
+        if ( pNew == NULL )
+            throw std::bad_alloc();
+
+        memset( pNew, GUARDPOST_PATTERN, m_nGuardpostSize );
+        memset( pNew + m_nGuardpostSize, 0, nLength );
+        memset( pNew + m_nGuardpostSize + nLength, GUARDPOST_PATTERN, m_nGuardpostSize );
+        if ( bPreserveData && m_pBuffer != NULL )
         {
-            memset( m_pBuffer, '\xAA', m_nGuardpostSize );
-            memset( (m_pBuffer + nLength) - m_nGuardpostSize, '\xAA', m_nGuardpostSize );
+            memcpy( pNew + m_nGuardpostSize, Data(), ( nLength < m_nSize ) ? nLength : m_nSize );
         }
+
+        free( m_pBuffer );
+        m_pBuffer = pNew;
+        m_nSize = nLength;
     }
 
+    bool CDataBlock::GuardpostsIntact( void ) const
+    {
+        const unsigned char *pBack = Data() + m_nSize;
+        for ( size_t nCount = 0; nCount < m_nGuardpostSize; nCount++ )
+        {
+            if ( m_pBuffer[ nCount ] != GUARDPOST_PATTERN || pBack[ nCount ] != GUARDPOST_PATTERN )
+                return false;
+        }
+        return true;
+    }
 
-        /**
-        * This private method tests whether the data Guard-posts 
-        * are still correct (containing a fixed data pattern). This method
-        * is called before most of the functions are called. It may throw 
-        * a CException if the guardpost bytes have been corrupted.
-        *
-        */
     void CDataBlock::CheckGuardposts( void ) const
     {
-        if ( m_nGuardpostSize )
+        if ( ! GuardpostsIntact() )
         {
-            for ( size_t nCount = 0; nCount < m_nGuardpostSize; nCount++ )
-            {
-                if ( m_pBuffer[ nCount ] != (unsigned char)'\xAA' )
-                {
-                    throw CException( "Starting guardpost corrupted in DataBlock!" );
-                }
-
-                if ( m_pBuffer[ m_nSize - ( nCount + 1 ) ] != (unsigned char)'\xAA' )
-                {
-                    throw CException( "Ending guardpost corrupted in DataBlock!" );
-                }
-            }
+            throw CException( "Guardpost corrupted in DataBlock!" );
         }
     }
 } // namespace IASLib
-
