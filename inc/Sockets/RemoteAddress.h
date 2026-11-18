@@ -1,4 +1,7 @@
 /**
+ * @file RemoteAddress.h
+ * @brief CRemoteAddress, an old name for CInternetAddress.
+ *
  *  Remote Address Class
  *
  *      This was a second copy of CInternetAddress that nothing used (and
@@ -23,6 +26,7 @@
 
 namespace IASLib
 {
+        /// An old name for CInternetAddress, kept for code that refers to it.
     typedef CInternetAddress CRemoteAddress;
 } // namespace IASLib
 

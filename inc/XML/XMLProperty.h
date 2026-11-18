@@ -1,3 +1,9 @@
+/**
+ * @file XMLProperty.h
+ * @brief CXMLProperty, an attribute of an XML element.
+ *
+ * The original header comment follows.
+ */
 /*
  * XML Property Class
  *
@@ -18,20 +24,30 @@
 
 namespace IASLib
 {
+    /// An attribute of an XML element: name="value", with the value as
+    /// text (entities already replaced). Names are case sensitive.
     class CXMLProperty : public CObject
     {
         protected:
-            CString     m_strName;
-            CString     m_strValue;
+            CString     m_strName;      ///< The attribute's name.
+            CString     m_strValue;     ///< The value, unescaped.
 
         public:
+                /// Creates an attribute.
+                /// @param strName  The name.
+                /// @param strValue  The value, unescaped.
                         CXMLProperty( const char *strName, const char *strValue );
+                /// Destroys the attribute.
             virtual    ~CXMLProperty( void );
 
                         DEFINE_OBJECT( CXMLProperty )
 
+                /// The attribute's name.
             const char *GetName( void ) const { return (const char *)m_strName; }
+                /// The value, unescaped.
             const char *GetValue( void ) const { return (const char *)m_strValue; }
+                /// Replaces the value.
+                /// @param strValue  The new value, unescaped.
             void        SetValue( const char *strValue ) { m_strValue = strValue; }
     };
 } // namespace IASLib

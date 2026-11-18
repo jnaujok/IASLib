@@ -1,4 +1,7 @@
 /**
+ * @file SocketWait.h
+ * @brief Waiting for a socket to become readable or writable, with a timeout.
+ *
  * Socket Wait
  *
  *      Waits for a socket to become readable, with a timeout, on every
@@ -23,8 +26,12 @@
 
 namespace IASLib
 {
-        // 1 if the socket can be read (or has an error or hang-up to report),
-        // 0 if the time ran out (or the wait was interrupted), -1 on error.
+        /// Waits for a socket to become readable.
+        /// @param hSocket  The socket handle.
+        /// @param nTimeoutMs  The longest wait in milliseconds; negative waits forever.
+        /// @return 1 if the socket can be read (or has an error or hang-up to
+        ///         report), 0 if the time ran out (or the wait was
+        ///         interrupted), -1 on error.
     template <typename SocketType>
     inline int WaitForReadable( SocketType hSocket, int nTimeoutMs )
     {
@@ -49,7 +56,11 @@ namespace IASLib
 #endif
     }
 
-        // The same for writing: 1 if the socket can take more data.
+        /// The same for writing: 1 if the socket can take more data.
+        /// @param hSocket  The socket handle.
+        /// @param nTimeoutMs  The longest wait in milliseconds; negative waits forever.
+        /// @return 1 if it can be written, 0 if the time ran out (or the wait
+        ///         was interrupted), -1 on error.
     template <typename SocketType>
     inline int WaitForWritable( SocketType hSocket, int nTimeoutMs )
     {
@@ -74,8 +85,9 @@ namespace IASLib
 #endif
     }
 
-        // True if the last socket call failed only because it would block or
-        // timed out (as opposed to a real error).
+        /// True if the last socket call failed only because it would block or
+        /// timed out (as opposed to a real error). An interrupted call counts
+        /// as well.
     inline bool SocketErrorIsTimeout( void )
     {
 #ifdef IASLIB_WIN32__

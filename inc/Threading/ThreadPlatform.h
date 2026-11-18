@@ -1,3 +1,9 @@
+/**
+ * @file ThreadPlatform.h
+ * @brief Chooses the threading API (Win32 or POSIX threads) from the platform flag.
+ *
+ * The original header comment follows.
+ */
 /***********************************************************************
 **  Thread Platform
 **
@@ -14,6 +20,8 @@
 #define IASLIB_THREADPLATFORM_H__
 
 #if defined( IASLIB_MULTI_THREADED__ ) && ! defined( IASLIB_WIN32__ ) && ! defined( IASLIB_PTHREAD__ )
+        /// Defined when the library uses POSIX threads (every multi-threaded
+        /// build except Windows).
     #define IASLIB_PTHREAD__
 #endif
 
