@@ -4,6 +4,145 @@ All notable changes to IASLib are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/) from 2.5.0 on.
 
+## [Unreleased] — 3.0 in progress
+
+The base types and collections, reviewed one by one and cleaned up, and template versions of every collection.
+
+### ⚠️ Breaking changes
+
+- **`CCString` (`String_Copy.h`) is removed.** It was unused, and `IASLIB_USE_DEEP_COPY_STRING__` could not have worked (it named a different class). `CString` copies are now safe across threads.
+- **`IASLibChar__` is `char` on every platform.** It was `TCHAR` on Windows, which the string code never handled as wide characters.
+- **`CString` details:**
+  - Doubles and floats become the shortest text that reads back as the same value (`"0.1"`, `"2"`), always with a `.` decimal point; they were `"%f"` (`"2.000000"`) in the C locale's format.
+  - `Replace()` and `Remove()` with strings make one pass, so text put in is not searched again.
+  - `Escape()` also escapes `+`, so `Unescape()` gives back the original.
+  - The `const` `operator []` returns a character, not a reference.
+  - `getBytes()` returns `const unsigned char *`.
+  - `hashcode()` is `hashCode()` (the old name still works) and overrides `CObject`'s, so equal strings hash alike everywhere.
+  - Stream input (`IASLIB_STD_STREAM_SUPPORT__`) reads a word, as `std::string` does.
+  - `dumpStubMemory()` is gone.
+- **`CObject`:**
+  - `GetType()` and `IsType()` are `const`.
+  - `SetAssertHandler()` takes the handler to use.
+  - A copied object gets a new ID.
+  - `Object.h` no longer includes the threading headers.
+- **Collections:**
+  - Collections that own `CObject` pointers (`CArray`, `CHash`, `CList`, `CQueue`, `CSparseArray`, `CCache`) can't be copied. Every copy used to free the same objects twice.
+  - `CSparseArray` is no longer a `CSortedArray`.
+  - `CHash` keeps entries in the order they were added, and number keys equal their digits as strings.
+  - `CQueue` iterates from the front.
+  - `CCollection::m_nElements` is gone; `GetLength()` is virtual.
+  - `CSortedArray::Find()` returns `NOT_FOUND` instead of an encoded insertion point.
+  - `CCacheItem`'s list links are gone.
+  - `HashBucket.h`, `HashSlat.h` and the unfinished template drafts (`TCollection.h`, `TEntry.h`, `TIterator.h`, `TMap.h`, `TDoubleList.h`, the old `TCache.h`) are removed.
+- **`CUUID`:**
+  - 16 bytes, written in the standard 36-character form.
+  - `getBytes()` and `toString()` are `const`.
+  - It no longer uses `TRandom`.
+- **`CStringTokenizer`:** with every delimiter counting, `"a,"` gives `"a"` and `""` (n delimiters, n + 1 tokens).
+- **`CMutex` can't be copied.** Copying one copied the operating system's mutex.
+
+### Added
+
+- **Template collections** (`Templates/TCollections.h`):
+  - `TArray`, `TSortedArray`, `TSparseArray`, `TList`, `TStack` and `TQueue` (a ring buffer).
+  - `THash`, which iterates in the order entries were added.
+  - `TCache`, least recently used with optional expiry and an eviction handler.
+  - They hold values, move what they can, and work with range-based `for`.
+  - They grow by half their size, but never by more than a megabyte at once, and have `Reserve()` and `Compact()`.
+- **`CString`:**
+  - `c_str()`, `IsEmpty()`, `StartsWith()` and `EndsWith()`.
+  - `Reserve()` and `Compact()`.
+  - Move construction and assignment.
+  - `+`, `+=` and `=` for every integer type and `double`.
+  - `printf` format checking on `Format()` and `FormatString()`.
+- **`CStringArray`:** `Find()`, `Contains()` and `Join()`.
+- **`CIntArray`:** `Find()` and `Sort()`.
+- **`CArray`:** `Find()`, `Reserve()` and `Compact()`.
+- **`CQueue`:** `Get()`.
+- **`CCache`:** `Get( key )`.
+- **`CCacheItem`:** accessors for its dates and hits.
+- **`CUUID`:** `getVersion()`, `isNil()`, `Nil()`, comparisons and `hashCode()`. It parses braced and undashed forms.
+- **`TRandom`:** `SeedFromSystem()`, and it works with the standard library's random distributions.
+- **`CVariant`:** `isEmpty()` and `isNumber()`. Its number getters convert, and read numbers from strings.
+- **`CMutexLock`:** locks a mutex for a scope.
+- **Tests:** `TestBaseTypes` and `TestCollections`.
+
+### Fixed
+
+- **`CString`:**
+  - **Memory errors:**
+    - Shortening a string to nothing wrote to freed memory.
+    - `ToHex()` wrote past its buffer.
+    - `hashcode()` crashed on an empty string.
+    - Fixed-buffer strings could overrun their buffer, and appended text past the length they recorded.
+  - **Wrong results:**
+    - `"abc" == str` compared pointers.
+    - `"" < "a"` was false.
+    - `operator []` changed every copy of a string.
+    - `Remove( char )` kept the old length.
+    - `Replace()` looped forever when the new text contained the old, or the old was empty.
+    - `LastIndexOf()` never found a match at 0.
+    - `"abc"` didn't match the wildcard `"abc*"`.
+    - `Copy()` did nothing on an empty string.
+    - `Unescape()` read past the end, and turned bad escapes into NULs.
+  - **Limits:**
+    - `Format()` cut text off at 64 KB, through a shared buffer.
+    - Every string had its own mutex.
+    - Appending a character at a time copied the whole string each time.
+  - **Missing:** `hasDelimitedTokens()` was declared but never defined.
+- **`CObject`:**
+  - Object IDs were counted without a lock, unless the build was multi-threaded.
+  - The memory-debugging allocator crashed on a failed allocation or a NULL delete.
+  - `ASSERT` broke `if`/`else`.
+- **Templates and memory debugging:** classes built with memory debugging hid placement `new`.
+- **`CDataBlock`** never recorded its size, so the first guardpost check read far outside the buffer. It also wrote the back guardpost inside the data, freed `malloc` memory with `delete`, and could throw from its destructor.
+- **`CUUID`:**
+  - It held 32 bytes and printed a form of varying length.
+  - It couldn't parse a UUID (`*uuid + 1`).
+  - It was seeded from the clock, so two programs started in the same second made the same UUIDs.
+- **`TRandom` (ISAAC):**
+  - The default integer type was 64 bits on Linux and macOS.
+  - Seeding without a seed filled only 8 of its 256 words.
+  - ISAAC-64 mixed with the 32-bit form.
+  - Copies freed the same tables twice.
+  - `UINT32` clashed with Windows' own type.
+- **`CVariant`:**
+  - The default constructor left every member unset.
+  - `v = "text"` stored the boolean `true`.
+  - NULL arrays and objects crashed `getString()`.
+  - `getInt()` gave 0 for `long` values.
+- **`CStringTokenizer`:** a one-character string gave no tokens in every-delimiter mode, and trailing empty tokens were dropped.
+- **`CArray`:**
+  - `Set()` past the end wrote past the buffer.
+  - Copying or assigning an array freed its objects twice.
+  - `Sort()` of an empty array read out of bounds.
+  - It grew four slots at a time and shrank on almost every `Remove()`.
+- **`CSortedArray`** never sorted. `Push()` appended at the end, or dropped (and leaked) a value equal to one already there.
+- **`CSparseArray`** inherited that.
+- **`CHash`:**
+  - `Delete()` removed every key in the same bucket.
+  - `Remove()` lost count.
+  - Negative number keys indexed outside the table.
+  - The string hash ignored the last character.
+  - A key with surrounding spaces could be dropped and leaked by `Push()`.
+  - Copies and assignment freed buckets twice.
+  - Iterating rescanned the table for every element.
+- **`CCache`:**
+  - `ClearExpired()` read the item it had just freed.
+  - Adding a key twice left a deleted item on the LRU list.
+  - A one-entry cache crashed when it evicted.
+- **Other collections:**
+  - `CQueue::Pop()` moved every element.
+  - `CStringArray::EmptyAll()` leaked every string.
+  - `CIntArray` and `CStringArray` copies freed twice, and their sorts crashed when empty.
+  - `CConnectionArray` freed memory with the wrong `delete`.
+- **Copies that freed twice:** `CLogContext::addValue( CArray & )` and the thread pool's shutdown each copied an owning array.
+- **`CStream << unsigned long`** wrote `"123ld"`. `printf` checking also found `size_t`s printed with `%d`.
+- **Exceptions:**
+  - The `IASLIB_THROW_*` macros threw a shared `static` exception, which two threads could change at once.
+  - `CCollectionException` named itself `"CCollectionExcetption"`.
+
 ## [2.5.0] — 2026-11-17
 
 A large update: the library now builds and passes its tests on Linux (GCC and Clang), macOS and Windows (MSVC) from the same source, and gains named time zones, a complete JSON library, TLS, and a rebuilt blockchain.

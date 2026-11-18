@@ -69,7 +69,9 @@ It was years later that the movie "Sherlock Holmes", and the TV series of "Sherl
 **Foundations**
 - `CObject` base class with run-time type information and per-class allocation tracking.
 - Memory debugging: buffer overrun and underrun detection, file and line of every allocation and free, and a leak report at shutdown.
-- `CString`, collections (arrays, lists, hashes, stacks, queues), streams, files and logging.
+- `CString`: shared text with thread-safe copy-on-write, `printf`-checked formatting, and locale-independent numbers.
+- Template collections — `TArray`, `TSortedArray`, `TSparseArray`, `TList`, `TStack`, `TQueue`, `THash` and `TCache` (LRU with expiry) — with range-based `for`, and the classic `CObject` collections built on them.
+- RFC 9562 UUIDs, the ISAAC random number generator, variants, streams, files and logging.
 - Threads, mutexes, semaphores and thread pools, using Win32 threads on Windows and POSIX threads everywhere else.
 
 **Dates and time zones**
@@ -218,6 +220,30 @@ sip.setTlsContext( tls, 5061 );                        // and SIP over TLS
 sip.Start();
 ```
 
+### Template collections
+
+```cpp
+#include "IASLib.h"
+using namespace IASLib;
+
+THash<CString, int> counts;                 // iterates in the order keys were added
+for ( const char *word : { "to", "be", "or", "not", "to", "be" } )
+    counts[ word ]++;
+for ( const auto &entry : counts )
+    printf( "%s: %d\n", entry.Key.c_str(), entry.Value );
+
+TSortedArray<int> sorted;                   // binary search, equal values keep their order
+sorted.Push( 42 );
+sorted.Push( 7 );
+size_t at = sorted.Find( 42 );              // 1
+
+TCache<CString, CString> cache( 1000 );     // least recently used goes first
+cache.Put( "session", "data", 30000 );      // expires in 30 seconds
+CString *value = cache.Get( "session" );
+```
+
+The collections grow by half their size but never by more than a megabyte at once, so small ones are cheap to append to and large ones carry bounded slack; `Reserve()` and `Compact()` take control where it matters.
+
 ### A blockchain
 
 ```cpp
@@ -235,7 +261,7 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 
 ## Testing
 
-`ctest` runs seven suites:
+`ctest` runs nine suites:
 
 | Suite | Covers |
 |---|---|
@@ -245,6 +271,8 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 | `TestSip` | Parsing, transactions, CANCEL, Via handling, hostile input, and a live server over UDP and TCP |
 | `TestTls` | TLS contexts, HTTPS, SNI, `sips:`, SIP over TLS, and trust stores |
 | `TestBlockchain` | SHA-256 and RFC 6962 test vectors, inclusion proofs, tamper detection, saving, and threads |
+| `TestBaseTypes` | `CObject`, `CString` (sharing, fixed buffers, numbers, searching, escaping, threads), the tokenizer, `CDataBlock`, UUIDs, ISAAC against Jenkins' test vector, and `CVariant` |
+| `TestCollections` | Every template collection against the standard library on random operations, with counted elements to catch leaks, and the classic collections |
 | `TestXMLDocument` | XML parsing and output |
 
 The suites are run under AddressSanitizer/UndefinedBehaviorSanitizer, ThreadSanitizer and Valgrind during development:

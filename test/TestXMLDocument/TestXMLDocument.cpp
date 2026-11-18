@@ -105,11 +105,7 @@ bool testFileStream( int argc, char *argv[] ) {
     return true;
 }
 
-#ifdef IASLIB_WIN32__
-int _tmain(int argc, _TCHAR* argv[])
-#else
 int main( int argc, char *argv[] )
-#endif
 {
     bool bMemory = testMemoryStream();
     bool bFile = testFileStream(argc,argv);
