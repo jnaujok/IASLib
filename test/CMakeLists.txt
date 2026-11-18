@@ -78,3 +78,7 @@ add_test(test_memory TestMemory)
 add_executable(TestResources TestResources/TestResources.cpp)
 target_link_libraries(TestResources IASLib)
 add_test(NAME test_resources COMMAND TestResources WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+add_executable(TestResourceManager TestResourceManager/TestResourceManager.cpp)
+target_link_libraries(TestResourceManager IASLib)
+add_test(NAME test_resource_manager COMMAND TestResourceManager WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

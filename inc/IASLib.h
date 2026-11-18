@@ -324,6 +324,8 @@
 #include "Resources/ResourceFile.h"
 #include "Resources/ResourceFileNode.h"
 #include "Resources/ResourceIndex.h"
+#include "Resources/ResourceSource.h"
+#include "Resources/ResourceManager.h"
 
 //***********
 //  SOCKETS

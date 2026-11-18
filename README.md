@@ -279,6 +279,7 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 | `TestLogging` | The default sink, levels and macros, long messages, `${name}` context expansion, CLogFile across threads, CRotatingLogFile periods, names, rotation and pruning |
 | `TestMemory` | Fixed-size and pooled heaps, the debugging heap (fenceposts, bad frees, leak tracking), and CObjects returning to the allocator they came from |
 | `TestResources` | The resource manager: put/get/replace/remove, SHA-256 checks, reopening, folders and names, Compact(), crash and damage handling, read-only use, the LRU cache, threads |
+| `TestResourceManager` | The resource manager: paths, sources by priority (archive and loose files), typed loaders, shared handles, the memory budget, reloading, background loading with main-thread callbacks |
 | `TestThreading` | Starting and joining threads from any thread, return codes, `ExitThread()`, `Kill()`, exceptions, the monitor, semaphores, the thread pool and the server thread |
 | `TestXMLDocument` | XML reading and writing, entities and CDATA, well-formedness errors with positions, XXE and entity-expansion protection, the element API, a real file, and fuzzing |
 

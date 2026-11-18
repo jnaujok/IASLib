@@ -160,15 +160,22 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CMemoryDebugHeap`: fenceposts, double and foreign frees, spoiling freed memory, and optional leak tracking by type, file and line, with `ReportLeaks()` and `CheckAll()`.
   - `IASLIB_NEW`, a `new` that records the file and line.
   - `TestMemory`, and a CI job for the memory manager without the debugging heap.
-- **Resource manager**, for games and other programs with many resources to load (it was an empty skeleton). It is built on the library's own pieces: CFile for the file, the streams' big-endian numbers for its format, `CSHA256` digests, `TCache` for caching, `CDataBlock` for data, and `CMutex`.
-  - `CResourceFile` keeps resources in one file, found by folder and resource tags or by name, and is thread-safe.
-  - Data and index are checked with SHA-256 digests. A crash part-way through a write leaves the archive as it was at the last `Flush()`.
-  - Auto-flush, or batched writes with `Flush()`. `Compact()` reclaims space left by replaced or removed resources.
-  - The cache is a `TCache` kept to a byte limit, with hit and miss counts. It hands out `shared_ptr`s, so an evicted resource stays valid for whoever holds it.
-  - On Windows an archive is limited to 2 GB, since CFile seeks with a `long`.
-  - `CResource` holds the data, name, type, and when and by whom it was changed. It loads from and saves to files, with `Load()`/`Save()` against an archive.
-  - `CResourceDirectoryNode` and `CResourceFileNode` give a folder view.
-  - `TestResources`.
+- **Resource manager**, for games and other programs with many resources to load (it was an empty skeleton):
+  - `CResourceManager` loads resources by path (`"textures/hero.png"`) and keeps them while they are wanted.
+    - Sources are searched in priority order, so loose files or a patch can override the main archive: `CArchiveSource` (an archive, by resource name) and `CDirectorySource` (loose files). Programs can add their own.
+    - Loaders registered by file extension turn bytes into typed resources (subclasses of `CLoadedResource`); `Get<T>()` returns the type. Without a loader a resource is a `CRawResource` holding its bytes.
+    - Handles are shared: every request for a path gets the same object, which lives while anyone holds it.
+    - Over its memory budget, the manager unloads the least recently used resources that nobody else holds, never one in use.
+    - `LoadAsync()` loads on worker threads, and callbacks run on the thread that calls `ProcessCompleted()`, such as a game's main loop. Requests for a path already loading share that load, and so does a `Get()`, which waits for it.
+    - Also `Unload()`, `UnloadUnused()`, `Reload()` (holders of the old object keep it), `Exists()`, `WaitForPending()` and statistics.
+  - `CResourceFile`, the packed archive:
+    - Resources by folder and resource tags or by name.
+    - SHA-256 digests on the data and the index. A crash part-way through a write leaves the archive as it was at the last `Flush()`.
+    - `Compact()` reclaims space from replaced or removed resources.
+    - A `TCache` with a byte limit, which `CArchiveSource` turns off because the manager caches.
+    - Built on CFile, so on Windows an archive is limited to 2 GB.
+  - `CResource` is a resource in an archive, with its name, type, and when and by whom it was changed. `CResourceDirectoryNode` and `CResourceFileNode` give a folder view.
+  - `TestResources` and `TestResourceManager`.
 - **Stats and status:**
   - `CHistogram::GetCount()` and `GetCategoryCount()`.
   - `CCoverageMap::IsUsed()`, `GetRunCount()` and `GetFragmentation()`.
