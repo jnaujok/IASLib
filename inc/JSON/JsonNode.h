@@ -11,9 +11,16 @@
  *
  *  Ownership: a container owns its children, and deleting the root deletes
  * the tree. Pointers returned by get(), path(), at() and the find methods
- * belong to the tree; do not delete them. The missing node is a shared
- * singleton. Nodes may be read from several threads at once, but a tree
- * being changed must not be read or changed elsewhere at the same time.
+ * belong to the tree; do not delete them. path(), at() and findPath() give a
+ * const reference: to change a node found by a path, use get() (which gives
+ * NULL rather than the missing node). The missing node is one shared,
+ * read-only object; do not delete it or add it to a tree (containers store a
+ * null in its place). Nodes may be read from several threads at once, but a
+ * tree being changed must not be read or changed elsewhere at the same time.
+ *
+ *  Trees of any depth can be written, copied, compared, searched and
+ * deleted: those walk the tree with a list of their own rather than by
+ * recursion, so a deep tree cannot overflow the stack.
  *
  *  Text is UTF-8. Text values may hold any character, including U+0000;
  * textValue() and asText() return a CString, which stops at a NUL, so use
@@ -68,30 +75,36 @@ namespace IASLib
 
                 // Type.
             virtual JsonNodeType    getNodeType( void ) const = 0;
-            bool                    isArray( void ) const { return getNodeType() == ARRAY; }
-            bool                    isObject( void ) const { return getNodeType() == OBJECT; }
-            bool                    isTextual( void ) const { return getNodeType() == STRING; }
-            bool                    isNumber( void ) const { return getNodeType() == NUMBER; }
-            bool                    isBoolean( void ) const { return getNodeType() == BOOLEAN; }
-            bool                    isNull( void ) const { return getNodeType() == NULLVAL; }
-            bool                    isBinary( void ) const { return getNodeType() == BINARY; }
-            bool                    isMissingNode( void ) const { return getNodeType() == MISSING; }
+            bool                    isArray( void ) const { return getNodeType() == JSON_ARRAY; }
+            bool                    isObject( void ) const { return getNodeType() == JSON_OBJECT; }
+            bool                    isTextual( void ) const { return getNodeType() == JSON_STRING; }
+            bool                    isNumber( void ) const { return getNodeType() == JSON_NUMBER; }
+            bool                    isBoolean( void ) const { return getNodeType() == JSON_BOOLEAN; }
+            bool                    isNull( void ) const { return getNodeType() == JSON_NULL; }
+            bool                    isBinary( void ) const { return getNodeType() == JSON_BINARY; }
+            bool                    isMissingNode( void ) const { return getNodeType() == JSON_MISSING; }
             bool                    isContainerNode( void ) const { return isArray() || isObject(); }
             bool                    isValueNode( void ) const { return ! isContainerNode() && ! isMissingNode(); }
 
                 // Numbers: an integer that fits in 32 bits (isInt) or 64 bits
-                // (isLong); an integer too large for 64 bits (isBigInteger,
-                // held as a double but written as it was read); or a number
-                // with a fraction or exponent (isDouble).
+                // (isLong); a positive integer above the signed 64-bit range
+                // that fits in 64 bits unsigned (isUnsignedLong, held exactly);
+                // an integer too large for either (isBigInteger, held as a
+                // double but written as it was read); or a number with a
+                // fraction or exponent (isDouble). (Integers from 2^63 to
+                // 2^64 - 1 used to be big integers, so they could not be read
+                // back exactly.)
             virtual bool            isIntegralNumber( void ) const { return false; }
             virtual bool            isFloatingPointNumber( void ) const { return false; }
             virtual bool            isInt( void ) const { return false; }
             virtual bool            isLong( void ) const { return false; }
+            virtual bool            isUnsignedLong( void ) const { return false; }
             virtual bool            isBigInteger( void ) const { return false; }
             virtual bool            isDouble( void ) const { return false; }
                 // A number whose value (dropping any fraction) fits the type.
             virtual bool            canConvertToInt( void ) const { return false; }
             virtual bool            canConvertToLong( void ) const { return false; }
+            virtual bool            canConvertToUnsignedLong( void ) const { return false; }
 
                 // The node's own value, for a node of that type: 0, false or ""
                 // otherwise. Numbers convert between types, truncating fractions
@@ -99,6 +112,7 @@ namespace IASLib
             virtual bool            booleanValue( void ) const { return false; }
             virtual int             intValue( void ) const { return 0; }
             virtual long long       longValue( void ) const { return 0; }
+            virtual unsigned long long unsignedLongValue( void ) const { return 0; }
             short                   shortValue( void ) const;
             virtual double          doubleValue( void ) const { return 0.0; }
             float                   floatValue( void ) const { return (float)doubleValue(); }
@@ -115,6 +129,7 @@ namespace IASLib
             virtual bool            asBoolean( bool bDefault = false ) const { return bDefault; }
             virtual int             asInt( int nDefault = 0 ) const { return nDefault; }
             virtual long long       asLong( long long llDefault = 0 ) const { return llDefault; }
+            virtual unsigned long long asUnsignedLong( unsigned long long ullDefault = 0 ) const { return ullDefault; }
             virtual double          asDouble( double dDefault = 0.0 ) const { return dDefault; }
 
                 // Children: the elements of an array, the fields of an object.
@@ -129,10 +144,12 @@ namespace IASLib
             const CJsonNode        *get( const std::string &strField ) const { return const_cast<CJsonNode *>( this )->field( strField ); }
 
                 // The same, but the missing node rather than NULL, so calls can
-                // be chained.
-            CJsonNode              &path( int nIndex ) const;
-            CJsonNode              &path( const char *pszField ) const;
-            CJsonNode              &path( const std::string &strField ) const;
+                // be chained. The reference is const: the missing node is
+                // shared, so it must not be changed. (These used to give a
+                // non-const reference to it.)
+            const CJsonNode        &path( int nIndex ) const;
+            const CJsonNode        &path( const char *pszField ) const;
+            const CJsonNode        &path( const std::string &strField ) const;
 
                 // True if there is such an element or field (has), and it is not
                 // null (hasNonNull).
@@ -145,8 +162,8 @@ namespace IASLib
 
                 // A JSON Pointer (RFC 6901), such as "/users/0/name"; "" is this
                 // node. The missing node if there is no such value.
-            CJsonNode              &at( const char *pszPointer ) const;
-            CJsonNode              &at( const std::string &strPointer ) const { return at( strPointer.c_str() ); }
+            const CJsonNode        &at( const char *pszPointer ) const;
+            const CJsonNode        &at( const std::string &strPointer ) const { return at( strPointer.c_str() ); }
 
                 // Searches this node and its descendants, depth first, for
                 // object fields with this name. A field that matches is not
@@ -156,7 +173,7 @@ namespace IASLib
                 //  findValues: every such value; findValuesAsText their asText().
                 //  findParent(s): the object(s) holding such fields.
             CJsonNode              *findValue( const char *pszField ) const;
-            CJsonNode              &findPath( const char *pszField ) const;
+            const CJsonNode        &findPath( const char *pszField ) const;
             std::vector<CJsonNode *> findValues( const char *pszField ) const;
             CStringArray            findValuesAsText( const char *pszField ) const;
             CObjectNode            *findParent( const char *pszField ) const;
@@ -173,7 +190,9 @@ namespace IASLib
                 // compact) and, optionally, only ASCII (other characters as \u
                 // escapes). Text that is not valid UTF-8 is written with U+FFFD
                 // in place of the bad bytes, so the output is always valid JSON.
-                // The missing node writes nothing.
+                // The missing node by itself writes nothing; inside an array or
+                // object (or as a NULL child) it is written as null. (It used
+                // to write nothing there too, leaving "[,1]" or "{"a":}".)
             CString                 toString( void ) const;
             CString                 toPrettyString( void ) const;
             std::string             toJson( int nIndent = -1, bool bAsciiOnly = false ) const;
@@ -200,10 +219,10 @@ namespace IASLib
             virtual CJsonNode      *field( const std::string &strField ) { (void)strField; return NULL; }
 
                 // The search behind the find methods: values (or, with bParents,
-                // the objects holding them) of fields named strField. Stops after
-                // the first if bFirst. Returns true once something is found and
-                // bFirst is set.
-            virtual bool            collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const;
+                // the objects holding them) of fields named strField, depth
+                // first, without recursion. Stops after the first if bFirst.
+                // Returns true once something is found and bFirst is set.
+            bool                    collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const;
 
             static void             newLine( std::string &strOut, int nIndent, int nLevel );
 

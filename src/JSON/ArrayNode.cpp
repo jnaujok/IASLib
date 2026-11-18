@@ -44,7 +44,7 @@ namespace IASLib
 
     CArrayNode *CArrayNode::add( CJsonNode *pValue )
     {
-        m_aElements.push_back( pValue ? pValue : new CNullNode() );
+        m_aElements.push_back( storable( pValue ) );
         return this;
     }
 
@@ -83,10 +83,10 @@ namespace IASLib
     {
         if ( nIndex < 0 || nIndex > size() )
         {
-            delete pValue;
+            discard( pValue );
             return false;
         }
-        m_aElements.insert( m_aElements.begin() + nIndex, pValue ? pValue : new CNullNode() );
+        m_aElements.insert( m_aElements.begin() + nIndex, storable( pValue ) );
         return true;
     }
 
@@ -94,11 +94,10 @@ namespace IASLib
     {
         if ( nIndex < 0 || nIndex >= size() )
         {
-            delete pValue;
+            discard( pValue );
             return false;
         }
-        if ( pValue == NULL )
-            pValue = new CNullNode();
+        pValue = storable( pValue );
         if ( m_aElements[ nIndex ] != pValue )
             delete m_aElements[ nIndex ];
         m_aElements[ nIndex ] = pValue;
@@ -123,62 +122,30 @@ namespace IASLib
 
     void CArrayNode::removeAll( void )
     {
-        for ( size_t n = 0; n < m_aElements.size(); n++ )
-            delete m_aElements[ n ];
+        std::vector<CJsonNode *> aChildren;
+        aChildren.swap( m_aElements );
+        deleteNodes( aChildren );
+    }
+
+    void CArrayNode::detachChildren( std::vector<CJsonNode *> &aChildren )
+    {
+        aChildren.insert( aChildren.end(), m_aElements.begin(), m_aElements.end() );
         m_aElements.clear();
     }
 
     bool CArrayNode::equals( const CJsonNode *pOther ) const
     {
-        if ( pOther == this )
-            return true;
-        if ( pOther == NULL || ! pOther->isArray() || pOther->size() != size() )
-            return false;
-        const CArrayNode *pArray = static_cast<const CArrayNode *>( pOther );
-        for ( size_t n = 0; n < m_aElements.size(); n++ )
-        {
-            if ( ! m_aElements[ n ]->equals( pArray->m_aElements[ n ] ) )
-                return false;
-        }
-        return true;
+        return equalTrees( this, pOther );
     }
 
     CJsonNode *CArrayNode::clone( void ) const
     {
-        CArrayNode *pCopy = new CArrayNode();
-        pCopy->m_aElements.reserve( m_aElements.size() );
-        for ( size_t n = 0; n < m_aElements.size(); n++ )
-            pCopy->m_aElements.push_back( m_aElements[ n ]->clone() );
-        return pCopy;
+        return cloneTree( this );
     }
 
     void CArrayNode::writeJson( std::string &strOut, int nIndent, int nLevel, bool bAsciiOnly ) const
     {
-        if ( m_aElements.empty() )
-        {
-            strOut += "[]";
-            return;
-        }
-        strOut += '[';
-        for ( size_t n = 0; n < m_aElements.size(); n++ )
-        {
-            if ( n > 0 )
-                strOut += ',';
-            newLine( strOut, nIndent, nLevel + 1 );
-            m_aElements[ n ]->writeJson( strOut, nIndent, nLevel + 1, bAsciiOnly );
-        }
-        newLine( strOut, nIndent, nLevel );
-        strOut += ']';
-    }
-
-    bool CArrayNode::collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const
-    {
-        for ( size_t n = 0; n < m_aElements.size(); n++ )
-        {
-            if ( m_aElements[ n ]->collect( strField, bParents, bFirst, aFound ) && bFirst )
-                return true;
-        }
-        return false;
+        writeTree( this, strOut, nIndent, nLevel, bAsciiOnly );
     }
 } // namespace IASLib
 

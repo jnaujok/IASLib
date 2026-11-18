@@ -29,11 +29,14 @@ namespace IASLib
         public:
             DEFINE_OBJECT( CMissingNode )
 
-            static CMissingNode    &getInstance( void );
+                // The shared missing node, which path() and at() give. It is
+                // read-only: do not delete it. (This used to give a non-const
+                // reference, which let callers change or delete it.)
+            static const CMissingNode &getInstance( void );
 
                                     CMissingNode( void ) {}
 
-            virtual JsonNodeType    getNodeType( void ) const { return MISSING; }
+            virtual JsonNodeType    getNodeType( void ) const { return JSON_MISSING; }
             virtual bool            equals( const CJsonNode *pOther ) const { return pOther != NULL && pOther->isMissingNode(); }
                 // A new missing node, owned by the caller like any clone.
             virtual CJsonNode      *clone( void ) const { return new CMissingNode(); }

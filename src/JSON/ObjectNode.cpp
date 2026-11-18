@@ -22,12 +22,14 @@
 #include "NumberNode.h"
 #include "TextNode.h"
 
+#include <algorithm>
+
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CCollectiveNode, CJsonNode );
     IMPLEMENT_OBJECT( CObjectNode, CCollectiveNode );
 
-    CObjectNode::CObjectNode( void )
+    CObjectNode::CObjectNode( void ) : m_nNextOrder( 0 )
     {
     }
 
@@ -38,15 +40,11 @@ namespace IASLib
 
     int CObjectNode::find( const std::string &strField ) const
     {
-        std::map<std::string, size_t>::const_iterator it = m_mapIndex.find( strField );
-        return ( it == m_mapIndex.end() ) ? -1 : (int)it->second;
-    }
-
-    void CObjectNode::reindex( void )
-    {
-        m_mapIndex.clear();
-        for ( size_t n = 0; n < m_aFields.size(); n++ )
-            m_mapIndex[ m_aFields[ n ].first ] = n;
+        std::unordered_map<std::string, unsigned long long>::const_iterator it = m_mapIndex.find( strField );
+        if ( it == m_mapIndex.end() )
+            return -1;
+        std::vector<unsigned long long>::const_iterator itOrder = std::lower_bound( m_aOrder.begin(), m_aOrder.end(), it->second );
+        return (int)( itOrder - m_aOrder.begin() );
     }
 
     CString CObjectNode::fieldName( int nIndex ) const
@@ -85,8 +83,7 @@ namespace IASLib
 
     CObjectNode *CObjectNode::set( const CJsonKey &key, CJsonNode *pValue )
     {
-        if ( pValue == NULL )
-            pValue = new CNullNode();
+        pValue = storable( pValue );
         int nIndex = find( key.str() );
         if ( nIndex >= 0 )
         {
@@ -96,7 +93,8 @@ namespace IASLib
         }
         else
         {
-            m_mapIndex[ key.str() ] = m_aFields.size();
+            m_mapIndex[ key.str() ] = m_nNextOrder;
+            m_aOrder.push_back( m_nNextOrder++ );
             m_aFields.push_back( std::make_pair( key.str(), pValue ) );
         }
         return this;
@@ -162,83 +160,44 @@ namespace IASLib
         if ( nIndex < 0 )
             return NULL;
         CJsonNode *pNode = m_aFields[ nIndex ].second;
+            // The other fields keep their numbers, so the index needs no other
+            // change. (The whole index used to be rebuilt, so removing each of
+            // n fields took O(n log n), and all of them O(n^2 log n).)
+        m_mapIndex.erase( key.str() );
         m_aFields.erase( m_aFields.begin() + nIndex );
-        reindex();
+        m_aOrder.erase( m_aOrder.begin() + nIndex );
         return pNode;
     }
 
     void CObjectNode::removeAll( void )
     {
+        std::vector<CJsonNode *> aChildren;
+        detachChildren( aChildren );
+        deleteNodes( aChildren );
+    }
+
+    void CObjectNode::detachChildren( std::vector<CJsonNode *> &aChildren )
+    {
         for ( size_t n = 0; n < m_aFields.size(); n++ )
-            delete m_aFields[ n ].second;
+            aChildren.push_back( m_aFields[ n ].second );
         m_aFields.clear();
+        m_aOrder.clear();
         m_mapIndex.clear();
     }
 
     bool CObjectNode::equals( const CJsonNode *pOther ) const
     {
-        if ( pOther == this )
-            return true;
-        if ( pOther == NULL || ! pOther->isObject() || pOther->size() != size() )
-            return false;
-        const CObjectNode *pObject = static_cast<const CObjectNode *>( pOther );
-        for ( size_t n = 0; n < m_aFields.size(); n++ )
-        {
-            int nIndex = pObject->find( m_aFields[ n ].first );
-            if ( nIndex < 0 || ! m_aFields[ n ].second->equals( pObject->m_aFields[ nIndex ].second ) )
-                return false;
-        }
-        return true;
+        return equalTrees( this, pOther );
     }
 
     CJsonNode *CObjectNode::clone( void ) const
     {
-        CObjectNode *pCopy = new CObjectNode();
-        pCopy->m_aFields.reserve( m_aFields.size() );
-        for ( size_t n = 0; n < m_aFields.size(); n++ )
-            pCopy->m_aFields.push_back( std::make_pair( m_aFields[ n ].first, m_aFields[ n ].second->clone() ) );
-        pCopy->m_mapIndex = m_mapIndex;
-        return pCopy;
+        return cloneTree( this );
     }
 
     void CObjectNode::writeJson( std::string &strOut, int nIndent, int nLevel, bool bAsciiOnly ) const
     {
-        if ( m_aFields.empty() )
-        {
-            strOut += "{}";
-            return;
-        }
-        strOut += '{';
-        for ( size_t n = 0; n < m_aFields.size(); n++ )
-        {
-            if ( n > 0 )
-                strOut += ',';
-            newLine( strOut, nIndent, nLevel + 1 );
-            writeString( strOut, m_aFields[ n ].first, bAsciiOnly );
-            strOut += ( nIndent >= 0 ) ? ": " : ":";
-            m_aFields[ n ].second->writeJson( strOut, nIndent, nLevel + 1, bAsciiOnly );
-        }
-        newLine( strOut, nIndent, nLevel );
-        strOut += '}';
-    }
-
-    bool CObjectNode::collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const
-    {
-        for ( size_t n = 0; n < m_aFields.size(); n++ )
-        {
-            if ( m_aFields[ n ].first == strField )
-            {
-                    // Names are unique, so an object is listed once as a parent.
-                aFound.push_back( bParents ? const_cast<CObjectNode *>( this ) : m_aFields[ n ].second );
-                if ( bFirst )
-                    return true;
-            }
-            else if ( m_aFields[ n ].second->collect( strField, bParents, bFirst, aFound ) && bFirst )
-            {
-                return true;
-            }
-        }
-        return false;
+        writeTree( this, strOut, nIndent, nLevel, bAsciiOnly );
     }
 } // namespace IASLib
 

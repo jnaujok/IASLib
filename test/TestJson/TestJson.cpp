@@ -4,19 +4,23 @@
 **  Tests for the JSON parser and nodes: RFC 8259 conformance (documents
 **  that must be accepted and rejected), error positions, parser options,
 **  numbers, strings and Unicode, building and changing trees, the find
-**  methods and JSON Pointer, equality, copies, base64, streams, and a fuzz
+**  methods and JSON Pointer, equality, copies, base64, streams, deep trees
+**  (written, copied, compared and deleted without recursion), size limits,
+**  unsigned 64-bit numbers, null children, field removal, and a fuzz
 **  pass that checks damaged input never crashes and that whatever parses
 **  writes back to the same tree.
 ***********************************************************************/
 
 #include "IASLib.h"
 
+#include <chrono>
 #include <clocale>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using namespace IASLib;
@@ -208,7 +212,7 @@ static void testNumbers( void )
     CHECK( ! a.path( 3 ).isInt() && a.path( 3 ).isLong() && ! a.path( 3 ).canConvertToInt() && a.path( 3 ).longValue() == 2147483648LL );
     CHECK( a.path( 3 ).intValue() == 2147483647 );                       // clamped
     CHECK( a.path( 4 ).isLong() && a.path( 4 ).longValue() == -9223372036854775807LL - 1 );
-    CHECK( a.path( 5 ).isBigInteger() && a.path( 5 ).isIntegralNumber() && ! a.path( 5 ).isLong() );
+    CHECK( a.path( 5 ).isUnsignedLong() && ! a.path( 5 ).isBigInteger() && a.path( 5 ).isIntegralNumber() && ! a.path( 5 ).isLong() );
     CHECK( ! a.path( 5 ).canConvertToLong() && a.path( 5 ).longValue() == 9223372036854775807LL );
     CHECK( fabs( a.path( 5 ).doubleValue() - 12345678901234567890.0 ) < 1e4 );
     CHECK_EQ_STR( "big text", (const char *)a.path( 5 ).asText(), "12345678901234567890" );
@@ -239,7 +243,7 @@ static void testNumbers( void )
     CHECK_EQ_STR( "nan", CNumberNode( std::nan( "" ) ).toJson(), "null" );
     CHECK_EQ_STR( "inf", CNumberNode( HUGE_VAL ).toJson(), "null" );
     CHECK_EQ_STR( "ull", CNumberNode( 18446744073709551615ULL ).toJson(), "18446744073709551615" );
-    CHECK( CNumberNode( 18446744073709551615ULL ).isBigInteger() );
+    CHECK( CNumberNode( 18446744073709551615ULL ).isUnsignedLong() && ! CNumberNode( 18446744073709551615ULL ).isBigInteger() );
     CHECK( CNumberNode( 5ULL ).isInt() );
 
         // Equality by value.
@@ -645,6 +649,296 @@ static void testFuzz( void )
     CHECK( nAccepted > 0 );
 }
 
+    // A chain of nDepth arrays (or objects, each with one field "a"), with
+    // pszLeaf at the bottom, as JSON text.
+static std::string deepText( int nDepth, bool bObjects, const char *pszLeaf )
+{
+    std::string strText;
+    strText.reserve( (size_t)nDepth * 6 + 16 );
+    for ( int n = 0; n < nDepth; n++ )
+        strText += bObjects ? "{\"a\":" : "[";
+    strText += pszLeaf;
+    for ( int n = 0; n < nDepth; n++ )
+        strText += bObjects ? '}' : ']';
+    return strText;
+}
+
+static void testDeepTrees( void )
+{
+    printf( "Deep trees\n" );
+    const int DEPTH = 100000;
+    std::string strArrays = deepText( DEPTH, false, "1" );
+    std::string strObjects = deepText( DEPTH, true, "{\"b\":true}" );
+
+        // Refused by default, at the limit.
+    CJsonParser strict;
+    CHECK( strict.readTree( strArrays ) == NULL && strict.getErrorOffset() == 512 );
+    CHECK( strict.readTree( strObjects ) == NULL );
+
+        // With a raised limit: parsed, written, copied, compared, searched
+        // and deleted without recursion.
+    CJsonParser deep;
+    deep.setMaxDepth( DEPTH + 1 );
+    CHECK( deep.getMaxDepth() == DEPTH + 1 );
+    CJsonNode *pArrays = deep.readTree( strArrays );
+    CHECK( pArrays != NULL );
+    CJsonNode *pObjects = deep.readTree( strObjects );
+    CHECK( pObjects != NULL );
+    if ( pArrays == NULL || pObjects == NULL )
+    {
+        delete pArrays;
+        delete pObjects;
+        return;
+    }
+    CHECK( pArrays->toJson() == strArrays );
+    CHECK( pObjects->toJson() == strObjects );
+    CHECK( pObjects->findValue( "b" ) != NULL && pObjects->findValue( "b" )->booleanValue() );
+    CHECK( pObjects->findValue( "nothing" ) == NULL && pObjects->findValues( "a" ).size() == 1 );
+    CHECK( pObjects->findParent( "b" ) != NULL && pObjects->findParent( "b" )->size() == 1 );
+
+    CJsonNode *pArraysCopy = pArrays->clone();
+    CJsonNode *pObjectsCopy = pObjects->clone();
+    CHECK( pArraysCopy->equals( pArrays ) && pArrays->equals( pArraysCopy ) );
+    CHECK( pObjectsCopy->equals( pObjects ) && ! pObjectsCopy->equals( pArrays ) );
+    CHECK( pArraysCopy->toJson() == strArrays && pObjectsCopy->toJson() == strObjects );
+
+        // A difference at the bottom is found.
+    CJsonNode *pOther = deep.readTree( deepText( DEPTH, false, "2" ) );
+    CHECK( pOther != NULL && ! pOther->equals( pArrays ) && ! pArrays->equals( pOther ) );
+    delete pOther;
+    pOther = deep.readTree( deepText( DEPTH - 1, false, "[1]" ) );     // the same, written another way
+    CHECK( pOther != NULL && pOther->equals( pArrays ) );
+    delete pOther;
+
+    delete pArraysCopy;
+    delete pObjectsCopy;
+    delete pArrays;
+    delete pObjects;
+
+        // An error deep inside: the partial tree is deleted, without a crash.
+    std::string strBroken = deepText( DEPTH, false, "1" );
+    strBroken[ strBroken.size() - 1 ] = ',';
+    CHECK( deep.readTree( strBroken ) == NULL && deep.hasError() );
+    strBroken = deepText( DEPTH, true, "1" );
+    strBroken.resize( strBroken.size() - 10 );
+    CHECK( deep.readTree( strBroken ) == NULL && deep.getErrorMessage() == "expected ',' or '}' but found end of input" );
+
+        // Built by hand, twice as deep again (each level an object holding an
+        // array), then changed in place: replaced, and its children removed.
+    CArrayNode *pRoot = new CArrayNode();
+    CArrayNode *pLevel = pRoot;
+    for ( int n = 0; n < 2 * DEPTH; n++ )
+    {
+        CObjectNode *pObject = pLevel->addObject();
+        pObject->put( "n", n );
+        pLevel = pObject->putArray( "next" );
+    }
+    pLevel->add( "bottom" );
+    std::string strBuilt = pRoot->toJson();
+    CHECK( strBuilt.size() > (size_t)( 2 * DEPTH ) * 16 && strBuilt.find( "\"next\":[\"bottom\"]}]}" ) != std::string::npos );
+    CHECK( pRoot->findValue( "nothing" ) == NULL && pRoot->findValues( "n" ).size() == (size_t)( 2 * DEPTH ) );
+    CJsonNode *pBuiltCopy = pRoot->clone();
+    CHECK( pBuiltCopy->equals( pRoot ) );
+    CHECK( pRoot->set( 0, new CTextNode( "replaced" ) ) && pRoot->toJson() == "[\"replaced\"]" );
+    CHECK( ! pBuiltCopy->equals( pRoot ) );
+    static_cast<CArrayNode *>( pBuiltCopy )->removeAll();
+    CHECK( pBuiltCopy->toJson() == "[]" );
+    delete pBuiltCopy;
+    delete pRoot;
+
+        // Pretty printing deep (but not so deep the indentation is huge).
+    CJsonNode *pPretty = deep.readTree( deepText( 2000, false, "1" ) );
+    CHECK( pPretty != NULL );
+    if ( pPretty )
+    {
+        std::string strPretty = pPretty->toJson( 1 );
+        CJsonNode *pBack = CJsonParser::parse( strPretty );
+        CHECK( pBack == NULL );             // past the default limit
+        pBack = deep.readTree( strPretty );
+        CHECK( pBack && pBack->equals( pPretty ) && pBack->toJson( 1 ) == strPretty );
+        CHECK( strPretty.compare( 0, 5, "[\n [\n" ) == 0 );
+        delete pBack;
+        delete pPretty;
+    }
+}
+
+static void testLimits( void )
+{
+    printf( "Size limits\n" );
+    CJsonParser parser;
+    CHECK( parser.getMaxInputSize() == 0 && parser.getMaxStringLength() == 0 );
+
+    parser.setMaxInputSize( 7 );
+    CHECK_EQ_STR( "fits", roundTrip( "[1,2,3]", &parser ), "[1,2,3]" );
+    CHECK_EQ_STR( "too big", roundTrip( "[1,2,34]", &parser ), "error: line 1, column 1: the input is larger than the limit of 7 bytes" );
+    CStringStream stream( CString( "[1, 2, 3, 4, 5, 6, 7, 8, 9]" ) );
+    CHECK( parser.readTree( &stream ) == NULL && parser.getErrorMessage() == "the input is larger than the limit of 7 bytes" );
+    parser.setMaxInputSize( 0 );
+    CHECK_EQ_STR( "no limit", roundTrip( "[1,2,34]", &parser ), "[1,2,34]" );
+
+        // Strings and field names, counted once escapes are decoded.
+    parser.setMaxStringLength( 3 );
+    CHECK_EQ_STR( "short", roundTrip( "[\"abc\",\"\\u00e9a\"]", &parser ), "[\"abc\",\"\xC3\xA9" "a\"]" );
+    CHECK_EQ_STR( "escapes", roundTrip( "[\"\\n\\n\\n\"]", &parser ), "[\"\\n\\n\\n\"]" );
+    CHECK_EQ_STR( "long", roundTrip( "[1, \"abcd\"]", &parser ), "error: line 1, column 5: the string is longer than the limit of 3 bytes" );
+    CHECK_EQ_STR( "long key", roundTrip( "{\"abcd\":1}", &parser ), "error: line 1, column 2: the string is longer than the limit of 3 bytes" );
+    CHECK_EQ_STR( "long decoded", roundTrip( "[\"\\u00e9\\u00e9\"]", &parser ).compare( 0, 6, "error:" ) == 0 ? "error" : "accepted", "error" );
+    parser.setMaxStringLength( 0 );
+    CHECK_EQ_STR( "string no limit", roundTrip( "[\"abcd\"]", &parser ), "[\"abcd\"]" );
+}
+
+static void testUnsigned( void )
+{
+    printf( "Unsigned 64-bit numbers\n" );
+    CJsonNode *pRoot = CJsonParser::parse( "[18446744073709551615, 9223372036854775808, 9223372036854775807, 18446744073709551616, -1, 1.5e19, 2.5, -0.5]" );
+    CHECK( pRoot != NULL );
+    if ( pRoot == NULL )
+        return;
+    const CJsonNode &a = *pRoot;
+    CHECK( a.path( 0 ).isUnsignedLong() && a.path( 0 ).isIntegralNumber() && ! a.path( 0 ).isLong() && ! a.path( 0 ).isBigInteger() );
+    CHECK( a.path( 0 ).unsignedLongValue() == 18446744073709551615ULL && a.path( 0 ).asUnsignedLong() == 18446744073709551615ULL );
+    CHECK( a.path( 0 ).canConvertToUnsignedLong() && ! a.path( 0 ).canConvertToLong() && ! a.path( 0 ).canConvertToInt() );
+    CHECK( a.path( 0 ).longValue() == 9223372036854775807LL && a.path( 0 ).intValue() == 2147483647 );       // clamped
+    CHECK( a.path( 0 ).doubleValue() == 18446744073709551615.0 && a.path( 0 ).asBoolean() );
+    CHECK( a.path( 1 ).isUnsignedLong() && a.path( 1 ).unsignedLongValue() == 9223372036854775808ULL );
+    CHECK( a.path( 2 ).isLong() && ! a.path( 2 ).isUnsignedLong() && a.path( 2 ).unsignedLongValue() == 9223372036854775807ULL );
+    CHECK( a.path( 3 ).isBigInteger() && ! a.path( 3 ).canConvertToUnsignedLong() && a.path( 3 ).unsignedLongValue() == 18446744073709551615ULL );
+    CHECK( ! a.path( 4 ).canConvertToUnsignedLong() && a.path( 4 ).unsignedLongValue() == 0 && a.path( 4 ).canConvertToLong() );
+    CHECK( a.path( 5 ).canConvertToUnsignedLong() && a.path( 5 ).unsignedLongValue() == 15000000000000000000ULL );
+    CHECK( a.path( 6 ).unsignedLongValue() == 2 && a.path( 7 ).canConvertToUnsignedLong() && a.path( 7 ).unsignedLongValue() == 0 );
+    CHECK_EQ_STR( "written", pRoot->toJson(), "[18446744073709551615,9223372036854775808,9223372036854775807,18446744073709551616,-1,1.5e19,2.5,-0.5]" );
+    CHECK( a.path( 99 ).asUnsignedLong( 7 ) == 7 && a.path( 99 ).unsignedLongValue() == 0 );
+
+        // Round trips, through building and parsing.
+    const unsigned long long values[] = { 0ULL, 1ULL, 9223372036854775807ULL, 9223372036854775808ULL, 12345678901234567890ULL, 18446744073709551614ULL, 18446744073709551615ULL };
+    for ( size_t n = 0; n < sizeof( values ) / sizeof( values[0] ); n++ )
+    {
+        CObjectNode object;
+        object.put( "v", values[ n ] );
+        object.putArray( "a" )->add( values[ n ] );
+        CJsonNode *pBack = CJsonParser::parse( object.toJson() );
+        CHECK( pBack && pBack->path( "v" ).unsignedLongValue() == values[ n ] && pBack->at( "/a/0" ).unsignedLongValue() == values[ n ] );
+        CHECK( pBack && pBack->path( "v" ).canConvertToUnsignedLong() && pBack->equals( &object ) );
+        CHECK( pBack && pBack->toJson() == object.toJson() );
+        CJsonNode *pCopy = object.clone();
+        CHECK( pCopy->path( "v" ).unsignedLongValue() == values[ n ] && pCopy->equals( pBack ) );
+        delete pCopy;
+        delete pBack;
+    }
+
+        // Equality: exact among integers, by value with doubles.
+    CNumberNode big( 9223372036854775808ULL ), bigDouble( 9223372036854775808.0 ), max( 18446744073709551615ULL );
+    CNumberNode maxDouble( 18446744073709551615.0 ), signedMax( 9223372036854775807LL ), bigAgain( 9223372036854775808ULL );
+    CHECK( big.equals( &bigDouble ) && bigDouble.equals( &big ) && big.equals( &bigAgain ) );
+    CHECK( ! big.equals( &max ) && ! max.equals( &maxDouble ) && ! big.equals( &signedMax ) && ! signedMax.equals( &big ) );
+
+        // Text and booleans convert too.
+    CTextNode t1( "18446744073709551615" ), t2( " +42 " ), t3( "-5" ), t4( "99999999999999999999" ), t5( "x" ), t6( "1e3" );
+    CHECK( t1.asUnsignedLong() == 18446744073709551615ULL && t2.asUnsignedLong() == 42 && t3.asUnsignedLong() == 0 );
+    CHECK( t4.asUnsignedLong() == 18446744073709551615ULL && t5.asUnsignedLong( 9 ) == 9 && t6.asUnsignedLong() == 1000 );
+    CHECK( CBooleanNode( true ).asUnsignedLong() == 1 && CNullNode().asUnsignedLong( 3 ) == 3 );
+    delete pRoot;
+}
+
+static void testNullChildren( void )
+{
+    printf( "Null and missing children\n" );
+    CJsonNode *pRoot = CJsonParser::parse( "{\"a\":1}" );
+    CHECK( pRoot != NULL );
+    if ( pRoot == NULL )
+        return;
+
+        // path() of a missing value is the shared, const missing node.
+    CHECK( ( std::is_same<decltype( pRoot->path( "nope" ) ), const CJsonNode &>::value ) );
+    CHECK( ( std::is_same<decltype( pRoot->at( "/nope" ) ), const CJsonNode &>::value ) );
+    CHECK( ( std::is_same<decltype( pRoot->findPath( "nope" ) ), const CJsonNode &>::value ) );
+    CHECK( &pRoot->path( "nope" ) == &CMissingNode::getInstance() && pRoot->get( "nope" ) == NULL );
+
+        // A missing node given to a container is stored as a null, so what
+        // is written is valid JSON.
+    CArrayNode array;
+    array.add( pRoot->path( "nope" ).clone() )->add( (CJsonNode *)NULL )->add( 1 );
+    CHECK( array.insert( 0, new CMissingNode() ) && array.size() == 4 );
+    CHECK( array.set( 3, new CMissingNode() ) );
+    CHECK_EQ_STR( "array", array.toJson(), "[null,null,null,null]" );
+    CHECK( array.path( 0 ).isNull() && ! array.path( 0 ).isMissingNode() );
+    CHECK( accepts( array.toJson() ) && accepts( array.toJson( 2 ) ) );
+    CObjectNode object;
+    object.set( "m", new CMissingNode() )->set( "n", NULL )->put( "x", 2 );
+    object.putArray( "list" )->add( new CMissingNode() );
+    CHECK_EQ_STR( "object", object.toJson(), "{\"m\":null,\"n\":null,\"x\":2,\"list\":[null]}" );
+    CHECK_EQ_STR( "object pretty", object.toJson( 1 ), "{\n \"m\": null,\n \"n\": null,\n \"x\": 2,\n \"list\": [\n  null\n ]\n}" );
+    CJsonNode *pBack = CJsonParser::parse( object.toJson() );
+    CHECK( pBack && pBack->equals( &object ) );
+    delete pBack;
+
+        // The shared missing node is never deleted by a container.
+    CArrayNode *pHolder = new CArrayNode();
+    pHolder->add( const_cast<CMissingNode *>( &CMissingNode::getInstance() ) );
+    CHECK( ! pHolder->insert( 5, const_cast<CMissingNode *>( &CMissingNode::getInstance() ) ) );
+    CHECK( pHolder->toJson() == "[null]" );
+    delete pHolder;
+    CHECK( CMissingNode::getInstance().isMissingNode() && CMissingNode::getInstance().toJson() == "" );
+    delete pRoot;
+}
+
+static void testRemoval( void )
+{
+    printf( "Removing fields\n" );
+    const int FIELDS = 50000;
+    CObjectNode object;
+    for ( int n = 0; n < FIELDS; n++ )
+        object.put( "f" + std::to_string( n ), n );
+
+        // Every third field, from the front: the rest keep their order, and
+        // are found by name and by position.
+    for ( int n = 0; n < 3000; n += 3 )
+        CHECK( n % 3 != 0 || object.remove( "f" + std::to_string( n ) ) );
+    CHECK( object.size() == FIELDS - 1000 );
+    bool bConsistent = true;
+    for ( int n = 0; n < object.size(); n++ )
+    {
+        const std::string &strName = object.fieldNameString( n );
+        if ( object.get( strName ) != object.fieldValue( n ) || object.fieldValue( n )->asText() != strName.substr( 1 ).c_str() )
+            bConsistent = false;
+    }
+    CHECK( bConsistent );
+    CHECK( object.fieldName( 0 ) == "f1" && object.fieldName( 1 ) == "f2" && object.fieldName( 2 ) == "f4" && ! object.has( "f3" ) );
+
+        // From the back, every field: each removal is quick. (It used to
+        // rebuild the whole index each time.)
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    while ( object.size() > 0 )
+    {
+        CJsonNode *pLast = object.release( object.fieldNameString( object.size() - 1 ) );
+        if ( pLast == NULL )
+            break;
+        delete pLast;
+    }
+    CHECK( object.size() == 0 && object.toJson() == "{}" );
+    CHECK( std::chrono::steady_clock::now() - start < std::chrono::seconds( 5 ) );
+    object.put( "again", 1 );
+    CHECK( object.path( "again" ).asInt() == 1 && object.fieldName( 0 ) == "again" );
+}
+
+static void testTypeNames( void )
+{
+    printf( "Type names\n" );
+    CTextNode text( "x" );
+    CNullNode null;
+    CArrayNode array;
+    CObjectNode object;
+    CHECK( text.getNodeType() == JSON_STRING && null.getNodeType() == JSON_NULL );
+    CHECK( array.getNodeType() == JSON_ARRAY && object.getNodeType() == JSON_OBJECT );
+    CHECK( CBooleanNode( true ).getNodeType() == JSON_BOOLEAN && CNumberNode( 1 ).getNodeType() == JSON_NUMBER );
+    CHECK( CMissingNode::getInstance().getNodeType() == JSON_MISSING && CBinaryNode( NULL, 0 ).getNodeType() == JSON_BINARY );
+#if !defined( _WIN32 ) && !defined( IASLIB_JSON_NO_LEGACY_NAMES__ )
+        // The old names remain where they cannot collide with Windows.
+    CHECK( BOOLEAN == JSON_BOOLEAN && NULLVAL == JSON_NULL && STRING == JSON_STRING && MISSING == JSON_MISSING );
+    CHECK( ARRAY == JSON_ARRAY && OBJECT == JSON_OBJECT && NUMBER == JSON_NUMBER && BINARY == JSON_BINARY );
+#endif
+}
+
 int main( void )
 {
     testConformance();
@@ -656,6 +950,12 @@ int main( void )
     testBuilding();
     testBinary();
     testStreams();
+    testDeepTrees();
+    testLimits();
+    testUnsigned();
+    testNullChildren();
+    testRemoval();
+    testTypeNames();
     testFuzz();
 
     printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );

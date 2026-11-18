@@ -49,17 +49,22 @@ namespace IASLib
     {
         public:
             static const uint32_t DEFAULT_DIFFICULTY = 16;
+                // The highest difficulty a chain takes (CBlock::MAX_DIFFICULTY).
+            static const uint32_t MAX_DIFFICULTY = CBlock::MAX_DIFFICULTY;
 
             DECLARE_OBJECT( CBlockchain, CObject );
 
-                // A chain with a mined genesis block holding strGenesisData.
+                // A chain with a mined genesis block holding strGenesisData
+                // (the difficulty is clamped as setDifficulty() does).
             explicit            CBlockchain( uint32_t nDifficulty = DEFAULT_DIFFICULTY, const std::string &strGenesisData = "Genesis Block" );
             virtual            ~CBlockchain( void );
 
                 // The difficulty new blocks are mined at (and validate()
                 // requires by default).
             uint32_t            getDifficulty( void ) const { return m_nDifficulty; }
-            void                setDifficulty( uint32_t nDifficulty ) { m_nDifficulty = ( nDifficulty > 256 ) ? 256 : nDifficulty; }
+                // Above MAX_DIFFICULTY it is clamped to that. (It used to be
+                // clamped to 256, which no block can be mined at.)
+            void                setDifficulty( uint32_t nDifficulty ) { m_nDifficulty = ( nDifficulty > MAX_DIFFICULTY ) ? (uint32_t)MAX_DIFFICULTY : nDifficulty; }
 
                 // The blocks, from the genesis block (0). NULL out of range.
             size_t              size( void ) const;

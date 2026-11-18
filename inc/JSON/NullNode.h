@@ -26,7 +26,7 @@ namespace IASLib
         public:
             DEFINE_OBJECT( CNullNode )
 
-            virtual JsonNodeType    getNodeType( void ) const { return NULLVAL; }
+            virtual JsonNodeType    getNodeType( void ) const { return JSON_NULL; }
             virtual CString         asText( void ) const { return CString( "null" ); }
 
             virtual bool            equals( const CJsonNode *pOther ) const { return pOther != NULL && pOther->isNull(); }

@@ -30,7 +30,7 @@ namespace IASLib
                                     CTextNode( const std::string &strValue ) : m_strValue( strValue ) {}
                                     CTextNode( const char *pszValue ) : m_strValue( pszValue ? pszValue : "" ) {}
 
-            virtual JsonNodeType    getNodeType( void ) const { return STRING; }
+            virtual JsonNodeType    getNodeType( void ) const { return JSON_STRING; }
             virtual CString         textValue( void ) const;
             virtual const std::string &textString( void ) const { return m_strValue; }
 
@@ -40,6 +40,8 @@ namespace IASLib
             virtual bool            asBoolean( bool bDefault = false ) const;
             virtual int             asInt( int nDefault = 0 ) const;
             virtual long long       asLong( long long llDefault = 0 ) const;
+                // Negative numbers give 0.
+            virtual unsigned long long asUnsignedLong( unsigned long long ullDefault = 0 ) const;
             virtual double          asDouble( double dDefault = 0.0 ) const;
 
             virtual bool            equals( const CJsonNode *pOther ) const;

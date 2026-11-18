@@ -4,7 +4,11 @@
  *  A JSON object: named fields, kept in the order they were added. Adding a
  * field that already exists replaces its value in place. The object owns its
  * values; set() takes ownership of the node it is given, which must not
- * belong to any other tree.
+ * belong to any other tree. NULL, or a missing node, is stored as a JSON null.
+ *
+ *  Finding a field by name takes logarithmic time; removing one takes time
+ * in proportion to the fields after it (moving them up), with no change to
+ * the name index.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 4/15/2019
@@ -22,7 +26,7 @@
 
 #include "CollectiveNode.h"
 
-#include <map>
+#include <unordered_map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,7 +41,7 @@ namespace IASLib
                                     CObjectNode( void );
             virtual                ~CObjectNode( void );
 
-            virtual JsonNodeType    getNodeType( void ) const { return OBJECT; }
+            virtual JsonNodeType    getNodeType( void ) const { return JSON_OBJECT; }
             virtual int             size( void ) const { return (int)m_aFields.size(); }
 
                 // Fields by position, in order.
@@ -73,7 +77,9 @@ namespace IASLib
             CArrayNode             *withArray( const CJsonKey &key );
 
                 // Deletes a field's value (remove), or hands it to the caller
-                // (release). False or NULL if there is no such field.
+                // (release). False or NULL if there is no such field. The fields
+                // after it move up one place. (This used to rebuild the whole
+                // name index, so removing many fields took quadratic time.)
             bool                    remove( const CJsonKey &key );
             CJsonNode              *release( const CJsonKey &key );
             virtual void            removeAll( void );
@@ -85,14 +91,20 @@ namespace IASLib
 
         protected:
             virtual CJsonNode      *field( const std::string &strField );
-            virtual bool            collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const;
+            virtual void            detachChildren( std::vector<CJsonNode *> &aChildren );
 
         private:
+                // The fields in order, each with a number given when it was
+                // added (m_aOrder, ascending, alongside m_aFields). The index
+                // maps a name to that number, which a binary search of
+                // m_aOrder turns into a position, so removing a field leaves
+                // the index of the others as it was.
             std::vector< std::pair<std::string, CJsonNode *> >  m_aFields;
-            std::map<std::string, size_t>                       m_mapIndex;     // name to position
+            std::vector<unsigned long long>                     m_aOrder;
+            std::unordered_map<std::string, unsigned long long> m_mapIndex;
+            unsigned long long                                  m_nNextOrder;
 
             int                     find( const std::string &strField ) const;
-            void                    reindex( void );
 
                                     CObjectNode( const CObjectNode & );
             CObjectNode            &operator =( const CObjectNode & );

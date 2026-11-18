@@ -30,7 +30,7 @@ namespace IASLib
                                     CBinaryNode( const std::vector<unsigned char> &aData ) : m_aData( aData ) {}
                                     CBinaryNode( const unsigned char *pData, size_t nLength ) : m_aData( pData, pData + nLength ) {}
 
-            virtual JsonNodeType    getNodeType( void ) const { return BINARY; }
+            virtual JsonNodeType    getNodeType( void ) const { return JSON_BINARY; }
             const std::vector<unsigned char> &data( void ) const { return m_aData; }
             virtual bool            binaryValue( std::vector<unsigned char> &aData ) const { aData = m_aData; return true; }
                 // The base64 text.

@@ -27,6 +27,7 @@ namespace IASLib
     namespace
     {
         const double TWO_63 = 9223372036854775808.0;
+        const double TWO_64 = 18446744073709551616.0;
 
             // A double truncated and clamped to the 64-bit range (NaN as 0).
         long long toLong( double dValue )
@@ -39,17 +40,30 @@ namespace IASLib
                 return LLONG_MIN;
             return (long long)dValue;
         }
+
+            // A double truncated and clamped to the unsigned 64-bit range.
+        unsigned long long toUnsignedLong( double dValue )
+        {
+            if ( dValue != dValue || dValue <= 0.0 )
+                return 0;
+            if ( dValue >= TWO_64 )
+                return ULLONG_MAX;
+            return (unsigned long long)dValue;
+        }
     }
 
-    CNumberNode::CNumberNode( int nValue ) : m_eKind( KIND_LONG ), m_llValue( nValue ), m_dValue( 0.0 )
+    CNumberNode::CNumberNode( int nValue ) : m_eKind( KIND_LONG ), m_llValue( nValue ), m_ullValue( 0 ), m_dValue( 0.0 )
     {
     }
 
-    CNumberNode::CNumberNode( long long llValue ) : m_eKind( KIND_LONG ), m_llValue( llValue ), m_dValue( 0.0 )
+    CNumberNode::CNumberNode( long long llValue ) : m_eKind( KIND_LONG ), m_llValue( llValue ), m_ullValue( 0 ), m_dValue( 0.0 )
     {
     }
 
-    CNumberNode::CNumberNode( unsigned long long llValue ) : m_eKind( KIND_LONG ), m_llValue( 0 ), m_dValue( 0.0 )
+        // Values past LLONG_MAX are held exactly as unsigned. (They used to be
+        // held as a double, as big integers, and so could not be read back
+        // as the same 64-bit value.)
+    CNumberNode::CNumberNode( unsigned long long llValue ) : m_eKind( KIND_LONG ), m_llValue( 0 ), m_ullValue( 0 ), m_dValue( 0.0 )
     {
         if ( llValue <= (unsigned long long)LLONG_MAX )
         {
@@ -57,13 +71,12 @@ namespace IASLib
         }
         else
         {
-            m_eKind = KIND_BIG;
-            m_dValue = (double)llValue;
-            m_strText = std::to_string( llValue );
+            m_eKind = KIND_ULONG;
+            m_ullValue = llValue;
         }
     }
 
-    CNumberNode::CNumberNode( double dValue ) : m_eKind( KIND_DOUBLE ), m_llValue( 0 ), m_dValue( dValue )
+    CNumberNode::CNumberNode( double dValue ) : m_eKind( KIND_DOUBLE ), m_llValue( 0 ), m_ullValue( 0 ), m_dValue( dValue )
     {
     }
 
@@ -96,6 +109,10 @@ namespace IASLib
                     return new CNumberNode( (long long)ullValue );
                 if ( bNegative && ullValue <= (unsigned long long)LLONG_MAX + 1ULL )
                     return new CNumberNode( ullValue == (unsigned long long)LLONG_MAX + 1ULL ? LLONG_MIN : -(long long)ullValue );
+                    // Up to 2^64 - 1, exactly. (These used to be read as
+                    // big integers, held as doubles.)
+                if ( ! bNegative )
+                    return new CNumberNode( ullValue );
             }
         }
 
@@ -117,6 +134,8 @@ namespace IASLib
     {
         if ( m_eKind == KIND_LONG )
             return m_llValue >= INT_MIN && m_llValue <= INT_MAX;
+        if ( m_eKind == KIND_ULONG )
+            return false;
         return std::isfinite( m_dValue ) && m_dValue > (double)INT_MIN - 1.0 && m_dValue < (double)INT_MAX + 1.0;
     }
 
@@ -124,7 +143,19 @@ namespace IASLib
     {
         if ( m_eKind == KIND_LONG )
             return true;
+        if ( m_eKind == KIND_ULONG )
+            return false;
         return std::isfinite( m_dValue ) && m_dValue >= -TWO_63 && m_dValue < TWO_63;
+    }
+
+    bool CNumberNode::canConvertToUnsignedLong( void ) const
+    {
+        if ( m_eKind == KIND_LONG )
+            return m_llValue >= 0;
+        if ( m_eKind == KIND_ULONG )
+            return true;
+            // Dropping the fraction, as the other conversions do.
+        return std::isfinite( m_dValue ) && m_dValue > -1.0 && m_dValue < TWO_64;
     }
 
     int CNumberNode::intValue( void ) const
@@ -139,18 +170,37 @@ namespace IASLib
 
     long long CNumberNode::longValue( void ) const
     {
-        return ( m_eKind == KIND_LONG ) ? m_llValue : toLong( m_dValue );
+        if ( m_eKind == KIND_LONG )
+            return m_llValue;
+        if ( m_eKind == KIND_ULONG )
+            return LLONG_MAX;
+        return toLong( m_dValue );
+    }
+
+    unsigned long long CNumberNode::unsignedLongValue( void ) const
+    {
+        if ( m_eKind == KIND_LONG )
+            return ( m_llValue < 0 ) ? 0 : (unsigned long long)m_llValue;
+        if ( m_eKind == KIND_ULONG )
+            return m_ullValue;
+        return toUnsignedLong( m_dValue );
     }
 
     double CNumberNode::doubleValue( void ) const
     {
-        return ( m_eKind == KIND_LONG ) ? (double)m_llValue : m_dValue;
+        if ( m_eKind == KIND_LONG )
+            return (double)m_llValue;
+        if ( m_eKind == KIND_ULONG )
+            return (double)m_ullValue;
+        return m_dValue;
     }
 
     std::string CNumberNode::text( void ) const
     {
         if ( m_eKind == KIND_LONG )
             return std::to_string( m_llValue );
+        if ( m_eKind == KIND_ULONG )
+            return std::to_string( m_ullValue );
         if ( ! m_strText.empty() )
             return m_strText;
         return formatDouble( m_dValue );
@@ -169,16 +219,28 @@ namespace IASLib
         if ( pOther == NULL || ! pOther->isNumber() )
             return false;
         const CNumberNode *pNumber = static_cast<const CNumberNode *>( pOther );
-        if ( m_eKind == KIND_LONG && pNumber->m_eKind == KIND_LONG )
-            return m_llValue == pNumber->m_llValue;
-        if ( m_eKind == KIND_LONG || pNumber->m_eKind == KIND_LONG )
+        bool bExact = ( m_eKind == KIND_LONG || m_eKind == KIND_ULONG );
+        bool bOtherExact = ( pNumber->m_eKind == KIND_LONG || pNumber->m_eKind == KIND_ULONG );
+        if ( bExact && bOtherExact )
         {
-            const CNumberNode *pLong = ( m_eKind == KIND_LONG ) ? this : pNumber;
-            const CNumberNode *pOtherKind = ( m_eKind == KIND_LONG ) ? pNumber : this;
-            double dValue = pOtherKind->m_dValue;
-            if ( ! std::isfinite( dValue ) || dValue != std::floor( dValue ) || dValue < -TWO_63 || dValue >= TWO_63 )
+                // A signed and an unsigned value never overlap: the unsigned
+                // ones are all above LLONG_MAX.
+            if ( m_eKind != pNumber->m_eKind )
                 return false;
-            return (long long)dValue == pLong->m_llValue;
+            return ( m_eKind == KIND_LONG ) ? m_llValue == pNumber->m_llValue : m_ullValue == pNumber->m_ullValue;
+        }
+        if ( bExact || bOtherExact )
+        {
+            const CNumberNode *pInteger = bExact ? this : pNumber;
+            const CNumberNode *pOtherKind = bExact ? pNumber : this;
+            double dValue = pOtherKind->m_dValue;
+            if ( ! std::isfinite( dValue ) || dValue != std::floor( dValue ) )
+                return false;
+            if ( pInteger->m_eKind == KIND_ULONG )
+                return dValue >= TWO_63 && dValue < TWO_64 && (unsigned long long)dValue == pInteger->m_ullValue;
+            if ( dValue < -TWO_63 || dValue >= TWO_63 )
+                return false;
+            return (long long)dValue == pInteger->m_llValue;
         }
         if ( m_eKind == KIND_BIG && pNumber->m_eKind == KIND_BIG )
             return m_strText == pNumber->m_strText;
@@ -190,6 +252,7 @@ namespace IASLib
         CNumberNode *pCopy = new CNumberNode( m_dValue );
         pCopy->m_eKind = m_eKind;
         pCopy->m_llValue = m_llValue;
+        pCopy->m_ullValue = m_ullValue;
         pCopy->m_strText = m_strText;
         return pCopy;
     }

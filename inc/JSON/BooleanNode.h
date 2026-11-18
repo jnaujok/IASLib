@@ -28,12 +28,13 @@ namespace IASLib
 
                                     CBooleanNode( bool bValue ) : m_bValue( bValue ) {}
 
-            virtual JsonNodeType    getNodeType( void ) const { return BOOLEAN; }
+            virtual JsonNodeType    getNodeType( void ) const { return JSON_BOOLEAN; }
             virtual bool            booleanValue( void ) const { return m_bValue; }
             virtual CString         asText( void ) const { return CString( m_bValue ? "true" : "false" ); }
             virtual bool            asBoolean( bool bDefault = false ) const { (void)bDefault; return m_bValue; }
             virtual int             asInt( int nDefault = 0 ) const { (void)nDefault; return m_bValue ? 1 : 0; }
             virtual long long       asLong( long long llDefault = 0 ) const { (void)llDefault; return m_bValue ? 1 : 0; }
+            virtual unsigned long long asUnsignedLong( unsigned long long ullDefault = 0 ) const { (void)ullDefault; return m_bValue ? 1 : 0; }
             virtual double          asDouble( double dDefault = 0.0 ) const { (void)dDefault; return m_bValue ? 1.0 : 0.0; }
 
             virtual bool            equals( const CJsonNode *pOther ) const;
