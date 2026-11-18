@@ -126,6 +126,15 @@ namespace IASLib
                 break;
             }
 
+                // A CR anywhere but at the end is not a line ending this parser
+                // splits on, so other software may see a header break there;
+                // such a line is refused rather than guessed at.
+            if ( line.IndexOf( '\r' ) != NOT_FOUND )
+            {
+                m_bMalformed = true;
+                continue;
+            }
+
                 // Lines starting with whitespace continue the previous header
                 // (RFC 3261 section 7.3.1, RFC 7230 obs-fold).
             if ( ( line[0] == ' ' ) || ( line[0] == '\t' ) )
@@ -154,9 +163,12 @@ namespace IASLib
                 // Whitespace is permitted before the colon.
             CString name = line.Substring( 0, (int)nSeparator );
             name.Trim();
-            if ( name.GetLength() == 0 )
+            if ( ! CHeader::isValidName( name ) )
             {
+                    // (Only an empty name was refused; one with spaces or
+                    // control characters in it was kept.)
                 m_bMalformed = true;
+                pLastHeader = NULL;
                 continue;
             }
             name = canonicalName( name );
@@ -182,46 +194,82 @@ namespace IASLib
         return m_bComplete;
     }
 
-    void CHeaderList::addHeader( const char *key, const char *value )
+    bool CHeaderList::validName( const char *key, CString &name )
     {
-        CString name = canonicalName( CString( key ) );
+        name = CString( key ? key : "" );
+        name.Trim();
+        return CHeader::isValidName( name );
+    }
+
+    bool CHeaderList::addHeader( const char *key, const char *value )
+    {
+        CString name;
+        CString strValue( value ? value : "" );
+            // (Names and values were stored as given, CR LF included, so
+            // text from a client could add headers to a response.)
+        if ( ! validName( key, name ) || ! CHeader::isValidValue( strValue ) )
+        {
+            return false;
+        }
+        name = canonicalName( name );
         int nIndex = findIndex( CHeader::makeKey( name ) );
 
         if ( nIndex >= 0 )
         {
-            ((CHeader *)m_aHeaders.Get( (size_t)nIndex ))->setValue( CString( value ) );
+            ((CHeader *)m_aHeaders.Get( (size_t)nIndex ))->setValue( strValue );
         }
         else
         {
             CHeader *temp = newHeader( name );
-            temp->setValue( CString( value ) );
+            temp->setValue( strValue );
             m_aHeaders.Append( temp );
         }
+        return true;
     }
 
-    void CHeaderList::addHeader( const char *key, const CStringArray &values )
+    bool CHeaderList::addHeader( const char *key, const CStringArray &values )
     {
+        CString name;
+        if ( ! validName( key, name ) )
+        {
+            return false;
+        }
+        for ( size_t nX = 0; nX < values.Count(); nX++ )
+        {
+            if ( ! CHeader::isValidValue( values[ nX ] ) )
+            {
+                return false;
+            }
+        }
         for ( size_t nX = 0; nX < values.Count(); nX++ )
         {
             appendHeader( key, values[ nX ] );
         }
+        return true;
     }
 
-    void CHeaderList::appendHeader( const char *key, const char *value )
+    bool CHeaderList::appendHeader( const char *key, const char *value )
     {
-        CString name = canonicalName( CString( key ) );
+        CString name;
+        CString strValue( value ? value : "" );
+        if ( ! validName( key, name ) || ! CHeader::isValidValue( strValue ) )
+        {
+            return false;
+        }
+        name = canonicalName( name );
         int nIndex = findIndex( CHeader::makeKey( name ) );
 
         if ( nIndex >= 0 )
         {
-            ((CHeader *)m_aHeaders.Get( (size_t)nIndex ))->addValue( CString( value ) );
+            ((CHeader *)m_aHeaders.Get( (size_t)nIndex ))->addValue( strValue );
         }
         else
         {
             CHeader *temp = newHeader( name );
-            temp->addValue( CString( value ) );
+            temp->addValue( strValue );
             m_aHeaders.Append( temp );
         }
+        return true;
     }
 
     bool CHeaderList::hasHeader( const char *name )
@@ -293,8 +341,20 @@ namespace IASLib
             CString name = header->getName();
             CStringArray values = header->getValues();
 
+                // The setters refuse these; this keeps a header that was
+                // changed some other way (a derived class) from being written
+                // out as more than one line.
+            if ( ! CHeader::isValidName( name ) )
+            {
+                continue;
+            }
+
             for ( size_t nY = 0; nY < values.Count(); nY++ )
             {
+                if ( ! CHeader::isValidValue( values[ nY ] ) )
+                {
+                    continue;
+                }
                 retVal += name;
                 retVal += ": ";
                 retVal += values[ nY ];

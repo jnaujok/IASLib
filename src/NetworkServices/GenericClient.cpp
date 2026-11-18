@@ -24,9 +24,11 @@
 
 namespace IASLib
 {
-    CGenericClient::CGenericClient( const char *strRemoteHost, int nPort, bool bUseSSL ) : CClientSocket( strRemoteHost, nPort )
+        // Connections are opened by the concrete client when it sends.
+    CGenericClient::CGenericClient( const char *strRemoteHost, int nPort, bool bUseSSL )
+        : m_strRemoteHost( strRemoteHost ? strRemoteHost : "" ), m_nPort( nPort )
     {
-        m_bConnected = this->IsConnected();
+        m_bConnected = false;
         m_bSecure = bUseSSL;
         m_bSecureHandshakeComplete = false;
     }
@@ -36,7 +38,7 @@ namespace IASLib
 
     }
 
-    IMPLEMENT_OBJECT( CGenericClient, CClientSocket );
+    IMPLEMENT_OBJECT( CGenericClient, CObject );
 
 } // namespace IASLib
 

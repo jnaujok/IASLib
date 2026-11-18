@@ -31,6 +31,7 @@ namespace IASLib
         protected:
             CInternetAddress    m_remoteAddress;
             bool                m_bHeadResponse;
+            CString             m_strVersion;
 
         public:
                                 DEFINE_OBJECT( CHttpResponse );
@@ -51,6 +52,16 @@ namespace IASLib
 
             virtual CString     toString( void );
             virtual void        toStream( CStream *oStream );
+
+                // Fills this response from a received message: the status line,
+                // the headers and, after the blank line, the body (all of the
+                // bytes that follow it). The message should already be framed,
+                // as CHttpUtils::frameResponse() does. False, with whatever
+                // could be read kept, if the status line or a header line is
+                // malformed or the header section does not end.
+            virtual bool        parse( const CString &message );
+                // The HTTP version of a received response ("HTTP/1.1"), or "".
+            virtual CString     getVersion( void ) { return m_strVersion; }
     };
 } // namespace IASLib
 

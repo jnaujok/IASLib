@@ -53,7 +53,9 @@ namespace IASLib
                 // Reads header lines up to and including the blank line that ends
                 // them. Handles CRLF or LF line endings, whitespace around the
                 // colon and folded continuation lines. Returns true if the blank
-                // line was found before the end of the stream.
+                // line was found before the end of the stream. A line whose
+                // name is not a token, or that holds a CR other than the one
+                // ending it, marks the list malformed and is skipped.
             virtual bool parse( CStream &headerStream );
 
                 // Maps a header name as received to the name it should be stored
@@ -63,12 +65,18 @@ namespace IASLib
 
             virtual CHeader *getHeader( const char *key );
 
+                // These refuse (return false, changing nothing) a name that is
+                // not a token or a value holding CR, LF or NUL, which would
+                // otherwise let a value smuggle extra header lines or a body
+                // into the message (see CHeader::isValidName/isValidValue).
+
                 // Replaces any existing values of the header with this one.
-            virtual void addHeader( const char *key, const char *value );
-                // Appends the values to the header, creating it if needed.
-            virtual void addHeader( const char *key, const CStringArray &values );
+            virtual bool addHeader( const char *key, const char *value );
+                // Appends the values to the header, creating it if needed (none
+                // of them if any one is refused).
+            virtual bool addHeader( const char *key, const CStringArray &values );
                 // Appends one value to the header, creating it if needed.
-            virtual void appendHeader( const char *key, const char *value );
+            virtual bool appendHeader( const char *key, const char *value );
 
             virtual void removeHeader( const char *key );
             virtual bool hasHeader( const char *key );
@@ -105,6 +113,8 @@ namespace IASLib
 
             int                 findIndex( const CString &key );
             void                copyFrom( const CHeaderList &oSource );
+                // The trimmed name, and whether it is a valid field name.
+            static bool         validName( const char *key, CString &name );
     };
 } // namespace IASLib
 

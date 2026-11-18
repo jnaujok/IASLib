@@ -16,6 +16,8 @@
 
 #include "Header.h"
 
+#include <cstring>
+
 namespace IASLib
 {
     IMPLEMENT_OBJECT(CHeader, CObject)
@@ -81,15 +83,27 @@ namespace IASLib
         return CString("");
     }
 
-    void CHeader::setValue( const CString &value )
+    bool CHeader::setValue( const CString &value )
     {
+            // (Any value was stored, so text passed on from a client could
+            // carry a CR LF and further headers into the output.)
+        if ( ! isValidValue( value ) )
+        {
+            return false;
+        }
         values.EmptyAll();
         values.Append( value );
+        return true;
     }
 
-    void CHeader::addValue( const CString &value )
+    bool CHeader::addValue( const CString &value )
     {
+        if ( ! isValidValue( value ) )
+        {
+            return false;
+        }
         values.Append( value );
+        return true;
     }
 
     CStringArray CHeader::getValues( void ) const
@@ -104,6 +118,10 @@ namespace IASLib
 
     void CHeader::appendToLastValue( const CString &text )
     {
+        if ( ! isValidValue( text ) )
+        {
+            return;
+        }
         if ( values.Count() == 0 )
         {
             values.Append( text );
@@ -125,6 +143,53 @@ namespace IASLib
         retVal.Trim();
         retVal.ToLowerCase();
         return retVal;
+    }
+
+    bool CHeader::isTokenChar( char ch )
+    {
+        unsigned char uch = (unsigned char)ch;
+        if ( ( uch >= '0' && uch <= '9' ) || ( uch >= 'a' && uch <= 'z' ) || ( uch >= 'A' && uch <= 'Z' ) )
+        {
+            return true;
+        }
+        return ( uch != 0 ) && ( strchr( "!#$%&'*+-.^_`|~", (int)uch ) != NULL );
+    }
+
+    bool CHeader::hasLineBreakOrNul( const CString &text )
+    {
+        const char *pText = (const char *)text;
+        size_t nLength = text.GetLength();
+        for ( size_t nX = 0; nX < nLength; nX++ )
+        {
+            if ( pText[ nX ] == '\r' || pText[ nX ] == '\n' || pText[ nX ] == '\0' )
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool CHeader::isValidName( const CString &name )
+    {
+        const char *pName = (const char *)name;
+        size_t nLength = name.GetLength();
+        if ( nLength == 0 )
+        {
+            return false;
+        }
+        for ( size_t nX = 0; nX < nLength; nX++ )
+        {
+            if ( ! isTokenChar( pName[ nX ] ) )
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool CHeader::isValidValue( const CString &value )
+    {
+        return ! hasLineBreakOrNul( value );
     }
 } // namespace IASLib
 

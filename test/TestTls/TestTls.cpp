@@ -9,6 +9,7 @@
 
 #include "IASLib.h"
 #include "NetworkServices/HTTP/BasicHttpServer.h"
+#include "NetworkServices/HTTP/HttpClient.h"
 #include "NetworkServices/HTTP/Handlers/BaseHttpHandlerFactory.h"
 #include "NetworkServices/Entities/TextPlainEntity.h"
 #include "NetworkServices/SIP/BasicSipServer.h"
@@ -322,6 +323,25 @@ static void testHttps( const CTestCertificate &good, const CTestCertificate &oth
         CHECK( client.Send( strSecond.data(), (int)strSecond.size() ) == (int)strSecond.size() );
         strData = readUntil( client, "HTTP/1.1 404", 1, 3000, bClosed );
         CHECK( strData.find( "HTTP/1.1 404" ) != std::string::npos );
+    }
+
+        // CHttpClient over https: verified, with its connection reused.
+    {
+        CHttpClient client( "localhost", nPort, true );
+        client.setTlsContext( clientTrusting( good ) );
+        client.setTimeout( 5000 );
+        CHttpResponse *pResponse = client.get( "/missing" );
+        CHECK( pResponse && pResponse->getStatusCode() == 404 );
+        delete pResponse;
+        pResponse = client.head( "/other" );
+        CHECK( pResponse && pResponse->getStatusCode() == 404 );
+        delete pResponse;
+        CHECK( client.IsConnected() && client.getConnectionsOpened() == 1 );
+
+        CHttpClient untrusting( "127.0.0.1", nPort, true );
+        untrusting.setTlsContext( clientTrusting( other ) );
+        untrusting.setTimeout( 5000 );
+        CHECK( untrusting.get( "/" ) == NULL && untrusting.getLastError().IndexOf( "TLS handshake failed" ) != NOT_FOUND );
     }
 
         // An untrusted certificate, and one for another name, are refused.

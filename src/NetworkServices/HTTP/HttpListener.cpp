@@ -95,7 +95,10 @@ namespace IASLib
                 nRequestStarted = 0;
 
                 bool bKeepAlive = false;
-                CString response = m_pParentServer->handleRequest( CString( frame.message.data(), frame.message.size() ),
+                    // FromBytes keeps a binary body whole. (The (text, length)
+                    // string stopped at the first zero byte, cutting the body
+                    // short of its Content-Length, so the request got 400.)
+                CString response = m_pParentServer->handleRequest( CString::FromBytes( frame.message.data(), frame.message.size() ),
                                                                    m_internetAddress, bKeepAlive,
                                                                    m_pSocket->IsSecure(), m_pSocket->GetTlsServerName() );
                 if ( ! sendData( response ) || ! bKeepAlive )

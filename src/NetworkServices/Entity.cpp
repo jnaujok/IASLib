@@ -131,21 +131,29 @@ namespace IASLib
 
     CEntity *CEntity::getEntity( const char *contentType, CStream &stream, size_t nContentLength )
     {
-        CString body;
-
-        if ( nContentLength > 0 )
+            // Read in pieces until the body is complete or the stream ends: a
+            // stream may return fewer bytes than asked for (a socket does).
+            // The bytes are kept as they are, zero bytes included. (It was one
+            // read, so a body arriving in parts was cut short, and the
+            // (text, length) string stopped at the first zero byte.)
+        std::string body;
+        char achBuffer[ 8192 ];
+        while ( body.size() < nContentLength && ! stream.IsEOS() )
         {
-            char *achBuffer = new char[ nContentLength + 1 ];
-            int nRead = stream.GetBuffer( achBuffer, (int)nContentLength );
-            achBuffer[ ( nRead > 0 ) ? nRead : 0 ] = '\0';
-            if ( nRead > 0 )
+            size_t nChunk = nContentLength - body.size();
+            if ( nChunk > sizeof( achBuffer ) )
             {
-                body = CString( achBuffer, (size_t)nRead );
+                nChunk = sizeof( achBuffer );
             }
-            delete [] achBuffer;
+            int nRead = stream.GetBuffer( achBuffer, (int)nChunk );
+            if ( nRead <= 0 )
+            {
+                break;
+            }
+            body.append( achBuffer, (size_t)nRead );
         }
 
-        return getEntity( contentType, body );
+        return getEntity( contentType, CString::FromBytes( body.data(), body.size() ) );
     }
 
     void CEntity::registerEntity( CEntity *entity )

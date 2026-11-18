@@ -58,9 +58,9 @@ namespace IASLib
 
     void CGenericServer::Start( void )
     {
-        if ( ! m_bStarted )
+            // Only the first caller resumes the thread.
+        if ( ! m_bStarted.exchange( true ) )
         {
-            m_bStarted = true;
             Resume();
         }
     }
@@ -73,10 +73,13 @@ namespace IASLib
     void CGenericServer::Wait( void )
     {
         Start();
+            // The lock makes a second waiter wait for the first one's join to
+            // finish, rather than return while the thread still runs.
+        std::lock_guard<std::mutex> lock( m_joinMutex );
         if ( ! m_bJoined )
         {
-            m_bJoined = true;
             Join();
+            m_bJoined = true;
         }
     }
 } // namespace IASLib

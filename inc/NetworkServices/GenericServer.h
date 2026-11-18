@@ -27,6 +27,9 @@
 #include "NetworkServices/HeaderList.h"
 #include "Streams/Stream.h"
 
+#include <atomic>
+#include <mutex>
+
 namespace IASLib
 {
     /**
@@ -37,6 +40,10 @@ namespace IASLib
      * derived class whose Run() uses its own members must call Stop() and
      * Wait() in its destructor so the thread has finished before those
      * members are destroyed.
+     *
+     * Start(), Stop() and Wait() may be called from any thread, and more
+     * than once: the thread is started once and joined once, and every
+     * Wait() returns only after it has finished.
      */
     class CGenericServer : public CThread
     {
@@ -44,8 +51,12 @@ namespace IASLib
             CSocket            *m_pSocket;
             CUDPSocket         *m_pUdpSocket;
             CInternetAddress    m_localAddress;
-            bool                m_bStarted;
-            bool                m_bJoined;
+                // (Plain bools, read and set from different threads without
+                // synchronisation: two Start() calls could both resume the
+                // thread, and two Wait() calls both join it.)
+            std::atomic<bool>   m_bStarted;
+            std::atomic<bool>   m_bJoined;
+            std::mutex          m_joinMutex;
 
         public:
                                 CGenericServer( void );

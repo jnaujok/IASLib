@@ -9,6 +9,13 @@
  * and thus it makes sense to abstract this protocol where 90%
  * of it can be reused.
  *
+ *      A client holds the server's address; a concrete client (CHttpClient)
+ * opens connections to it when it has a request to send, using the
+ * library's socket classes. (This class used to be a CClientSocket that
+ * connected in its constructor, so a client could not set a timeout or use
+ * TLS first, could not reconnect after the server closed the connection,
+ * and was unusable once it had failed to connect.)
+ *
  *	Author: Jeffrey R. Naujok
  *	Created: 6/03/2019
  *	Log:
@@ -23,15 +30,18 @@
 #ifndef IASLIB_GENERICCLIENT_H__
 #define IASLIB_GENERICCLIENT_H__
 
-#include "Sockets/ClientSocket.h"
+#include "BaseTypes/Object.h"
+#include "BaseTypes/String_.h"
 #include "GenericRequest.h"
 #include "GenericResponse.h"
 
 namespace IASLib
 {
-    class CGenericClient : public CClientSocket
+    class CGenericClient : public CObject
     {
         protected:
+            CString                     m_strRemoteHost;
+            int                         m_nPort;
             bool                        m_bConnected;
             bool                        m_bSecure;
             bool                        m_bSecureHandshakeComplete;
@@ -41,7 +51,18 @@ namespace IASLib
 
                                         DEFINE_OBJECT( CGenericClient );
 
+                                        CGenericClient( const CGenericClient & ) = delete;
+            CGenericClient             &operator =( const CGenericClient & ) = delete;
+
+                // Sends the request and returns the response, which the caller
+                // deletes, or NULL if there is none.
             virtual CGenericResponse   *executeRequest( CGenericRequest *request ) = 0;
+
+            CString                     getRemoteHost( void ) const { return m_strRemoteHost; }
+            int                         getRemotePort( void ) const { return m_nPort; }
+            bool                        isSecure( void ) const { return m_bSecure; }
+                // Whether a connection to the server is open now.
+            virtual bool                IsConnected( void ) { return m_bConnected; }
     };
 } // namespace IASLib
 
