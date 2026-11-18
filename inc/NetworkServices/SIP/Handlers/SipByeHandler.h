@@ -1,4 +1,7 @@
 /**
+ * @file SipByeHandler.h
+ * @brief The default BYE handler (CSipByeHandler).
+ *
  * SIP Bye Handler class
  *
  * This server keeps no dialogs, so a BYE cannot match one and is
@@ -18,16 +21,24 @@
 
 namespace IASLib
 {
+    /// The default BYE handler.
+    ///
+    /// Answers 481 Call/Transaction Does Not Exist: this server keeps no dialogs (RFC 3261 15.1.2).
     class CSipByeHandler : public CSipHandler
     {
         IASLIB_SET_SIP_HANDLER( CSipByeHandler, "BYE" );
         public:
             DEFINE_OBJECT( CSipByeHandler );
 
+                /// Creates a handler for one request (or, with empty values, a
+                /// prototype to register).
             CSipByeHandler( CString uri, CString version );
 
+                /// Destroys the handler.
             virtual ~CSipByeHandler( void );
 
+                /// Answers 481 Call/Transaction Does Not Exist: this server keeps no dialogs (RFC 3261 15.1.2).
+                /// @return true.
             virtual bool process( CSipRequest *request, CSipResponse *response );
     };
 } // namespace IASLib

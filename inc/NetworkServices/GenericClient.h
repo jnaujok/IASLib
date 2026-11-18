@@ -1,4 +1,7 @@
 /**
+ * @file GenericClient.h
+ * @brief The base of request/response protocol clients (CGenericClient).
+ *
  *  Generic Client Class
  *
  *      This class provides a base interface for connecting
@@ -37,31 +40,52 @@
 
 namespace IASLib
 {
+    /// The base of clients for request/response protocols such as HTTP.
+    ///
+    /// A client holds the server's host, port and whether to use TLS. It does
+    /// not connect when constructed: a concrete client (CHttpClient) opens a
+    /// connection when it has a request to send, and can reconnect after the
+    /// server closes one. Clients cannot be copied.
+    /// @note This class used to be a CClientSocket that connected in its
+    ///       constructor, so a client could not set a timeout or use TLS
+    ///       first, could not reconnect, and was unusable once it had failed
+    ///       to connect.
     class CGenericClient : public CObject
     {
         protected:
-            CString                     m_strRemoteHost;
-            int                         m_nPort;
-            bool                        m_bConnected;
-            bool                        m_bSecure;
-            bool                        m_bSecureHandshakeComplete;
+            CString                     m_strRemoteHost;            ///< The server's host name or address.
+            int                         m_nPort;                    ///< The server's port.
+            bool                        m_bConnected;               ///< Whether a connection is open now (kept by the derived client).
+            bool                        m_bSecure;                  ///< Whether connections use TLS.
+            bool                        m_bSecureHandshakeComplete; ///< Whether the TLS handshake on the open connection is done (kept by the derived client).
         public:
+                                        /// Stores the server's address; nothing is connected yet.
+                                        /// @param strRemoteHost The host name or address; NULL is taken as "".
+                                        /// @param nPort         The port.
+                                        /// @param bUseSSL       Whether to use TLS.
                                         CGenericClient( const char *strRemoteHost, int nPort, bool bUseSSL = false );
+                                        /// Destroys the client.
             virtual                    ~CGenericClient( void );
 
                                         DEFINE_OBJECT( CGenericClient );
 
+                                        /// Not copyable.
                                         CGenericClient( const CGenericClient & ) = delete;
+                                        /// Not assignable.
             CGenericClient             &operator =( const CGenericClient & ) = delete;
 
-                // Sends the request and returns the response, which the caller
-                // deletes, or NULL if there is none.
+                /// Sends the request and returns the response.
+                /// @return The response, which the caller deletes, or NULL if
+                ///         there is none.
             virtual CGenericResponse   *executeRequest( CGenericRequest *request ) = 0;
 
+                /// The server's host name or address.
             CString                     getRemoteHost( void ) const { return m_strRemoteHost; }
+                /// The server's port.
             int                         getRemotePort( void ) const { return m_nPort; }
+                /// Whether connections use TLS.
             bool                        isSecure( void ) const { return m_bSecure; }
-                // Whether a connection to the server is open now.
+                /// Whether a connection to the server is open now.
             virtual bool                IsConnected( void ) { return m_bConnected; }
     };
 } // namespace IASLib

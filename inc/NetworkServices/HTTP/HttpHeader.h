@@ -1,8 +1,11 @@
 /**
+ * @file HttpHeader.h
+ * @brief One HTTP header field (CHttpHeader).
+ *
  *  Http Header Class
  *
- *      This class supports an interface for accessing, sending, and 
- * receiving HTTP Header values (name-value pairs in HTTP formats). 
+ *      This class supports an interface for accessing, sending, and
+ * receiving HTTP Header values (name-value pairs in HTTP formats).
  * It also attempts to correctly interpret well-known header entries
  * (e.g. date types) so that it can do validity checking.
  *
@@ -26,22 +29,29 @@
 
 namespace IASLib
 {
+    /// One HTTP header field: a name and its values.
+    ///
+    /// It adds nothing to CHeader beyond its constructors; CHttpHeaderList
+    /// stores its headers as CHttpHeader objects.
     class CHttpHeader : public CHeader
     {
         public:
-                                /// Used to set a header from a name and a value
+                                /// Used to set a header from a name and a value.
+                                /// A value holding CR, LF or NUL is not stored
+                                /// (see CHeader::addValue()).
                             CHttpHeader( const char *strName, const char *strValue );
-                                /// Builds an HTTP Header with only the name for adding values to later
+                                /// Builds an HTTP Header with only the name for adding values to later.
                             CHttpHeader( const char *strName )  : CHeader( strName ) {}
-                                /// Builds an HTTP Header with only the name for adding values to later
+                                /// Same, from a CString name.
                             CHttpHeader( const CString &strName ) : CHeader( strName ) {}
-                                /// Copy Constructor
+                                /// Copy Constructor.
                             CHttpHeader( const CHttpHeader &oSource );
-                                /// Destructor
+                                /// Destructor.
             virtual        ~CHttpHeader( void );
 
                             DEFINE_OBJECT( CHttpHeader )
 
+                                /// Copies the name and values of another header.
             CHttpHeader    &operator =( const CHttpHeader &oSource );
     };
 }   // namespace IASLib

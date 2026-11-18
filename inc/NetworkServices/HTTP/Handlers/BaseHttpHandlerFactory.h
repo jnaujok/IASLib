@@ -1,4 +1,7 @@
 /**
+ * @file BaseHttpHandlerFactory.h
+ * @brief The default HTTP handlers (CBaseHttpHandlerFactory).
+ *
  * Base HTTP Handler Factory class
  *
  * The default handlers: GET and POST answer 404 Not Found (there is
@@ -19,10 +22,19 @@
 
 namespace IASLib
 {
+    /// A factory with the default handlers: GET and POST answer 404 Not Found,
+    /// and OPTIONS answers 200 OK with Allow.
+    ///
+    /// It has no HEAD handler, so the server answers HEAD with whichever GET
+    /// handler applies, an application's included. Add it first and the
+    /// application's own factories after it, so that they are consulted
+    /// before it.
     class CBaseHttpHandlerFactory : public CHttpHandlerFactory
     {
         public:
+                /// Registers the GET, POST and OPTIONS handlers.
             CBaseHttpHandlerFactory( void );
+                /// Deletes the handlers.
             virtual ~CBaseHttpHandlerFactory( void );
 
             DEFINE_OBJECT( CBaseHttpHandlerFactory );
