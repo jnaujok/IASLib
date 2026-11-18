@@ -78,6 +78,7 @@ USE_PDFLATEX           = YES
 PDF_HYPERLINKS         = YES
 LATEX_BATCHMODE        = YES
 PAPER_TYPE             = letter
+LATEX_EXTRA_STYLESHEET = docs/doxygen-latex.sty
 
 GENERATE_XML           = NO
 GENERATE_MAN           = NO

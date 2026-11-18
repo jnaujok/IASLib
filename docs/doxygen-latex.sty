@@ -1,0 +1,23 @@
+% Extra LaTeX for the Doxygen PDF (Doxyfile: LATEX_EXTRA_STYLESHEET).
+% pdflatex needs to be told how to typeset characters outside its fonts
+% that appear in README.md and the header comments.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{doxygen-latex}
+\RequirePackage{amssymb}
+\DeclareUnicodeCharacter{2705}{\ensuremath{\checkmark}}
+\DeclareUnicodeCharacter{2714}{\ensuremath{\checkmark}}
+\DeclareUnicodeCharacter{274C}{\ensuremath{\times}}
+\DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}}
+\DeclareUnicodeCharacter{2190}{\ensuremath{\leftarrow}}
+\DeclareUnicodeCharacter{2194}{\ensuremath{\leftrightarrow}}
+\DeclareUnicodeCharacter{21D2}{\ensuremath{\Rightarrow}}
+\DeclareUnicodeCharacter{2264}{\ensuremath{\leq}}
+\DeclareUnicodeCharacter{2265}{\ensuremath{\geq}}
+\DeclareUnicodeCharacter{2260}{\ensuremath{\neq}}
+\DeclareUnicodeCharacter{2248}{\ensuremath{\approx}}
+\DeclareUnicodeCharacter{221E}{\ensuremath{\infty}}
+\DeclareUnicodeCharacter{2211}{\ensuremath{\sum}}
+\DeclareUnicodeCharacter{00D7}{\ensuremath{\times}}
+\DeclareUnicodeCharacter{03BC}{\ensuremath{\mu}}
+\DeclareUnicodeCharacter{2022}{\textbullet}
+\DeclareUnicodeCharacter{2026}{\ldots}
