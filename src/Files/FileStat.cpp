@@ -19,64 +19,54 @@
 #include "FileStat.h"
 #include "FileException.h"
 
-#ifdef IASLIB_MULTI_THREADED__
-#include "Mutex.h"
-#endif
-
+#include <errno.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <errno.h>
 
 namespace IASLib
 {
-#ifdef IASLIB_MULTI_THREADED__
-    CMutex oStatLock;
-#endif
-
     IMPLEMENT_OBJECT( CFileStat, CObject );
 
+        // (It took a global lock that stat() does not need, trimmed spaces
+        // a name may really have, tested the type with "mode & S_IFDIR",
+        // which is also true of sockets and block devices, and kept the size
+        // in a long: wrong past 2 GB on Windows.)
     CFileStat::CFileStat( const char *strFileName )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        oStatLock.Lock();
-#endif
-        m_strFileName = strFileName;
-        m_strFileName.Trim();
-        if ( stat( m_strFileName, &m_stFileStatus ) != 0 )
-        {
-#ifdef IASLIB_MULTI_THREADED__
-            oStatLock.Unlock();
-#endif
-            throw CFileException( errno );
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        oStatLock.Unlock();
-#endif
+        m_strFileName = ( strFileName ) ? strFileName : "";
         m_bIsDir = false;
         m_bIsFile = false;
         m_lFileSize = 0;
 
-        if ( m_stFileStatus.st_mode & S_IFDIR )
-        {
-            m_bIsDir = true;
-        }
-        else
-        {
-            if ( m_stFileStatus.st_mode & S_IFREG )
-            {
-                m_bIsFile = true;
-                m_lFileSize = (long)m_stFileStatus.st_size;
-            }
-        }
+#ifdef IASLIB_WIN32__
+        struct _stat64 stStatus;
+        if ( _stat64( m_strFileName, &stStatus ) != 0 )
+            throw CFileException( errno );
+        int nType = stStatus.st_mode & _S_IFMT;
+        m_bIsDir = ( nType == _S_IFDIR );
+        m_bIsFile = ( nType == _S_IFREG );
+#else
+        struct stat stStatus;
+        if ( stat( m_strFileName, &stStatus ) != 0 )
+            throw CFileException( errno );
+        m_bIsDir = S_ISDIR( stStatus.st_mode );
+        m_bIsFile = S_ISREG( stStatus.st_mode );
+#endif
+        if ( m_bIsFile )
+            m_lFileSize = (int64_t)stStatus.st_size;
 
-        m_dttLastAccess = CDate::ParseUnix( m_stFileStatus.st_atime );
-        m_dttLastModified = CDate::ParseUnix( m_stFileStatus.st_mtime );
-        m_dttLastChanged = CDate::ParseUnix( m_stFileStatus.st_ctime );
+        m_dttLastAccess = CDate::ParseUnix( (time_t)stStatus.st_atime );
+        m_dttLastModified = CDate::ParseUnix( (time_t)stStatus.st_mtime );
+        m_dttLastChanged = CDate::ParseUnix( (time_t)stStatus.st_ctime );
     }
 
     CFileStat::~CFileStat( void )
     {
-        // Nothing to do for now.
+    }
+
+    long CFileStat::GetSize( void ) const
+    {
+        return ( m_lFileSize > (int64_t)LONG_MAX ) ? -1L : (long)m_lFileSize;
     }
 } // namespace IASLib
-

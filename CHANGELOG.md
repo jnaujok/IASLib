@@ -86,6 +86,12 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CLogFile` and `CRotatingLogFile` take an auto-flush argument; lines at ERROR and above are always flushed. A file that cannot be opened leaves the log closed instead of throwing.
   - `CRotatingLogFile` deletes all but the newest `nFilesToKeep` files that match its template. It used to keep everything.
   - `CLogContext::getArrayValue()` returns NULL for a missing name, not a shared empty array.
+- **Files:**
+  - `CFile` cannot be copied: a copy shared the `FILE` and closed it twice.
+  - `CFile::Rename()` replaces an existing file on Windows too.
+  - `CDirectory` lists entries sorted by name, and a directory that cannot be read gives an empty list.
+  - `CDirectoryEntry::m_lSize` and the CFileStat size are 64-bit.
+  - The `CRWFile` index is written in binary mode, so its records are 16 bytes on Windows too.
 - **Files:** `CFile::GetPos()`, `GetSize()` and `Seek()` return -1 when the value does not fit in a `long` (past 2 GB where it is 32 bits, as on Windows). They used to return a wrong value. A failed `Seek()` returns -1 rather than the old position, and seeking past the end no longer changes the size `GetSize()` reports.
 - **Resources:** `CResource::Load()` and `Save()` take the `CResourceFile` to use (they were declared without one and never defined). The compression constants are in `ResourceIndex.h`.
 - **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
@@ -161,6 +167,17 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CMemoryDebugHeap`: fenceposts, double and foreign frees, spoiling freed memory, and optional leak tracking by type, file and line, with `ReportLeaks()` and `CheckAll()`.
   - `IASLIB_NEW`, a `new` that records the file and line.
   - `TestMemory`, and a CI job for the memory manager without the debugging heap.
+- **Memory-mapped files:** `CMemMappedFile` works. Every method was an empty stub. It maps the file with `mmap()` on Unix and file mappings on Windows, behind CFile's interface:
+  - Separate read and write pointers when asked for (`SetSyncPointers()`).
+  - Direct access through `GetData()`.
+  - Writes past the end grow the file in bounded steps, and `Close()` trims it back.
+  - `Resize()`, `GetLine()`, and 64-bit offsets.
+- **Files:**
+  - A `CFile::CREATE` mode, for a new file opened for both reading and writing.
+  - `CFile::Exists()` and `GetFileName()`.
+  - `CDirectory::Create()` (with parents), `Remove()`, `Exists()`, `IsValid()` and `GetPath()`.
+  - `CDirectoryEntry::IsDirectory()` and `IsDotEntry()`.
+  - `CFileStat::GetSizeBig()`.
 - **64-bit files:** `CFile::SeekBig()`, `GetPosBig()`, `GetSizeBig()`, `ReadBig()` and `WriteBig()` take and return 64-bit values, so files of any size (up to 2^63 bytes) can be addressed. The C library's 64-bit calls are used on every platform, and `_FILE_OFFSET_BITS=64` is set outside Windows. `TestFiles` checks past 4 GB, using sparse files.
 - **Resource manager**, for games and other programs with many resources to load (it was an empty skeleton):
   - `CResourceManager` loads resources by path (`"textures/hero.png"`) and keeps them while they are wanted.
@@ -338,6 +355,28 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - Log messages were cut at 4096 bytes.
   - On Windows, the source file kept its whole path.
   - `CConsoleLog` did not flush its output.
+- **Files:**
+  - `CFile`:
+    - `GetLine()` shared one static buffer between every file and thread, refused binary files, and seeked backwards in text mode to handle long lines.
+    - `IsEOF()` was always true past 2 GB.
+    - Reopening in another mode kept the old mode's flags.
+    - A file opened with no mode lost `BINARY`.
+    - `Close()` and `Flush()` ignored errors.
+  - `CFileStat`:
+    - Sockets and block devices counted as directories (the type was tested with `mode & S_IFDIR`).
+    - Sizes past 2 GB were wrong on Windows.
+    - It took a needless global lock, and trimmed spaces from names.
+  - `CDirectory`:
+    - A directory that could not be opened crashed it.
+    - On Windows the TCHAR calls broke UNICODE builds, and a buffer was freed with the wrong `delete`.
+    - Lightweight listings were ignored except on Windows.
+  - `CDirectoryEntry` left its size unset when the entry could not be read.
+  - `CRWFile`:
+    - Failing to open a file threw instead of trying to create it.
+    - On Windows the reader wrote its position over the writer's.
+    - Reopening a finished file for writing wrote over it from the start.
+    - A reader could take half of a line still being written.
+    - A written line containing newlines counted as one.
 - **Files:** on Windows, `CFile` opened files with `fopen_s()`, which nothing else can open at the same time, so a log could not be read while it was being written. It opens them shared, as on other systems.
 - **Memory manager:** `MemoryManager.h` defined `new` as a macro for every file that included it, defined an inline replacement `operator delete`, and declared an allocator pointer that was never defined, so `USE_MEMORY_MANAGER` did not compile.
 - **Stats:**

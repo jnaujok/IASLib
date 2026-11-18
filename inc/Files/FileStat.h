@@ -19,23 +19,25 @@
 #ifndef IASLIB_FILESTAT_H__
 #define IASLIB_FILESTAT_H__
 
+#include <stdint.h>
 #include "../BaseTypes/Date.h"
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "../BaseTypes/String_.h"
 
 namespace IASLib
 {
+        // What the file system says about a path, without opening it. The
+        // constructor throws a CFileException (errno) if there is no such
+        // path.
     class CFileStat : public CObject
     {
         protected:
             CString         m_strFileName;
-            struct stat     m_stFileStatus;
             bool            m_bIsFile;
             bool            m_bIsDir;
             CDate           m_dttLastAccess;
             CDate           m_dttLastModified;
             CDate           m_dttLastChanged;
-            long            m_lFileSize;
+            int64_t         m_lFileSize;
 
         public:
                             CFileStat( const char *strFileName );
@@ -43,15 +45,20 @@ namespace IASLib
 
                             DEFINE_OBJECT( CFileStat );
 
-            bool            IsFile( void ) { return m_bIsFile; }
-            bool            IsDir( void ) { return m_bIsDir; }
+            bool            IsFile( void ) const { return m_bIsFile; }
+            bool            IsDir( void ) const { return m_bIsDir; }
 
-            CDate           GetLastAccess( void ) { return m_dttLastAccess; }
-            CDate           GetLastModified( void ) { return m_dttLastModified; }
-            CDate           GetLastChanged( void ) { return m_dttLastChanged; }
+            CDate           GetLastAccess( void ) const { return m_dttLastAccess; }
+            CDate           GetLastModified( void ) const { return m_dttLastModified; }
+                // The status change time (on Windows, the creation time).
+            CDate           GetLastChanged( void ) const { return m_dttLastChanged; }
 
-            long            GetSize( void ) { return m_lFileSize; }
+                // The size of a file in bytes (0 for a directory); GetSize()
+                // is -1 when that does not fit in a long.
+            int64_t         GetSizeBig( void ) const { return m_lFileSize; }
+            long            GetSize( void ) const;
+            const CString  &GetFileName( void ) const { return m_strFileName; }
     };
 } // namespace IASLib
 
-#endif // __FILESTAT_H__
+#endif // IASLIB_FILESTAT_H__

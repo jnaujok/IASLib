@@ -85,16 +85,10 @@ namespace IASLib
             return pFile != NULL;
         }
 
-            // A new empty file (CFile has no "w+" mode), opened for reading
-            // and writing.
+            // A new empty file, opened for reading and writing.
         CFile *createFile( const char *strPath )
         {
-            CFile *pFile = openFile( strPath, CFile::WRITE | CFile::BINARY );
-            if ( pFile == NULL )
-                return NULL;
-            pFile->Close();
-            delete pFile;
-            return openFile( strPath, CFile::READ | CFile::WRITE | CFile::BINARY );
+            return openFile( strPath, CFile::READ | CFile::WRITE | CFile::CREATE | CFile::BINARY );
         }
 
         void putText( CStringStream &oOut, const CString &str )
@@ -706,10 +700,7 @@ namespace IASLib
             m_pFile = NULL;
             try
             {
-#ifdef IASLIB_WIN32__
-                    // Windows will not rename over an existing file.
-                CFile::Delete( m_strPath );
-#endif
+                    // (Rename() replaces the old file, Windows included.)
                 bReplaced = CFile::Rename( strTemp.c_str(), m_strPath );
             }
             catch ( ... )

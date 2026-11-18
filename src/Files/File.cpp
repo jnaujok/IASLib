@@ -18,12 +18,14 @@
 #include "FileException.h"
 #include <errno.h>
 #include <limits.h>
+#include <string.h>
 #ifdef IASLIB_WIN32__
 #include <share.h>
 #endif
 #include <iostream>
 
 #ifndef IASLIB_WIN32__
+#include <sys/stat.h>
 #include <unistd.h> // unlink()
 #endif
 
@@ -86,43 +88,7 @@ namespace IASLib
         m_lFileSize = -1;
         m_lCurrentPos = -1;
 
-        CString strMode = "";
-
-        if ( nMode & READ )
-        {
-            m_bInput = true;
-            strMode += "r";
-        }
-
-        if ( nMode & WRITE )
-        {
-            m_bOutput = true;
-            if ( strMode.GetLength() != 0 )
-                strMode += "+";
-            else
-                strMode += "w";
-        }
-
-        if ( nMode & APPEND )
-        {
-            m_bAppend = true;
-            strMode = "a";
-            if ( m_bInput )
-                strMode += "+";
-        }
-
-        if ( nMode & BINARY )
-        {
-            m_bBinary = true;
-            strMode += "b";
-        }
-
-        if ( ( nMode & 0x07 ) == 0 )
-        {
-            m_bInput = true;
-            strMode = "r";
-        }
-
+        CString strMode = ModeString( nMode );
         m_fpFile = _fdopen( nHandle, strMode );
     }
 #endif // IASLIB_WIN32__
@@ -146,6 +112,49 @@ namespace IASLib
         Close();
     }
 
+        // (The flags were never reset, so reopening in another mode kept
+        // the old ones; and with no READ or WRITE flag the mode fell back to
+        // "r", dropping BINARY.)
+    CString CFile::ModeString( int nMode )
+    {
+        m_bInput = false;
+        m_bOutput = false;
+        m_bAppend = false;
+        m_bBinary = ( nMode & BINARY ) != 0;
+
+        if ( ( nMode & ( READ | WRITE | APPEND | CREATE ) ) == 0 )
+            nMode |= READ;
+        if ( nMode & CREATE )
+            nMode |= WRITE;
+
+        CString strMode;
+        if ( nMode & APPEND )
+        {
+            m_bAppend = true;
+            m_bInput = ( nMode & READ ) != 0;
+            strMode = ( m_bInput ) ? "a+" : "a";
+        }
+        else if ( ( nMode & READ ) && ( nMode & WRITE ) )
+        {
+            m_bInput = true;
+            m_bOutput = true;
+            strMode = ( nMode & CREATE ) ? "w+" : "r+";
+        }
+        else if ( nMode & WRITE )
+        {
+            m_bOutput = true;
+            strMode = "w";
+        }
+        else
+        {
+            m_bInput = true;
+            strMode = "r";
+        }
+        if ( m_bBinary )
+            strMode += "b";
+        return strMode;
+    }
+
     bool CFile::Open( const char *strFileName, int nMode )
     {
         if ( m_fpFile )
@@ -155,44 +164,10 @@ namespace IASLib
         }
 
         m_lCurrentPos = -1;
-        m_strFileName = strFileName;
+        m_lFileSize = -1;
+        m_strFileName = ( strFileName ) ? strFileName : "";
 
-        CString strMode = "";
-
-        if ( nMode & READ )
-        {
-            m_bInput = true;
-            strMode += "r";
-        }
-
-        if ( nMode & WRITE )
-        {
-            m_bOutput = true;
-            if ( strMode.GetLength() != 0 )
-                strMode += "+";
-            else
-                strMode += "w";
-        }
-
-        if ( nMode & APPEND )
-        {
-            m_bAppend = true;
-            strMode = "a";
-            if ( m_bInput )
-                strMode += "+";
-        }
-
-        if ( nMode & BINARY )
-        {
-            m_bBinary = true;
-            strMode += "b";
-        }
-
-        if ( ( nMode & 0x07 ) == 0 )
-        {
-            m_bInput = true;
-            strMode = "r";
-        }
+        CString strMode = ModeString( nMode );
 
 #ifdef IASLIB_WIN32__
             // Shared, as fopen() is elsewhere: fopen_s() opens files that no
@@ -215,11 +190,13 @@ namespace IASLib
     {
         if ( m_fpFile != NULL )
         {
-            fclose( m_fpFile );
+                // (fclose()'s result was ignored: a failed final write went
+                // unnoticed.)
+            bool bOk = ( fclose( m_fpFile ) == 0 );
             m_fpFile = NULL;
             m_lFileSize = -1;
             m_lCurrentPos = -1;
-            return true;
+            return bOk;
         }
         return false;
     }
@@ -228,8 +205,7 @@ namespace IASLib
     {
         if ( ( m_fpFile ) && ( m_bOutput || m_bAppend ) )
         {
-            fflush( m_fpFile );
-            return true;
+            return fflush( m_fpFile ) == 0;
         }
         return false;
     }
@@ -410,60 +386,39 @@ namespace IASLib
         return nDone;
     }
 
+        // (It compared the long position and size, which are both -1 past
+        // 2 GB, so a large file always looked finished.)
     bool CFile::IsEOF( void )
     {
-        if ( GetPos() == GetSize() )
-        {
+        if ( m_fpFile == NULL )
             return true;
-        }
-        return false;
+        int64_t nPos = GetPosBig();
+        int64_t nSize = GetSizeBig();
+        if ( nPos < 0 || nSize < 0 )
+            return feof( m_fpFile ) != 0;
+        return nPos >= nSize;
     }
 
+        // (It used one static buffer for every file and thread, refused
+        // binary files, and handled long lines by seeking back a byte, which
+        // text mode does not allow.)
     CString CFile::GetLine( void )
     {
-        CString     strRetVal;
-        static char Buffer[1024];
-        bool        bDone = false;
-
-        if ( ( ! m_fpFile ) || ( m_bBinary ) )
+        CString strRetVal;
+        if ( m_fpFile == NULL || ! m_bInput )
         {
             return strRetVal;
         }
 
-        if ( fgets( Buffer, 1024, m_fpFile ) != NULL )
+        char achBuffer[ 1024 ];
+        while ( fgets( achBuffer, (int)sizeof( achBuffer ), m_fpFile ) != NULL )
         {
-            do
-            {
-                size_t nTemp = strRetVal.GetLength();
-                if ( m_lCurrentPos != -1 )
-                {
-                    m_lCurrentPos += (int64_t)nTemp;
-                    if ( ! m_bBinary )
-                    {
-                        m_lCurrentPos = tell64( m_fpFile );
-                    }
-                }
-                strRetVal += Buffer;
-                nTemp = strRetVal.GetLength() - nTemp;
-                if ( nTemp == 1023 )
-                {
-                    Seek( -1, CURRENT );
-                    Read( Buffer, 1 );
-                    if ( Buffer[0] == '\n' )
-                    {
-                        bDone = true;
-                    }
-                    else
-                    {
-                        if ( fgets( Buffer, 1024, m_fpFile ) == NULL )
-                            bDone = true;
-                    }
-                }
-                else
-                    bDone = true;
-            } while ( ! bDone );
+            size_t nLength = strlen( achBuffer );
+            strRetVal += achBuffer;
+            if ( nLength > 0 && achBuffer[ nLength - 1 ] == '\n' )
+                break;
         }
-
+        m_lCurrentPos = tell64( m_fpFile );
         return strRetVal;
     }
 
@@ -486,18 +441,33 @@ namespace IASLib
     bool CFile::Rename( const char *strOldName, const char *strNewName )
     {
 #ifdef IASLIB_WIN32__
-        int nReturn = rename( strOldName, strNewName );
+            // (rename() will not replace a file on Windows.)
+        if ( ! MoveFileExA( strOldName, strNewName, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED ) )
+        {
+            DWORD dwError = GetLastError();
+            int nError = ( dwError == ERROR_FILE_NOT_FOUND || dwError == ERROR_PATH_NOT_FOUND ) ? ENOENT :
+                         ( dwError == ERROR_ACCESS_DENIED || dwError == ERROR_SHARING_VIOLATION ) ? EACCES : EIO;
+            IASLIB_THROW_FILE_EXCEPTION( nError );
+        }
 #else
-        int nReturn = rename( strOldName, strNewName );
-#endif
-
-        if ( nReturn != 0 )
+        if ( rename( strOldName, strNewName ) != 0 )
         {
             IASLIB_THROW_FILE_EXCEPTION(errno);
         }
-
+#endif
         return true;
     }
 
+    bool CFile::Exists( const char *strFileName )
+    {
+        if ( strFileName == NULL || *strFileName == '\0' )
+            return false;
+#ifdef IASLIB_WIN32__
+        return GetFileAttributesA( strFileName ) != INVALID_FILE_ATTRIBUTES;
+#else
+        struct stat stInfo;
+        return stat( strFileName, &stInfo ) == 0;
+#endif
+    }
 
 } // namespace IASLib

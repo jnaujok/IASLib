@@ -23,24 +23,32 @@ namespace IASLib
 {
     IMPLEMENT_OBJECT( CRWFile, CObject );
 
+    namespace
+    {
+        const int RECORD = 16;          // "%15ld\n"
+    }
+
     CRWFile::CRWFile()
     {
         m_strBaseFileName = "";
         m_bRead = false;
-        m_nReadLine = -1;
-        m_nWriteLine = -1;
+        m_nReadLine = 0;
+        m_nWriteLine = 0;
+        m_nReadPos = 0;
+        m_nWritePos = 0;
         m_bFileOpen = false;
     }
 
     CRWFile::CRWFile( const char *strFileName, int nMode )
     {
         m_bRead = false;
-        m_nReadLine = -1;
-        m_nWriteLine = -1;
+        m_nReadLine = 0;
+        m_nWriteLine = 0;
+        m_nReadPos = 0;
+        m_nWritePos = 0;
         m_bFileOpen = false;
 
         Open( strFileName, nMode );
-
     }
 
     CRWFile::~CRWFile()
@@ -51,6 +59,44 @@ namespace IASLib
         }
     }
 
+        // Binary, so the index records are 16 bytes on every system (in
+        // text mode Windows made the newline two bytes, and the reader's
+        // record was written over the writer's). CFile throws when a file
+        // cannot be opened, so the "else create it" steps never ran.
+    bool CRWFile::OpenFile( CFile &oFile, const CString &strName, bool bCreate )
+    {
+        try
+        {
+            if ( oFile.Open( strName, CFile::READ | CFile::WRITE | CFile::BINARY ) )
+                return true;
+        }
+        catch ( ... )
+        {
+        }
+        if ( ! bCreate )
+            return false;
+        try
+        {
+            return oFile.Open( strName, CFile::READ | CFile::WRITE | CFile::CREATE | CFile::BINARY );
+        }
+        catch ( ... )
+        {
+            return false;
+        }
+    }
+
+    bool CRWFile::ReadIndex( long &nWriteLine, long &nReadLine )
+    {
+        char achIndex[ RECORD * 2 + 1 ];
+        if ( m_oIndexFile.SeekBig( 0, CFile::BEGIN ) != 0 ||
+             m_oIndexFile.ReadBig( achIndex, RECORD * 2 ) != RECORD * 2 )
+            return false;
+        achIndex[ RECORD * 2 ] = '\0';
+        nWriteLine = atol( achIndex );
+        nReadLine = atol( achIndex + RECORD );
+        return true;
+    }
+
     bool CRWFile::Open( const char *strFileName, int nMode )
     {
         if ( m_bFileOpen )
@@ -58,93 +104,87 @@ namespace IASLib
             Close();
         }
 
-        m_bRead = false;
+        m_bRead = ( nMode != WRITE );
         m_nReadLine = 0;
         m_nReadPos = 0;
         m_nWriteLine = 0;
+        m_nWritePos = 0;
         m_bFileOpen = false;
+        m_strBaseFileName = ( strFileName ) ? strFileName : "";
+        CString strIndex = m_strBaseFileName + ".idx";
 
-        m_strBaseFileName = strFileName;
-
-        if ( nMode == WRITE )
+        if ( ! m_bRead )
         {
-            m_oIndexFile.Open( m_strBaseFileName + ".idx", CFile::READ | CFile::WRITE );
-            if ( ! m_oIndexFile.IsOpen() )
+            if ( ! OpenFile( m_oIndexFile, strIndex, true ) )
+                return false;
+            if ( ! OpenFile( m_oDataFile, m_strBaseFileName, true ) )
             {
-                m_oIndexFile.Open( m_strBaseFileName + ".idx", CFile::WRITE );
+                m_oIndexFile.Close();
+                return false;
             }
 
-            if ( m_oIndexFile.IsOpen() )
+            long nWriteLine = 0, nReadLine = 0;
+            bool bHaveIndex = ReadIndex( nWriteLine, nReadLine );
+            if ( ! bHaveIndex )
+                nReadLine = 0;
+
+                // Where the last writer stopped: after its last line, or (if
+                // it finished: -1) after everything. (Reopening a finished
+                // file started again at line 0, over the old lines.)
+            m_oDataFile.SeekBig( 0, CFile::BEGIN );
+            long nLines = 0;
+            int64_t nPos = 0;
+            while ( nWriteLine < 0 || nLines < nWriteLine )
             {
-                if ( m_oIndexFile.GetSize() != 0 )
-                {
-                    m_nWriteLine = atol( m_oIndexFile.GetLine() );
-                }
-                else
-                {
-                    m_nWriteLine = 0;
-                    CString strOutputLine;
-                    strOutputLine.Format( "%15ld\n", (long)0 );
-                    m_oIndexFile.WriteString( strOutputLine );
-                    m_oIndexFile.WriteString( strOutputLine );
-                    m_oIndexFile.Flush();
-                }
-
-                m_oDataFile.Open( m_strBaseFileName, CFile::READ | CFile::WRITE );
-
-                if ( ! m_oDataFile.IsOpen() )
-                    m_oDataFile.Open( m_strBaseFileName, CFile::WRITE );
-
-                if ( m_oDataFile.IsOpen() )
-                {
-                    m_oDataFile.Seek( 0, CFile::BEGIN );
-
-                    for ( int nCount = 0; nCount < m_nWriteLine ; nCount++ )
-                    {
-                        CString strTemp = m_oDataFile.GetLine();
-                    }
-                    m_nWritePos = m_oDataFile.GetPos();
-
-                    m_bFileOpen = true;
-                }
+                CString strLine = m_oDataFile.GetLine();
+                if ( strLine.GetLength() == 0 || strLine[ strLine.GetLength() - 1 ] != '\n' )
+                    break;                      // the end, or a line never finished
+                nLines++;
+                nPos = m_oDataFile.GetPosBig();
             }
+            m_nWriteLine = nLines;
+            m_nWritePos = nPos;
+            m_nReadLine = nReadLine;
+            m_bFileOpen = true;
+
+            CString strRecords;
+            strRecords.Format( "%15ld\n%15ld\n", m_nWriteLine, m_nReadLine );
+            m_oIndexFile.SeekBig( 0, CFile::BEGIN );
+            m_oIndexFile.WriteString( strRecords );
+            m_oIndexFile.Flush();
         }
         else
         {
-            m_bRead = true;
-            m_oIndexFile.Open( m_strBaseFileName + ".idx", CFile::READ | CFile::WRITE );
-            if ( m_oIndexFile.IsOpen() )
+            if ( ! OpenFile( m_oIndexFile, strIndex, false ) )
+                return false;
+            long nWriteLine = 0, nReadLine = 0;
+            if ( ! ReadIndex( nWriteLine, nReadLine ) )
             {
-                if ( m_oIndexFile.GetSize() > 0 )
-                {
-                        // Read the write index first
-                    long lTemp = atol( m_oIndexFile.GetLine() ); lTemp=lTemp; // To aviod compiler warnings.
-                        // Read the read index.
-                    m_nReadLine = atol( m_oIndexFile.GetLine() );
-
-                    m_oDataFile.Open( m_strBaseFileName, CFile::READ );
-
-                    if ( m_oDataFile.IsOpen() )
-                    {
-                        for ( int nCount = 0; nCount < m_nReadLine ; nCount++ )
-                        {
-                            m_oDataFile.GetLine();
-                        }
-
-                        m_nReadPos = m_oDataFile.GetPos();
-
-                        m_bFileOpen = true;
-                    }
-                }
-                else
-                {
-                    m_oIndexFile.Close();
-                }
+                m_oIndexFile.Close();
+                return false;
             }
-            else
+            try
             {
-                //DebugLog( "RWFile: Error Number %d\n", errno );
+                if ( ! m_oDataFile.Open( m_strBaseFileName, CFile::READ | CFile::BINARY ) )
+                    throw 0;
             }
+            catch ( ... )
+            {
+                m_oIndexFile.Close();
+                return false;
+            }
+
+                // Skip the lines the last reader took.
+            m_oDataFile.SeekBig( 0, CFile::BEGIN );
+            for ( long nCount = 0; nCount < nReadLine; nCount++ )
+            {
+                CString strLine = m_oDataFile.GetLine();
+                if ( strLine.GetLength() == 0 || strLine[ strLine.GetLength() - 1 ] != '\n' )
+                    break;
+                m_nReadLine++;
+                m_nReadPos = m_oDataFile.GetPosBig();
+            }
+            m_bFileOpen = true;
         }
 
         return m_bFileOpen;
@@ -156,11 +196,11 @@ namespace IASLib
         {
             if ( ! m_bRead )
             {
+                m_oDataFile.Flush();
                 if ( bComplete )
                 {
                     m_nWriteLine = -1;
                 }
-                m_oDataFile.Flush();
             }
             UpdateIndex();
             m_oDataFile.Close();
@@ -177,9 +217,8 @@ namespace IASLib
     {
         if ( m_bFileOpen )
         {
-            m_oDataFile.Flush();
-            m_oIndexFile.Flush();
-            return true;
+            bool bOk = m_bRead || m_oDataFile.Flush();
+            return m_oIndexFile.Flush() && bOk;
         }
 
         return false;
@@ -187,13 +226,14 @@ namespace IASLib
 
     bool CRWFile::Write( const char *achBuffer, int nLength )
     {
-        if ( ( ! m_bRead ) && ( m_bFileOpen ) )
+        if ( ( ! m_bRead ) && ( m_bFileOpen ) && achBuffer && nLength >= 0 )
         {
-            m_oDataFile.Seek( m_nWritePos, CFile::BEGIN );
-		    if ( m_oDataFile.Write( achBuffer, nLength ) == nLength )
+            m_oDataFile.SeekBig( m_nWritePos, CFile::BEGIN );
+		    if ( m_oDataFile.WriteBig( achBuffer, (size_t)nLength ) == nLength )
 		    {
+                m_oDataFile.Flush();
 			    m_nWritePos += nLength;
-			    for (int nCount = 0; nCount < nLength ; nCount++ )
+			    for ( int nCount = 0; nCount < nLength ; nCount++ )
 			    {
 				    if ( achBuffer[nCount] == '\n' )
 				    {
@@ -207,36 +247,29 @@ namespace IASLib
         return false;
     }
 
+        // (A line with newlines in it counted as one.)
     bool CRWFile::WriteLine( const CString &oString )
     {
-        if ( ( ! m_bRead ) && ( m_bFileOpen ) )
-        {
-            CString strTemp = oString;
-            strTemp += "\n";
-            m_oDataFile.Seek( m_nWritePos, CFile::BEGIN );
-            m_oDataFile.WriteString( strTemp );
-            m_oDataFile.Flush();
-            m_nWritePos += (int)strTemp.GetLength();
-            m_nWriteLine++;
-            UpdateIndex();
-            return true;
-        }
-        return false;
+        CString strTemp = oString;
+        strTemp += "\n";
+        return Write( (const char *)strTemp, (int)strTemp.GetLength() );
     }
 
     CString CRWFile::GetLine( void )
     {
         CString strTemp;
-        if ( ( m_bRead ) && ( m_bFileOpen ) )
+        if ( ( m_bRead ) && ( m_bFileOpen ) && ! IsEOF() )
         {
-            if ( ! IsEOF() )
+            m_oDataFile.SeekBig( m_nReadPos, CFile::BEGIN );
+            strTemp = m_oDataFile.GetLine();
+            if ( strTemp.GetLength() == 0 || strTemp[ strTemp.GetLength() - 1 ] != '\n' )
             {
-                m_oDataFile.Seek( m_nReadPos, CFile::BEGIN );
-                strTemp = m_oDataFile.GetLine();
-                m_nReadPos = m_oDataFile.GetPos();
-                m_nReadLine++;
-                UpdateIndex();
+                    // Not finished yet: leave it for the next call.
+                return CString( "" );
             }
+            m_nReadPos = m_oDataFile.GetPosBig();
+            m_nReadLine++;
+            UpdateIndex();
         }
         return strTemp;
     }
@@ -245,72 +278,42 @@ namespace IASLib
     {
         if ( m_bFileOpen )
         {
-            if ( m_bRead )
-            {
-                return m_nReadLine;
-            }
-
-            return m_nWriteLine;
+            return ( m_bRead ) ? m_nReadLine : m_nWriteLine;
         }
-
         return -1;
     }
 
     bool CRWFile::IsWriterDone( void )
     {
-        if ( m_bFileOpen )
+        if ( m_bFileOpen && m_bRead )
         {
-            if ( m_bRead )
-            {
-                m_oIndexFile.Seek( 0, CFile::BEGIN );
-                long lTemp = atol( m_oIndexFile.GetLine() );
-                if ( lTemp < 0 )
-                {
-                    return true;
-                }
-            }
+            long nWriteLine = 0, nReadLine = 0;
+            return ReadIndex( nWriteLine, nReadLine ) && nWriteLine < 0;
         }
         return false;
     }
 
     bool CRWFile::IsEOF( void )
     {
-        if ( m_bFileOpen )
+        if ( m_bFileOpen && m_bRead )
         {
-            if ( m_bRead )
-            {
-                long lFileSize = m_oDataFile.Seek( 0, CFile::END );
-                m_oDataFile.Seek( m_nReadPos, CFile::BEGIN );
-                if ( m_nReadPos == lFileSize )
-                {
-                    return true;
-                }
-            }
+                // The size now (the writer may have added to it).
+            int64_t nFileSize = m_oDataFile.SeekBig( 0, CFile::END );
+            m_oDataFile.SeekBig( m_nReadPos, CFile::BEGIN );
+            return m_nReadPos >= nFileSize;
         }
         return false;
     }
 
     void CRWFile::UpdateIndex( void )
     {
-        CString strTemp;
-
         if ( m_bFileOpen )
         {
-            if ( m_bRead )
-            {
-                m_oIndexFile.Seek( 16, CFile::BEGIN );
-                strTemp.Format( "%15ld\n", m_nReadLine );
-                m_oIndexFile.WriteString( strTemp );
-                m_oIndexFile.Flush();
-            }
-            else
-            {
-                m_oIndexFile.Seek( 0, CFile::BEGIN );
-                strTemp.Format( "%15ld\n", m_nWriteLine );
-                m_oIndexFile.WriteString( strTemp );
-                m_oIndexFile.Flush();
-            }
+            CString strTemp;
+            strTemp.Format( "%15ld\n", ( m_bRead ) ? m_nReadLine : m_nWriteLine );
+            m_oIndexFile.SeekBig( ( m_bRead ) ? RECORD : 0, CFile::BEGIN );
+            m_oIndexFile.WriteString( strTemp );
+            m_oIndexFile.Flush();
         }
     }
 } // namespace IASLib
-

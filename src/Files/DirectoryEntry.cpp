@@ -17,10 +17,6 @@
 #include "FileException.h"
 #include "FileStat.h"
 
-#ifndef WIN32
-#include <dirent.h>
-#endif
-
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CDirectoryEntry, CObject );
@@ -28,51 +24,34 @@ namespace IASLib
     CDirectoryEntry::CDirectoryEntry( const char *strDir, const char *strFileName, bool bLightweight )
     {
         m_bIsDir = false;
-        m_strFileName = strFileName;
-        m_strEntryName = strDir;
+        m_lSize = 0;                    // (was left unset when stat failed)
+        m_strFileName = ( strFileName ) ? strFileName : "";
+        m_strEntryName = ( strDir ) ? strDir : ".";
         m_strEntryName += "/";
-        m_strEntryName += strFileName;
-
+        m_strEntryName += m_strFileName;
         m_strExtension = "";
+        m_dttLastModified.SetToCurrent();
 
         if ( ! bLightweight )
         {
             try
             {
-                CFileStat  statFile( m_strEntryName );
-                
-                m_lSize = statFile.GetSize();
-                m_dttLastModified = statFile.GetLastModified();    
-
-                if ( statFile.IsFile() )
-                {
-                    m_bIsDir = false;
-                    if ( m_strFileName.LastIndexOf( '.' ) != IASLib::NOT_FOUND )
-                    {
-                        m_strExtension = m_strFileName.Substring( m_strFileName.LastIndexOf('.') + (size_t)1 );
-                    }
-                }
-                else 
-                {
-                    if ( statFile.IsDir() )
-                    {
-                        m_bIsDir = true;
-                        m_strExtension = "";
-                    }
-                }
+                CFileStat statFile( m_strEntryName );
+                m_lSize = statFile.GetSizeBig();
+                m_dttLastModified = statFile.GetLastModified();
+                m_bIsDir = statFile.IsDir();
             }
-            catch ( CFileException &feException )
+            catch ( CFileException & )
             {
-                    // The following line is to avoid compiler complaints.
-                feException.GetID();
+                    // Gone since the listing, or not ours to look at.
             }
         }
-        else
+
+        if ( ! m_bIsDir )
         {
-            m_lSize = 0;
-            m_dttLastModified.SetToCurrent();
-            m_bIsDir = false;
-            m_strExtension = "";
+            size_t nDot = m_strFileName.LastIndexOf( '.' );
+            if ( nDot != IASLib::NOT_FOUND && nDot > 0 )
+                m_strExtension = m_strFileName.Substring( nDot + (size_t)1 );
         }
     }
 

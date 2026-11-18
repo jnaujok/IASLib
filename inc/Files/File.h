@@ -26,11 +26,17 @@ namespace IASLib
     class CFile : public CObject
     {
         public:
+                // READ: an existing file. WRITE: a new or emptied file.
+                // READ | WRITE: an existing file, both ways. CREATE (with
+                // WRITE, or READ | WRITE): a new or emptied file, both ways.
+                // APPEND: writes go to the end (with READ, reads too).
+                // BINARY: no line-ending translation (Windows).
             enum OpenFlags {
 		    READ              = 0x0001,
 		    WRITE             = 0x0002,
             APPEND            = 0x0004,
-            BINARY            = 0x0008
+            BINARY            = 0x0008,
+            CREATE            = 0x0010
 		    };
 
             enum SeekFlags {
@@ -84,10 +90,26 @@ namespace IASLib
             virtual int64_t ReadBig( void *pBuffer, size_t nLength );
             virtual int64_t WriteBig( const void *pBuffer, size_t nLength );
             virtual bool    IsOpen( void ) const { return (m_fpFile != NULL); }
+                // The next line, with its line ending ("" at the end of the
+                // file). Any length; works in binary mode too.
             virtual CString GetLine( void );
+            const CString  &GetFileName( void ) const { return m_strFileName; }
 
+                // Throw a CFileException if they fail. Rename() replaces a
+                // file already called strNewName, on every platform.
             static bool     Delete( const char *strFileName );
             static bool     Rename( const char *strOldName, const char *strNewName );
+                // Whether a file (or directory) of that name exists.
+            static bool     Exists( const char *strFileName );
+
+        protected:
+                // The fopen() mode for OpenFlags, setting the m_b* flags.
+            CString         ModeString( int nMode );
+
+        private:
+                // (A copy would share the FILE and close it twice.)
+                            CFile( const CFile & );
+            CFile          &operator =( const CFile & );
     };
 } // namespace IASLib
 
