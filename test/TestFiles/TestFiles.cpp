@@ -192,10 +192,10 @@ static void testBigArchive( void )
         CResourceFile archive( strPath, CResourceFile::READ_WRITE );
         CHECK( archive.IsOpen() );
         CHECK( archive.GetWastedBytes() > (uint64_t)FIVE_GB - 1024 );
-        CResource far( 1, 2 );
-        far.SetName( "far" );
-        far.SetData( "past five gigabytes", 19 );
-        CHECK( archive.Put( far ) );
+        CResource oFar( 1, 2 );
+        oFar.SetName( "far" );
+        oFar.SetData( "past five gigabytes", 19 );
+        CHECK( archive.Put( oFar ) );   // (not "far": Windows #defines it)
         CResourceIndexEntry entry;
         CHECK( archive.GetEntry( 1, 2, entry ) && entry.m_nOffset > (uint64_t)FIVE_GB );
     }
