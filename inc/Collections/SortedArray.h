@@ -1,26 +1,17 @@
-/**
- * Sorted Array Class
+/*
+ * CSortedArray Class
  *
- *  This class provides an extension to the array class that
- * supports an array that is always in a sorted state. This
- * allows for somewhat slower insertions, but rapid retrieval
- * of an element from the array.
- *  A sorted array requires a sorting function be provided when
- * the Sorted Array object is instantiated. Note that no attempt
- * is made to assure that the correct type is passed to this
- * sorting function. That is left up to the user. To use a type
- * safe version of this class, you should use the TSortedArray
- * template class instead of this class.
- *  Note that, although this class supports all the interfaces
- * that CArray does, all of the insertion interfaces map to Push,
- * which inserts the object in the correct location in the array.
- * This assures that no matter what insertion method is used, the
- * element is always inserted in the correct location.
+ *  An array of CObject pointers (owned, as in CArray) kept in the order
+ * of a comparison function given to the constructor (negative, zero or
+ * positive, as strcmp). Every way of adding (Push, Insert, Append,
+ * Prepend, Set) puts the object where it belongs, after any equal ones,
+ * and Find() is a binary search. Swap() and Sort() are refused, since
+ * they would break the order.
+ *
+ *  For a type safe sorted array, use TSortedArray.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 10/24/2004
- *	Log:
- *	  $LOG$
+ *	Created: 1/15/1994 (rebuilt on the template collections 11/18/2026)
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -38,23 +29,34 @@ namespace IASLib
         protected:
             int                 (*m_fnCompare)(const CObject *, const CObject *);
         public:
-                                CSortedArray( int (*fnCompare)(const CObject *, const CObject *),size_t nScale = 4 );
+                                CSortedArray( int (*fnCompare)(const CObject *, const CObject *), size_t nScale = 4 );
             virtual            ~CSortedArray( void );
 
                                 DEFINE_OBJECT( CSortedArray )
 
+                // Inserts in order, returning the index it went to.
             virtual size_t      Push( CObject *pNew );
-                                virtual size_t      Insert( size_t nCount, CObject *pNew ) { nCount=nCount; return CSortedArray::Push(pNew); }
+            virtual size_t      Insert( size_t, CObject *pNew ) { return Push( pNew ); }
             virtual size_t      Append( CObject *pNew ) { return Push( pNew ); }
             virtual size_t      Prepend( CObject *pNew ) { return Push( pNew ); }
-            virtual size_t      Find( CObject *pSearch ) const { return (GetLength()) ? FindIndex( pSearch, 0, m_nElements ) : IASLib::NOT_FOUND; }
+                // Replaces the element at nIndex (without deleting it) and
+                // moves the new one to its place; returns where it went.
+            virtual size_t      Set( size_t nIndex, CObject *pSet );
 
-			virtual bool		Swap( size_t nSwap1, size_t nSwap2 );
+                // The index of an element comparing equal to pSearch (the
+                // first such), or NOT_FOUND.
+            virtual size_t      Find( const CObject *pSearch ) const;
+                // Where pSearch would go: the first index whose element is
+                // not before it.
+            virtual size_t      LowerBound( const CObject *pSearch ) const;
+
+            virtual bool        Swap( size_t, size_t ) { return false; }
+            virtual void        Sort( int (*)(const CObject *, const CObject *, void *), void * ) {}
 
             virtual CIterator  *Enumerate( void );
 
         protected:
-            virtual size_t      FindIndex( CObject *pSearch, size_t nLow, size_t nHigh ) const;
+            size_t              UpperBound( const CObject *pSearch ) const;
     }; // End of Class CSortedArray
 } // End of Namespace IASLib
 

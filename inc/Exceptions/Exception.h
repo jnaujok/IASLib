@@ -112,7 +112,7 @@ namespace IASLib
     };
 } // namespace IASLib
 
-#define IASLIB_THROW_DEFAULT( x ) {static CException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_DEFAULT( x ) {CException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 #define IASLIB_RETHROW(x,y) {x.AddStack(__FILE__,__LINE__,y);x.Rethrow();}
 

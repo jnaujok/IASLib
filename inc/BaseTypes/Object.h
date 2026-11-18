@@ -100,7 +100,9 @@ namespace IASLib
     #ifdef IASLIB_MEMORY_DEBUGGING__
         #define IASLIB_MEMORY_DECLARE__(x) \
             static void        *operator new( size_t size ) { return IASLib::CObject::allocate( size, #x ); } \
-            static void         operator delete( void *p ) { IASLib::CObject::deallocate( p, #x ); }
+            static void         operator delete( void *p ) { IASLib::CObject::deallocate( p, #x ); } \
+            static void        *operator new( size_t, void *pPlace ) { return pPlace; } \
+            static void         operator delete( void *, void * ) {}
     #else
         #define IASLIB_MEMORY_DECLARE__(x)
     #endif

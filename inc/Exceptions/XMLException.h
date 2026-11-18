@@ -34,7 +34,7 @@ namespace IASLib
 
     };
 
-#define IASLIB_THROW_XML_EXCEPTION( x ) {static CXMLException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_XML_EXCEPTION( x ) {CXMLException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 } // namespace IASLib
 

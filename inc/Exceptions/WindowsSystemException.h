@@ -44,7 +44,7 @@ namespace IASLib
     };
 } // namespace IASLib
 
-#define IASLIB_THROW_WINDOWS_SYSTEM_ERROR(x) {static CWindowsSystemException oE(x); oE.FileLine( __FILE__, __LINE__ ); oE.Throw(); }
+#define IASLIB_THROW_WINDOWS_SYSTEM_ERROR(x) {CWindowsSystemException oE(x); oE.FileLine( __FILE__, __LINE__ ); oE.Throw(); }
 
 #endif // IASLIB_WIN32__
 #endif // IASLIB_WINDOWSSYSTEMEXCEPTION_H__

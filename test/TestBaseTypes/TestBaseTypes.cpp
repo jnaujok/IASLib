@@ -844,7 +844,7 @@ static void testRandom( void )
         s1.SeedFromSystem();
         s2.SeedFromSystem();
         CHECK( s1.rand() != s2.rand() || s1.rand() != s2.rand() );
-        CHECK( TRandom<>::max() == 0xffffffffu );
+        CHECK( ( TRandom<>::max )() == 0xffffffffu );
     }
 }
 

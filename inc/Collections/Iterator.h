@@ -92,13 +92,13 @@ namespace IASLib
                                      *
                                      * This class is protected so no one can create a copy of an Iterator.
                                      */
-                                CIterator( const CIterator &oSource ) { oSource.HasMore(); }
+                                CIterator( const CIterator &oSource ) : CObject( oSource ) {}
                                     /**
                                      * CIterator Copy Operator
                                      *
                                      * This operator is hidden to prevent copying of iterators.
                                      */
-            CIterator          &operator =( const CIterator &oSource ) { oSource.HasMore(); return *this; }
+            CIterator          &operator =( const CIterator & ) { return *this; }
     };
 } // namespace IASLib
 

@@ -109,7 +109,7 @@ set(
         ${STREAMS}
         ${THREADING}
         ${XML}
-        inc/Templates/TArray.h src/Resources/Resource.cpp)
+        src/Resources/Resource.cpp)
 
 if(USE_JSON)
     list(APPEND SOURCES ${JSON})

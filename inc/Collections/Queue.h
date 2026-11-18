@@ -1,22 +1,14 @@
-/**
- * Queue Class
+/*
+ * CQueue Class
  *
- *  This class provides a dynamically re-sizable queue for use in
- * storing CObject derived pointers. Any object that has been
- * derived from the CObject type can be stored in this queue.
- *  The queue itself will dynamically re-size itself as used. The
- * rate at which it is re-sized can be adjusted by changing the
- * "Scale" value passed to the constructor, or by using the SetScale
- * function to change it dynamically.
- *  The queue structure only allows insertion at the back of the queue
- * and removal/deletion from the front of the queue. The Push function 
- * adds an element, the Pop function removes an element. The Peek 
- * function allows the viewing of the front element without its removal.
+ *  First in, first out, of CObject pointers (owned, as in CArray), in a
+ * ring buffer, so Push() and Pop() take constant time. Pop() and Peek()
+ * give NULL when the queue is empty. Iterating runs from the front (the
+ * next to be popped). It is thread-safe: each call locks the queue. For
+ * a type safe queue, use TQueue.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 02/28/2005
- *	Log:
- *	  $LOG$
+ *	Created: 1/15/1994 (rebuilt on the template collections 11/18/2026)
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -25,35 +17,45 @@
 #ifndef IASLIB_QUEUE_H__
 #define IASLIB_QUEUE_H__
 
-#include "Array.h"
+#include "Collection.h"
+#include "../Templates/TQueue.h"
+#ifdef IASLIB_MULTI_THREADED__
+#include "../Threading/Mutex.h"
+#endif
 
 namespace IASLib
 {
     class CQueue : public CCollection
     {
         protected:
-            CArray              m_aElements;
+            TQueue<CObject *>   m_qElements;
+#ifdef IASLIB_MULTI_THREADED__
+            mutable CMutex      m_mutex;
+#endif
         public:
                                 CQueue( size_t nScale = 4 );
             virtual            ~CQueue( void );
 
                                 DEFINE_OBJECT( CQueue )
 
+            virtual size_t      GetLength( void ) const;
+
+                // Adds at the back, returning the new length.
             virtual size_t      Push( CObject *pNew );
             virtual CObject    *Pop( void );
-            virtual CObject    *Peek( void );
-
-            virtual size_t      Length( void ) const { return m_aElements.Length(); }
-            virtual size_t      GetLength( void ) const { return m_aElements.Length(); }
-            virtual size_t      GetCount( void ) const { return m_aElements.Length(); }
-            virtual size_t      Count( void ) const { return m_aElements.Length(); }
+            virtual CObject    *Peek( void ) const;
+                // The object nPosition from the front, or NULL.
+            virtual CObject    *Get( size_t nPosition ) const;
 
             virtual void        DeleteAll( void );
             virtual void        EmptyAll( void );
-
             virtual void        SetScale( size_t nScale );
 
             virtual CIterator  *Enumerate( void );
+
+        private:
+                                CQueue( const CQueue & );
+            CQueue             &operator =( const CQueue & );
     }; // End of class CQueue
 } // End of Namespace IASLib
 

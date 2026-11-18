@@ -17,18 +17,18 @@
 #define IASLIB_CONNECTIONARRAY_H__
 
 #include "Connection.h"
+#include "../Templates/TArray.h"
 
 #ifdef IASLIB_DATABASE__
 
 namespace IASLib
 {
+        // The connections a database holds (it owns them: DeleteAll()
+        // deletes them; Delete() only takes one out of the array).
     class CConnectionArray : public CObject
     {
         protected:
-            CConnection       **m_apElements;
-            int                 m_nElements;
-            int                 m_nSize;
-            int                 m_nScale;
+            TArray<CConnection *> m_aElements;
         public:
                                 CConnectionArray( int nScale = 4 );
             virtual            ~CConnectionArray( void );
@@ -36,16 +36,18 @@ namespace IASLib
                                 DEFINE_OBJECT( CConnectionArray )
 
             virtual int         Push( CConnection *pNew );
-            virtual CConnection *Get( int nCount );
-            virtual CConnection *operator []( int nCount );
+            virtual CConnection *Get( int nCount ) const;
+            virtual CConnection *operator []( int nCount ) const { return Get( nCount ); }
             virtual int         Insert( int nCount, CConnection *pNew );
+                // Takes the connection out of the array, without deleting it.
             virtual bool        Delete( int nCount );
-            virtual int         Length( void ) { return m_nElements; }
+            virtual int         Length( void ) const { return (int)m_aElements.Length(); }
             virtual void        DeleteAll( void );
+
         private:
-            void                Resize( bool bIncrease = true );
+                                CConnectionArray( const CConnectionArray & );
+            CConnectionArray   &operator =( const CConnectionArray & );
     };
 } // namespace IASLib
 #endif // IASLIB_DATABASE__
 #endif // IASLIB_CONNECTIONARRAY_H__
-

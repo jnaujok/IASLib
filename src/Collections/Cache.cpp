@@ -1,16 +1,9 @@
-/*
+/**
  * Cache Class
  *
- *  This class provides an LRU cache for storing objects derived 
- * from CObject. As new items are cached, those that were used 
- * last are dropped from the cache. 
+ *  An LRU cache of CCacheItems.
  *
- *	Author: Jeffrey R. Naujok
- *	Created: 1/15/2004
- *	Log:
- *	  $LOG$
- *
- * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
@@ -18,313 +11,195 @@
 
 namespace IASLib
 {
+#ifdef IASLIB_MULTI_THREADED__
+    #define IASLIB_CACHE_LOCK__     CMutexLock oLock__( cacheMutex )
+#else
+    #define IASLIB_CACHE_LOCK__     do { } while ( 0 )
+#endif
+
+    namespace
+    {
+        class CCacheIterator : public CIterator
+        {
+            protected:
+                const CCache::Table        *m_pTable;
+                CCache::Table::const_iterator m_itCurrent;
+            public:
+                                    CCacheIterator( const CCache::Table *pTable ) : m_pTable( pTable ), m_itCurrent( pTable->begin() ) {}
+                                    DECLARE_OBJECT( CCacheIterator, CIterator )
+                virtual            ~CCacheIterator( void ) {}
+                virtual CObject    *Next( void )
+                {
+                    if ( m_itCurrent == m_pTable->end() )
+                        return NULL;
+                    CObject *pValue = m_itCurrent->Value;
+                    ++m_itCurrent;
+                    return pValue;
+                }
+                virtual CObject    *Prev( void ) { return NULL; }
+                virtual void        Reset( void ) { m_itCurrent = m_pTable->begin(); }
+                virtual bool        HasMore( void ) const { return m_itCurrent != m_pTable->end(); }
+        };
+    }
+
     IMPLEMENT_OBJECT( CCache, CCollection );
 
-	CCache::CCache( size_t nMaxEntries, bool bUseExpiration )
-		: m_hashEntries( CHash::LARGE )
-	{
-        m_pListFirst = NULL;
-        m_pListLast = NULL;
-		m_nQueueMax = nMaxEntries;
+    CCache::CCache( size_t nMaxEntries, bool bUseExpiration )
+    {
+        m_nQueueMax = ( nMaxEntries > 0 ) ? nMaxEntries : 1;
         m_bUseExpiration = bUseExpiration;
-	}
+    }
 
-  	CCache::~CCache( void )
-	{
+    CCache::~CCache( void )
+    {
         DeleteAll();
-	}
+    }
+
+    size_t CCache::GetLength( void ) const
+    {
+        IASLIB_CACHE_LOCK__;
+        return m_hashEntries.Length();
+    }
 
     bool CCache::AddItem( CCacheItem *pItem )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-            // Make sure there is room in the Cache
-        while ( ( m_pListLast ) && ( m_hashEntries.GetLength() >= m_nQueueMax ) )
+        if ( pItem == NULL )
+            return false;
+
+        CString strKey = pItem->GetKey();
+        TArray<CCacheItem *> aDropped;
         {
-            CCacheItem *pOldest = m_pListLast;
-
-            m_pListLast = pOldest->m_pPrevItem;
-            m_pListLast->m_pNextItem = NULL;
-
-            pOldest->m_pPrevItem = NULL;
-
-            m_hashEntries.Delete( pOldest->GetKey() );
+            IASLIB_CACHE_LOCK__;
+            CCacheItem *pOld = NULL;
+            if ( m_hashEntries.Remove( strKey, pOld ) && pOld != pItem )
+                aDropped.Push( pOld );
+            while ( m_hashEntries.Length() >= m_nQueueMax )
+            {
+                Table::Entry *pOldest = m_hashEntries.FirstEntry();
+                CString strOldest = pOldest->Key;
+                CCacheItem *pEvicted = NULL;
+                m_hashEntries.Remove( strOldest, pEvicted );
+                aDropped.Push( pEvicted );
+            }
+            m_hashEntries.Put( strKey, pItem );
         }
-
-        m_hashEntries.Push( pItem->GetKey(), pItem );
-        pItem->m_pNextItem = m_pListFirst;
-        m_pListFirst = pItem;
-        pItem->m_pPrevItem = NULL;
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
-
+        aDropped.DeleteAll();
         return true;
     }
 
-    bool CCache::RemoveItem( CCacheItem *pKey )
+    bool CCache::RemoveItem( const CCacheItem *pKey )
     {
-        bool        bRetVal = false;
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        CCacheItem *pRemove = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
-
-        if ( pRemove )
+        if ( pKey == NULL )
+            return false;
+        CCacheItem *pRemoved = NULL;
         {
-            RemoveFromList( pRemove );
-            m_hashEntries.Delete( pKey->GetKey() );
-
-            bRetVal = true;
+            IASLIB_CACHE_LOCK__;
+            if ( ! m_hashEntries.Remove( pKey->GetKey(), pRemoved ) )
+                return false;
         }
-
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
-        return bRetVal;
+        delete pRemoved;
+        return true;
     }
 
-    CCacheItem *CCache::Get( CCacheItem *pKey )
+        // Finds an item (locked by the caller), dropping it if it expired.
+    CCacheItem *CCache::Lookup( const CString &strKey )
     {
-        CCacheItem *pRetVal = NULL;        
-
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        pRetVal = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
-
-        if ( pRetVal )
+        CCacheItem *pItem = m_hashEntries.Get( strKey, NULL );
+        if ( pItem != NULL && m_bUseExpiration && pItem->IsExpired() )
         {
-            if ( m_bUseExpiration )
-            {
-                if ( pRetVal->IsExpired() )
-                {
-                    RemoveFromList( pRetVal );
-                    m_hashEntries.Delete( pKey->GetKey() );
-                    pRetVal = NULL;
-                }
-            }
-
-            // It wasn't expired            
-            if ( pRetVal )
-            {
-                pRetVal->Hit( this );
-            }
+            m_hashEntries.Remove( strKey );
+            delete pItem;
+            pItem = NULL;
         }
-
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
-        return pRetVal;
+        return pItem;
     }
 
-    bool CCache::Touch( CCacheItem *pKey )
+    CCacheItem *CCache::Get( const CCacheItem *pKey )
     {
-        bool        bRetVal = false;
-        CCacheItem *pItem = NULL;        
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        pItem = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
+        return ( pKey != NULL ) ? Get( pKey->GetKey() ) : NULL;
+    }
 
-        if ( pItem )
-        {
+    CCacheItem *CCache::Get( const char *strKey )
+    {
+        IASLIB_CACHE_LOCK__;
+        CCacheItem *pItem = Lookup( strKey );
+        if ( pItem != NULL )
             pItem->Hit( this );
-
-            bRetVal = true;
-        }
-
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
-        return bRetVal;
+        return pItem;
     }
 
-    bool CCache::Discard( CCacheItem *pKey )
+    bool CCache::Touch( const CCacheItem *pKey )
     {
-        bool        bRetVal = false;
-        CCacheItem *pItem = NULL;        
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        pItem = (CCacheItem *)m_hashEntries.Get( pKey->GetKey() );
-
-        if ( pItem )
-        {
-            MoveToTail( pItem );
-            bRetVal = true;
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
-        return bRetVal;
+        if ( pKey == NULL )
+            return false;
+        IASLIB_CACHE_LOCK__;
+        CCacheItem *pItem = m_hashEntries.Get( pKey->GetKey(), NULL );
+        if ( pItem == NULL )
+            return false;
+        pItem->Hit( this );
+        return true;
     }
 
-    void CCache::ClearExpired( void )
+    bool CCache::Discard( const CCacheItem *pKey )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        CCacheItem *pItem = m_pListFirst;
-        while ( pItem )
+        if ( pKey == NULL )
+            return false;
+        IASLIB_CACHE_LOCK__;
+        return m_hashEntries.MoveToFront( pKey->GetKey() );
+    }
+
+        // Called by CCacheItem::Hit(), with the cache locked.
+    void CCache::MoveToHead( CCacheItem *pItem )
+    {
+        m_hashEntries.MoveToEnd( pItem->GetKey() );
+    }
+
+    size_t CCache::ClearExpired( void )
+    {
+        CDate dttNow;
+        dttNow.SetToCurrent();
+        return ClearExpired( dttNow );
+    }
+
+    size_t CCache::ClearExpired( const CDate &dttCompare )
+    {
+        TArray<CCacheItem *> aExpired;
         {
-            if ( pItem->IsExpired() )
+            IASLIB_CACHE_LOCK__;
+            TArray<CString> aKeys;
+            for ( Table::const_iterator it = m_hashEntries.begin(); it != m_hashEntries.end(); ++it )
+                if ( it->Value->IsExpired( dttCompare ) )
+                    aKeys.Push( it->Key );
+            for ( size_t n = 0; n < aKeys.Length(); n++ )
             {
-                RemoveFromList(pItem);
-                m_hashEntries.Delete( pItem->GetKey() );
+                CCacheItem *pItem = NULL;
+                if ( m_hashEntries.Remove( aKeys[n], pItem ) )
+                    aExpired.Push( pItem );
             }
-            pItem = pItem->m_pNextItem;
         }
-
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
-    }
-
-    void CCache::ClearExpired( CDate &dttCompare )
-    {
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        CCacheItem *pItem = m_pListFirst;
-        while ( pItem )
-        {
-            if ( pItem->IsExpired( dttCompare ) )
-            {
-                RemoveFromList(pItem);
-                m_hashEntries.Delete( pItem->GetKey() );
-            }
-            pItem = pItem->m_pNextItem;
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
+        size_t nCount = aExpired.Length();
+        aExpired.DeleteAll();
+        return nCount;
     }
 
     void CCache::DeleteAll( void )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        DetatchList( );
-		m_hashEntries.DeleteAll();
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
+        Table oTaken;
+        {
+            IASLIB_CACHE_LOCK__;
+            oTaken.Swap( m_hashEntries );
+        }
+        oTaken.DeleteAll();
     }
 
     void CCache::EmptyAll( void )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Lock();
-#endif
-        DetatchList( );
-		m_hashEntries.EmptyAll();
-#ifdef IASLIB_MULTI_THREADED__
-        cacheMutex.Unlock();
-#endif
+        IASLIB_CACHE_LOCK__;
+        m_hashEntries.Clear();
     }
 
     CIterator *CCache::Enumerate( void )
     {
-        return m_hashEntries.Enumerate();
-    }
-
-    void CCache::MoveToHead( CCacheItem *pItem )
-    {
-        // Skip if already at the head of the list.
-        if ( pItem->m_pPrevItem )
-        {
-            // Move to head of LRU list
-            CCacheItem *pTemp = m_pListFirst;
-            m_pListFirst = pItem;
-            if ( pItem->m_pNextItem )
-            {
-                pItem->m_pNextItem->m_pPrevItem = pItem->m_pPrevItem;
-            }
-            else
-            {
-                // At the tail of the list, so set the tail to the prior item
-                m_pListLast = pItem->m_pPrevItem;
-            }
-            
-            pItem->m_pPrevItem->m_pNextItem = pItem->m_pNextItem;
-            pItem->m_pPrevItem = NULL;
-            pItem->m_pNextItem = pTemp;
-        }
-    }
-
-    void CCache::MoveToTail( CCacheItem *pItem )
-    {
-        if ( pItem->m_pNextItem )
-        {
-            CCacheItem *pTemp = m_pListLast;
-            m_pListLast = pItem;
-
-            pItem->m_pNextItem->m_pPrevItem = pItem->m_pPrevItem;
-
-            if ( pItem->m_pPrevItem )
-            {
-                pItem->m_pPrevItem->m_pNextItem = pItem->m_pNextItem;
-            }
-            else
-            {
-                m_pListFirst = pItem->m_pNextItem;
-            }
-
-            if ( pTemp )
-            {
-                pTemp->m_pNextItem = pItem;
-            }
-            pItem->m_pPrevItem = pTemp;
-            pItem->m_pNextItem = NULL;
-        }
-    }
-
-    void CCache::RemoveFromList( CCacheItem *pRemove )
-    {
-        // Remove the item from the LRU list.
-        if ( pRemove->m_pPrevItem )
-        {
-            pRemove->m_pPrevItem->m_pNextItem = pRemove->m_pNextItem;
-        }
-        else
-        {
-            m_pListFirst = pRemove->m_pNextItem;
-        }
-
-        if ( pRemove->m_pNextItem )
-        {
-            pRemove->m_pNextItem->m_pPrevItem = pRemove->m_pPrevItem;
-        }
-        else
-        {
-            m_pListLast = pRemove->m_pPrevItem;
-            if ( pRemove->m_pPrevItem )
-            {
-                pRemove->m_pPrevItem->m_pNextItem = NULL;
-            }
-        }
-    }
-
-    void CCache::DetatchList( void )
-    {
-        CCacheItem *pItem;
-
-        pItem = m_pListFirst;
-
-        while ( pItem )
-        {
-            m_pListFirst = pItem->m_pNextItem;
-            pItem->m_pNextItem = NULL;
-            pItem->m_pPrevItem = NULL;
-            
-            pItem = m_pListFirst;
-        }
-
-        m_pListFirst = NULL;
-        m_pListLast = NULL;
+        return new CCacheIterator( &m_hashEntries );
     }
 } // namespace IASLib
-

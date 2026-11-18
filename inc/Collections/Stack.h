@@ -1,22 +1,12 @@
-/**
- * Stack Class
+/*
+ * CStack Class
  *
- *  This class provides a dynamically re-sizable stack for use in
- * storing CObject derived pointers. Any object that has been
- * derived from the CObject type can be stored in this stack.
- *  The stack itself will dynamically re-size itself as used. The
- * rate at which it is re-sized can be adjusted by changing the
- * "Scale" value passed to the constructor, or by using the SetScale
- * function to change it dynamically.
- *  The stack structure only allows insertion and deletion from the
- * top of the stack. The Push function adds an element, the Pop function
- * removes an element. The Peek function allows the viewing of the
- * top element without its removal.
+ *  Last in, first out, of CObject pointers (owned, as in CArray). Pop()
+ * and Peek() give NULL when the stack is empty. Iterating runs from the
+ * bottom to the top. For a type safe stack, use TStack.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 10/24/2004
- *	Log:
- *	  $LOG$
+ *	Created: 1/15/1994 (rebuilt on the template collections 11/18/2026)
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -25,9 +15,7 @@
 #ifndef IASLIB_STACK_H__
 #define IASLIB_STACK_H__
 
-#include "../BaseTypes/Object.h"
 #include "Array.h"
-#include "Collection.h"
 
 namespace IASLib
 {
@@ -41,18 +29,15 @@ namespace IASLib
 
                                 DEFINE_OBJECT( CStack )
 
+            virtual size_t      GetLength( void ) const { return m_aElements.GetLength(); }
+
+                // Returns the object's index (its depth from the bottom).
             virtual size_t      Push( CObject *pNew );
             virtual CObject    *Pop( void );
-            virtual CObject    *Peek( void );
-
-            virtual size_t      Length( void ) const { return m_aElements.Length(); }
-            virtual size_t      GetLength( void ) const { return m_aElements.Length(); }
-            virtual size_t      GetCount( void ) const { return m_aElements.Length(); }
-            virtual size_t      Count( void ) const { return m_aElements.Length(); }
+            virtual CObject    *Peek( void ) const;
 
             virtual void        DeleteAll( void );
             virtual void        EmptyAll( void );
-
             virtual void        SetScale( int nScale );
 
             virtual CIterator  *Enumerate( void );

@@ -49,6 +49,7 @@ namespace IASLib
             virtual void    addValue( const char *name, float value );
             virtual void    addValue( const char *name, double value );
             virtual void    addValue( const char *name, bool value );
+                // Refers to value (not a copy): it must outlive the context.
             virtual void    addValue( const char *name, CArray &value );
             virtual void    addObject( const char *name, CObject *value );
 

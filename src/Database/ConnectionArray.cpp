@@ -13,7 +13,6 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-#include <stdlib.h>
 #include "ConnectionArray.h"
 
 #ifdef IASLIB_DATABASE__
@@ -23,14 +22,8 @@ namespace IASLib
     IMPLEMENT_OBJECT( CConnectionArray, CObject );
 
     CConnectionArray::CConnectionArray( int nScale )
+        : m_aElements( ( nScale > 0 ) ? (size_t)nScale : 4 )
     {
-        if ( nScale > 0 )
-            m_nScale = nScale;
-        else
-            m_nScale = 4;
-        m_nSize = 0;
-        m_nElements = 0;
-        m_apElements = NULL;
     }
 
     CConnectionArray::~CConnectionArray( void )
@@ -38,114 +31,33 @@ namespace IASLib
         DeleteAll();
     }
 
-    void CConnectionArray::Resize( bool bIncrease )
-    {
-        if ( bIncrease )
-        {
-            if ( ( m_nSize % m_nScale ) == 0 )
-            {
-                CConnection **aTemp = new CConnection *[ m_nSize + m_nScale ];
-
-                for ( int nCount = 0; nCount < m_nSize ; nCount++ )
-                {
-                    aTemp[ nCount ] = m_apElements[ nCount ];
-                }
-
-                delete m_apElements;
-                m_apElements = aTemp;
-                m_nSize += m_nScale;
-            }
-        }
-        else
-        {
-            if ( ( m_nSize - m_nElements ) > m_nScale )
-            {
-                CConnection **aTemp = new CConnection *[ m_nSize - m_nScale ];
-
-                for ( int nCount = 0; nCount < m_nElements ; nCount++ )
-                {
-                    aTemp[ nCount ] = m_apElements[ nCount ];
-                }
-
-                delete m_apElements;
-                m_apElements = aTemp;
-                m_nSize -= m_nScale;
-            }
-        }
-    }
-
     int CConnectionArray::Push( CConnection *pNew )
     {
-        Resize( true );
-        m_apElements[ m_nElements ] = pNew;
-        m_nElements++;
-
-        return ( m_nElements - 1 );
+        return (int)m_aElements.Push( pNew );
     }
 
-    CConnection *CConnectionArray::Get( int nCount )
+    CConnection *CConnectionArray::Get( int nCount ) const
     {
-        if ( ( nCount >= 0 ) && ( nCount < m_nElements ) )
-        {
-            return m_apElements[ nCount ];
-        }
-        return NULL;
-    }
-
-    CConnection *CConnectionArray::operator []( int nCount )
-    {
-        return Get( nCount );
+        return ( nCount >= 0 ) ? m_aElements.Get( (size_t)nCount, NULL ) : NULL;
     }
 
     int CConnectionArray::Insert( int nCount, CConnection *pNew )
     {
-        if ( nCount >= m_nElements )
-        {
-            return Push( pNew );
-        }
-
-        Resize( true );
-
-        if ( nCount < 0 )
-            nCount = 0;
-
-        for ( int nIndex = m_nElements; nIndex > nCount ; nIndex-- )
-        {
-            m_apElements[ nIndex ] = m_apElements[ nIndex - 1 ];
-        }
-        m_apElements[ nCount ] = pNew;
-        m_nElements++;
-
-        return nCount;
+        return (int)m_aElements.Insert( ( nCount > 0 ) ? (size_t)nCount : 0, pNew );
     }
 
     bool CConnectionArray::Delete( int nCount )
     {
-        if ( ( nCount >= m_nElements ) || ( nCount < 0 ) )
+        if ( nCount < 0 || (size_t)nCount >= m_aElements.Length() )
             return false;
-
-        for ( int nIndex = nCount; nIndex < (m_nElements - 1) ; nIndex++ )
-        {
-            m_apElements[ nIndex ] = m_apElements[ nIndex + 1 ];
-        }
-        m_nElements--;
-        Resize( false );
+        m_aElements.Remove( (size_t)nCount );
         return true;
     }
 
     void CConnectionArray::DeleteAll( void )
     {
-        if ( m_nSize )
-        {
-            for ( int nCount = 0; nCount < m_nElements ; nCount++ )
-            {
-                delete m_apElements[ nCount ];
-            }
-            delete m_apElements;
-            m_nElements = 0;
-            m_nSize = 0;
-            m_apElements = NULL;
-        }
+        m_aElements.DeleteAll();
+        m_aElements.Compact();
     }
 } // namespace IASLib
 

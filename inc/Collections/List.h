@@ -1,27 +1,12 @@
-/**
- * List Class
+/*
+ * CList Class
  *
- *  This class provides a dynamic linked list for storing pointers
- * to objects derived from CObject. The linked list is singly
- * linked and features O(1) insert and delete times. However, all
- * finds, insert at, and other such operations are O(n).
- *  Linked lists, more than any other data type, can grow to fill
- * all available memory space and are more efficient at using memory
- * since their elements do not need to be contiguous in memeory,
- * like an array.
- *  This class represents a singly linked list, to use a doubly linked
- * list, use the CDList class.
- *  To store objects other than CObject pointers, use the template
- * version of this class TList.
- *  Note: Unlike a typical singly linked list, we do store a "Last"
- * pointer to the last item in the array to make addition at either end
- * of the array an O(1) operation. That's really the only reason it's
- * there, honestly.
+ *  A doubly linked list of CObject pointers (owned, as in CArray). The
+ * Get and Remove methods give NULL when there is no such element. For a
+ * type safe list, or one of values, use TList.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 10/26/2004
- *	Log:
- *	  $LOG$
+ *	Created: 1/15/1994 (rebuilt on the template collections 11/18/2026)
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -30,45 +15,51 @@
 #ifndef IASLIB_LIST_H__
 #define IASLIB_LIST_H__
 
-#include "../BaseTypes/Object.h"
 #include "Collection.h"
+#include "../Templates/TList.h"
 
 namespace IASLib
 {
-        // Forward reference to internal object
-    class CListNode;
-
     class CList : public CCollection
     {
         protected:
-            CListNode          *m_pFirst;
-            CListNode          *m_pLast;
+            TList<CObject *>    m_lstElements;
         public:
                                 CList( void );
             virtual            ~CList( void );
 
                                 DEFINE_OBJECT( CList )
 
+            virtual size_t      GetLength( void ) const { return m_lstElements.Length(); }
+
+                // Each returns the index the object went to (NOT_FOUND, for
+                // AddBefore/AddAfter, if pValue is not in the list).
             virtual size_t      AddFirst( CObject *pNew );
             virtual CObject    *RemoveFirst( void );
             virtual size_t      AddLast( CObject *pNew );
             virtual CObject    *RemoveLast( void );
-
             virtual size_t      AddAt( size_t nIndex, CObject *pNew );
             virtual size_t      AddBefore( CObject *pValue, CObject *pNew );
             virtual size_t      AddAfter( CObject *pValue, CObject *pNew );
+                // Takes the element at nIndex out (the caller owns it).
+            virtual CObject    *RemoveAt( size_t nIndex );
 
-            virtual CObject    *GetAt( size_t nIndex );
-            virtual CObject    *GetFirst( void );
-            virtual CObject    *GetLast( void );
-
-            virtual int         Find( CObject *pValue );
+            virtual CObject    *GetAt( size_t nIndex ) const;
+            virtual CObject    *GetFirst( void ) const;
+            virtual CObject    *GetLast( void ) const;
+                // The index of pValue (the same pointer), or -1.
+            virtual int         Find( CObject *pValue ) const;
 
             virtual void        DeleteAll( void );
             virtual void        EmptyAll( void );
 
             virtual CIterator  *Enumerate( void );
 
+            const TList<CObject *> &GetList( void ) const { return m_lstElements; }
+
+        private:
+                                CList( const CList & );
+            CList              &operator =( const CList & );
     }; // End of class CList
 } // End of Namespace IASLib
 

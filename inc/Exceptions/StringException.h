@@ -37,8 +37,8 @@ namespace IASLib
 
     };
 
-#define IASLIB_THROW_STRING_EXCEPTION(x) {static CStringException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
-#define IASLIB_THROW_STRMSG_EXCEPTION(x,y) {static CStringException oE(x,y);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_STRING_EXCEPTION(x) {CStringException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_STRMSG_EXCEPTION(x,y) {CStringException oE(x,y);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 } // namespace IASLib
 

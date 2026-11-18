@@ -1,26 +1,7 @@
 /*
- * Sorted Array Class
+ * CSortedArray Class
  *
- *  This class provides an extension to the array class that
- * supports an array that is always in a sorted state. This
- * allows for somewhat slower insertions, but rapid retrieval
- * of an element from the array.
- *  A sorted array requires a sorting function be provided when
- * the Sorted Array object is instantiated. Note that no attempt
- * is made to assure that the correct type is passed to this
- * sorting function. That is left up to the user. To use a type
- * safe version of this class, you should use the TSortedArray
- * template class instead of this class.
- *  Note that, although this class supports all the interfaces
- * that CArray does, all of the insertion interfaces map to Push,
- * which inserts the object in the correct location in the array.
- * This assures that no matter what insertion method is used, the
- * element is always inserted in the correct location.
- *
- *	Author: Jeffrey R. Naujok
- *	Created: 10/24/2004
- *	Log:
- *	  $LOG$
+ *  An array kept in order.
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -30,82 +11,80 @@
 
 namespace IASLib
 {
-	IMPLEMENT_OBJECT( CSortedArray, CArray );
+    IMPLEMENT_OBJECT( CSortedArray, CArray );
 
-	CSortedArray::CSortedArray( int (*fnCompare)(const CObject *, const CObject *), size_t nScale )
-		: CArray( nScale )
-	{
-		m_fnCompare = fnCompare;
-	}
+#ifdef IASLIB_MULTI_THREADED__
+    #define IASLIB_ARRAY_LOCK__     CMutexLock oLock__( m_mutex )
+#else
+    #define IASLIB_ARRAY_LOCK__     do { } while ( 0 )
+#endif
 
-	CSortedArray::~CSortedArray( void )
-	{
-		DeleteAll();
-	}
+    CSortedArray::CSortedArray( int (*fnCompare)(const CObject *, const CObject *), size_t nScale )
+        : CArray( nScale )
+    {
+        m_fnCompare = fnCompare;
+    }
 
+    CSortedArray::~CSortedArray( void )
+    {
+    }
 
-	size_t CSortedArray::Push( CObject *pNew )
-	{
-		size_t nInsertPoint = Find( pNew );
+    size_t CSortedArray::LowerBound( const CObject *pSearch ) const
+    {
+        IASLIB_ARRAY_LOCK__;
+        size_t nLow = 0, nHigh = m_aElements.Length();
+        while ( nLow < nHigh )
+        {
+            size_t nMiddle = nLow + ( nHigh - nLow ) / 2;
+            if ( m_fnCompare( m_aElements[ nMiddle ], pSearch ) < 0 )
+                nLow = nMiddle + 1;
+            else
+                nHigh = nMiddle;
+        }
+        return nLow;
+    }
 
-      	if ( nInsertPoint >= ( GetCount() + 1 ) )
-		    CArray::Push( pNew );
-			return GetCount();
+    size_t CSortedArray::UpperBound( const CObject *pSearch ) const
+    {
+        size_t nLow = 0, nHigh = m_aElements.Length();
+        while ( nLow < nHigh )
+        {
+            size_t nMiddle = nLow + ( nHigh - nLow ) / 2;
+            if ( m_fnCompare( m_aElements[ nMiddle ], pSearch ) <= 0 )
+                nLow = nMiddle + 1;
+            else
+                nHigh = nMiddle;
+        }
+        return nLow;
+    }
 
-		return CArray::Insert( nInsertPoint, pNew );
-	}
+    size_t CSortedArray::Push( CObject *pNew )
+    {
+        IASLIB_ARRAY_LOCK__;
+        return m_aElements.Insert( UpperBound( pNew ), pNew );
+    }
 
-	size_t CSortedArray::FindIndex( CObject *pSearch, size_t nLow, size_t nHigh ) const
-	{
-		if ( nLow == nHigh )
-		{
-			return (size_t)(( -(int)nLow ) - 1);
-		}
+    size_t CSortedArray::Set( size_t nIndex, CObject *pSet )
+    {
+        {
+            IASLIB_ARRAY_LOCK__;
+            if ( nIndex < m_aElements.Length() )
+                m_aElements.Remove( nIndex );
+        }
+        return Push( pSet );
+    }
 
-		size_t nMiddle = (nLow + nHigh) / 2;
-		int    nResult;
-
-		CObject *pCompare = m_apElements[ nMiddle ];
-
-		nResult = (*m_fnCompare)( pCompare, pSearch );
-
-		if ( nResult < 0 )
-		{
-         if ( ( nMiddle == nLow ) && ( nMiddle != nHigh ) )
-         {
-            nMiddle++;
-         }
-			return FindIndex( pSearch, nMiddle, nHigh );
-		}
-
-		if ( nResult > 0 )
-		{
-         if ( ( nMiddle == nHigh ) && ( nMiddle != nLow ) )
-         {
-            nMiddle--;
-         }
-			return FindIndex( pSearch, nLow, nMiddle );
-		}
-
-		return nMiddle;
-	}
+    size_t CSortedArray::Find( const CObject *pSearch ) const
+    {
+        size_t nIndex = LowerBound( pSearch );
+        IASLIB_ARRAY_LOCK__;
+        if ( nIndex < m_aElements.Length() && m_fnCompare( m_aElements[ nIndex ], pSearch ) == 0 )
+            return nIndex;
+        return NOT_FOUND;
+    }
 
     CIterator *CSortedArray::Enumerate( void )
     {
         return new CArrayIterator( this );
     }
-
-	bool CSortedArray::Swap( size_t swap1, size_t swap2 )
-	{
-		if ( ( swap1 != swap2 ) && ( swap1 < this->m_nElements ) && ( swap2 < m_nElements ) )
-		{
-			CObject *temp = m_apElements[swap1];
-			m_apElements[swap1] = m_apElements[swap2];
-			m_apElements[swap2] = temp;
-			return true;
-		}
-		return false;
-	}
-
 } // End of Namespace IASLib
-

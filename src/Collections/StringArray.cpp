@@ -1,316 +1,154 @@
-/***********************************************************************
-**  CStringArray
-**
-**  Description:
-**      This class is an array class for storing pointers derived from
-** CObject. It can dynamically re-allocate to store data.
-**
-**  $AUTHOR$
-**  $LOG$
-**
-***********************************************************************/
+/*
+ * CStringArray Class
+ *
+ *  An array of strings.
+ *
+ * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
+ */
 
-#include <string>
 #include "StringArray.h"
+
+#include <algorithm>
 
 namespace IASLib
 {
-    class CStringArrayIterator : public CIterator
+    namespace
     {
-        protected:
-            CStringArray       *m_pArray;
-            size_t              m_nCurrentPos;
-        public:
-                                CStringArrayIterator( CStringArray *pArray ) { m_pArray = pArray; m_nCurrentPos = 0; }
-                                DECLARE_OBJECT( CStringArrayIterator, CIterator )
-            virtual            ~CStringArrayIterator( void ) {}
-
-            virtual CString     NextString( void );
-            virtual CObject    *Next( void ) { return NULL; }
-            virtual CObject    *Prev( void ) { return NULL; }
-
-            virtual void        Reset( void ) { m_nCurrentPos = 0; }
-            virtual bool        HasMore( void ) const;
-    };
-
-    CString CStringArrayIterator::NextString( void )
-    {
-        CString pRetVal = NULL;
-
-        if ( m_nCurrentPos < m_pArray->GetLength() )
+        class CStringArrayIterator : public CIterator
         {
-            pRetVal = (*m_pArray)[ m_nCurrentPos ];
-            m_nCurrentPos++;
-        }
-
-        return pRetVal;
+            protected:
+                const CStringArray *m_pArray;
+                size_t              m_nCurrentPos;
+            public:
+                                    CStringArrayIterator( const CStringArray *pArray ) { m_pArray = pArray; m_nCurrentPos = 0; }
+                                    DECLARE_OBJECT( CStringArrayIterator, CIterator )
+                virtual            ~CStringArrayIterator( void ) {}
+                virtual CString     NextString( void ) { return HasMore() ? m_pArray->Get( m_nCurrentPos++ ) : CString(); }
+                virtual CObject    *Next( void ) { if ( HasMore() ) m_nCurrentPos++; return NULL; }
+                virtual CObject    *Prev( void ) { if ( m_nCurrentPos > 0 ) m_nCurrentPos--; return NULL; }
+                virtual void        Reset( void ) { m_nCurrentPos = 0; }
+                virtual bool        HasMore( void ) const { return m_nCurrentPos < m_pArray->GetLength(); }
+        };
     }
 
-    bool CStringArrayIterator::HasMore( void ) const
-    {
-        bool bRetVal = false;
-
-        if ( m_nCurrentPos < m_pArray->GetLength() )
-        {
-            bRetVal = true;
-        }
-
-        return bRetVal;
-    }
-
-    IMPLEMENT_OBJECT( CStringArray, CObject );
+    IMPLEMENT_OBJECT( CStringArray, CCollection );
 
     CStringArray::CStringArray( size_t nScale )
+        : m_aElements( ( nScale > 0 ) ? nScale : 4 )
     {
-        if ( nScale > 0 )
-            m_nScale = nScale;
-        else
-            m_nScale = 4;
-        m_nSize = 0;
-        m_nElements = 0;
-        m_apElements = NULL;
     }
 
     CStringArray::CStringArray( const CStringArray &oSource )
+        : CCollection( oSource ), m_aElements( oSource.m_aElements )
     {
-        m_nScale = oSource.m_nScale;
-        m_nSize = oSource.m_nSize;
-        m_nElements = oSource.m_nElements;
-        m_apElements = ( m_nSize > 0 ) ? new CString *[ m_nSize ] : NULL;
-        for ( size_t nX = 0; nX < m_nElements; nX++ )
-        {
-            m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
-        }
     }
 
     CStringArray &CStringArray::operator =( const CStringArray &oSource )
     {
         if ( &oSource != this )
-        {
-            this->DeleteAll();
-            m_nScale = oSource.m_nScale;
-            m_nSize = oSource.m_nSize;
-            m_nElements = oSource.m_nElements;
-            m_apElements = ( m_nSize > 0 ) ? new CString *[ m_nSize ] : NULL;
-            for ( size_t nX = 0; nX < m_nElements; nX++ )
-            {
-                m_apElements[nX] = new CString( *(oSource.m_apElements[nX]) );
-            }
-        }
-
+            m_aElements = oSource.m_aElements;
         return *this;
     }
 
     CStringArray::~CStringArray( void )
     {
-        DeleteAll();
     }
 
-    void CStringArray::Resize( bool bIncrease )
+    size_t CStringArray::Push( const CString &strNew )
     {
-        if ( bIncrease )
-        {
-            if ( m_nElements == m_nSize )
-            {
-                CString **aTemp = new CString *[ m_nSize + m_nScale ];
-
-                for ( size_t nCount = 0; nCount < m_nSize ; nCount++ )
-                {
-                    aTemp[ nCount ] = m_apElements[ nCount ];
-                }
-
-                delete [] m_apElements;
-                m_apElements = aTemp;
-                m_nSize += m_nScale;
-            }
-        }
-        else
-        {
-            if ( ( m_nSize - m_nElements ) > m_nScale )
-            {
-                CString **aTemp = new CString *[ m_nSize - m_nScale ];
-
-                for ( size_t nCount = 0; nCount < m_nElements ; nCount++ )
-                {
-                    aTemp[ nCount ] = m_apElements[ nCount ];
-                }
-
-                delete [] m_apElements;
-                m_apElements = aTemp;
-                m_nSize -= m_nScale;
-            }
-        }
+        return m_aElements.Push( strNew );
     }
 
-    size_t CStringArray::Push( CString pNew )
+    CString CStringArray::Get( size_t nIndex ) const
     {
-        Resize( true );
-        m_apElements[ m_nElements ] = new CString( pNew );
-        m_nElements++;
-
-        return ( m_nElements - 1 );
+        return m_aElements.Get( nIndex );
     }
 
-    CString CStringArray::Get( size_t nCount ) const
+    CString &CStringArray::operator []( size_t nIndex )
     {
-        if ( nCount < m_nElements )
-        {
-            return *(m_apElements[ nCount ]);
-        }
-        CString strRet;
-        return strRet;
+        if ( nIndex < m_aElements.Length() )
+            return m_aElements[ nIndex ];
+        m_strScratch.Clear();
+        return m_strScratch;
     }
 
-    CString &CStringArray::operator []( size_t nCount ) const
+    const CString &CStringArray::operator []( size_t nIndex ) const
     {
-        static     CString strRet;
-
-
-        if ( nCount < m_nElements )
-        {
-            return *(m_apElements[ nCount ]);
-        }
-        return strRet;
+        static const CString strEmpty;
+        if ( nIndex < m_aElements.Length() )
+            return m_aElements[ nIndex ];
+        return strEmpty;
     }
 
-    size_t CStringArray::Insert( size_t nCount, CString pNew )
+    size_t CStringArray::Insert( size_t nIndex, const CString &strNew )
     {
-        if ( nCount >= m_nElements )
-        {
-            return Push( pNew );
-        }
-
-        Resize( true );
-
-        for ( size_t nIndex = m_nElements; nIndex > nCount ; nIndex-- )
-        {
-            m_apElements[ nIndex ] = m_apElements[ nIndex - 1 ];
-        }
-        m_apElements[ nCount ] = new CString( pNew );
-        m_nElements++;
-
-        return nCount;
+        return m_aElements.Insert( nIndex, strNew );
     }
 
-    bool CStringArray::Delete( size_t nCount )
+    bool CStringArray::Delete( size_t nIndex )
     {
-        if ( nCount >= m_nElements )
-        {
+        if ( nIndex >= m_aElements.Length() )
             return false;
-        }
-
-        CString *pDel = m_apElements[ nCount ];
-
-        for ( size_t nIndex = nCount; nIndex < (m_nElements - 1) ; nIndex++ )
-        {
-            m_apElements[ nIndex ] = m_apElements[ nIndex + 1 ];
-        }
-        m_nElements--;
-
-        delete pDel;
-
-        Resize( false );
+        m_aElements.Remove( nIndex );
         return true;
+    }
+
+    size_t CStringArray::Find( const char *strFind, bool bCaseSensitive ) const
+    {
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+            if ( m_aElements[n].Compare( strFind, bCaseSensitive ) == 0 )
+                return n;
+        return NOT_FOUND;
+    }
+
+    CString CStringArray::Join( const char *strSeparator ) const
+    {
+        CString strResult;
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+        {
+            if ( n > 0 && strSeparator != NULL )
+                strResult += strSeparator;
+            strResult += m_aElements[n];
+        }
+        return strResult;
+    }
+
+    bool CStringArray::Sort( bool bAscending )
+    {
+        if ( ! m_aElements.IsEmpty() )
+            QuickSort( 0, m_aElements.Length() - 1, bAscending );
+        return true;
+    }
+
+    void CStringArray::QuickSort( size_t nLow, size_t nHigh, bool bAscending )
+    {
+        if ( m_aElements.IsEmpty() || nLow >= m_aElements.Length() || nLow >= nHigh )
+            return;
+        if ( nHigh >= m_aElements.Length() )
+            nHigh = m_aElements.Length() - 1;
+
+        CString *pFirst = m_aElements.Data() + nLow;
+        CString *pEnd = m_aElements.Data() + nHigh + 1;
+        if ( bAscending )
+            std::stable_sort( pFirst, pEnd, []( const CString &a, const CString &b ) { return a.Compare( b ) < 0; } );
+        else
+            std::stable_sort( pFirst, pEnd, []( const CString &a, const CString &b ) { return a.Compare( b ) > 0; } );
     }
 
     void CStringArray::DeleteAll( void )
     {
-        for ( size_t nIndex = 0; nIndex < m_nElements; nIndex++ )
-        {
-            delete m_apElements[ nIndex ];
-        }
-        delete [] m_apElements;
-        m_nElements = 0;
-        m_nSize = 0;
-        m_apElements = NULL;
+        m_aElements.Clear();
+        m_aElements.Compact();
     }
 
     void CStringArray::EmptyAll( void )
     {
-        {
-            delete [] m_apElements;
-            m_nElements = 0;
-            m_nSize = 0;
-            m_apElements = NULL;
-        }
+        DeleteAll();
     }
 
     CIterator *CStringArray::Enumerate( void )
     {
         return new CStringArrayIterator( this );
     }
-
-    bool CStringArray::Sort( bool bAscending )
-    {
-        QuickSort( 0, m_nElements - 1, bAscending );
-
-        return true;
-    }
-
-
-    void CStringArray::QuickSort( size_t nLow, size_t nHigh, bool bAscending )
-    {
-        CString    *pPivot;
-        size_t      nLo = nLow;
-        size_t      nHi = nHigh;
-
-        if ( nHigh > nLow)
-        {
-                // Arbitrarily choose the pivot point of the range
-            pPivot = m_apElements[ (nLow + nHigh) / 2 ];
-
-                // loop through the array until indices cross
-               // Watch out for the unsigned wrap-around on "nHi"
-            while ( ( nLo <= nHi ) && ( nHi <= nHigh ) )
-            {
-                    // find the first element that is greater than or equal to
-                    // the partition element starting from the left Index.
-                if ( bAscending )
-                {
-                   while( ( nLo < nHigh ) && ( *(m_apElements[ nLo ]) < *pPivot ) )
-                       ++nLo;
-                }
-                else
-                {
-                   while( ( nLo < nHigh ) && ( *(m_apElements[ nLo ]) > *pPivot ) )
-                       ++nLo;
-                }
-
-                    // find an element that is smaller than or equal to
-                    // the partition element starting from the right Index.
-                if ( bAscending )
-                {
-                    while( ( nHi > nLow ) && ( nHigh < m_nElements ) && ( *(m_apElements[ nHi ]) > *pPivot ) )
-                        --nHi;
-                }
-                else
-                {
-                    while( ( nHi > nLow ) && ( nHigh < m_nElements ) && ( *(m_apElements[ nHi ]) < *pPivot ) )
-                        --nHi;
-                }
-
-                // if the indexes have not crossed, swap the elements
-                if ( ( nLo <= nHi ) && ( nHi <= nHigh ) )
-                {
-                    CString *pTemp = m_apElements[ nLo ];
-                    m_apElements[ nLo ] = m_apElements[ nHi ];
-                    m_apElements[ nHi ] = pTemp;
-
-                    ++nLo;
-                    --nHi;
-                }
-            }
-
-                // If the right index has not reached the left side of array
-                // must now sort the left partition.
-            if ( ( nLow < nHi ) && ( nHi <= nHigh ) )
-                QuickSort( nLow, nHi, bAscending );
-
-                // If the left index has not reached the right side of array
-                // must now sort the right partition.
-            if ( nLo < nHigh )
-                QuickSort( nLo, nHigh, bAscending );
-        }
-    }
 } // namespace IASLib
-

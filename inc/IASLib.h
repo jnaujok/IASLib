@@ -88,10 +88,14 @@
 //***************
 
     // Arrays
+    // Template collections
+#include "Templates/TCollections.h"
+
 #include "Collections/Array.h"
 #include "Collections/IntArray.h"
 #include "Collections/StringArray.h"
 #include "Collections/SortedArray.h"
+#include "Collections/SparseArray.h"
 
     // Hash
 #include "Collections/Hash.h"

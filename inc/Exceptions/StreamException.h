@@ -35,7 +35,7 @@ namespace IASLib
 
     };
 
-#define IASLIB_THROW_STREAM_EXCEPTION(x) {static CStreamException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_STREAM_EXCEPTION(x) {CStreamException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 } // namespace IASLib
 

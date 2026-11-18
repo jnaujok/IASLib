@@ -1,857 +1,242 @@
 /*
- * Hash
+ * CHash Class
  *
- *  This object provides a string keyed hash for looking up keyed items
- * very, very rapidly. It makes use of one other class, the Hash Bucket,
- * which is placed at each array entry to store data that has been
- * hashed. Array entries that do not have any data are simply set to
- * null rather than waste the memory for a hash bucket.
- *
- *  The default hash table is either 107, 347, or 1019 elements, with
- * hash keys of either 191, 421, or 1607 respectively. The initilizer
- * values of "small", "normal", or "large" are passed to the constructor
- * to determine what sizes are being used. The default size is "small".
- *
- *	Author: Jeffrey R. Naujok
- *	Created: 01/01/1995
- *	Log:
- *	  $LOG$
+ *  A hash table of CObject pointers by string key.
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#ifdef IASLIB_DATABASE__
-#include "Cursor.h"
-#endif
-
-#include "../../inc/Collections/Hash.h"
+#include "Hash.h"
 
 namespace IASLib
 {
-    class CHashIterator : public CIterator
+#ifdef IASLIB_MULTI_THREADED__
+    #define IASLIB_HASH_LOCK__      CMutexLock oLock__( m_mutexProtect )
+#else
+    #define IASLIB_HASH_LOCK__      do { } while ( 0 )
+#endif
+
+    namespace
     {
-        protected:
-            CHash              *m_pHash;
-            size_t              m_nCurrentPos;
-        public:
-                                CHashIterator( CHash *pHash ) { m_pHash = pHash; m_nCurrentPos = 0; }
-                                DECLARE_OBJECT( CHashIterator, CIterator )
-            virtual            ~CHashIterator( void ) {}
-            virtual CObject    *Next( void );
-            virtual CObject    *Prev( void );
-
-            virtual void        Reset( void ) { m_nCurrentPos = 0; }
-            virtual bool        HasMore( void ) const;
-    };
-
-    CObject *CHashIterator::Next( void )
-    {
-        CObject *pRetVal = NULL;
-
-        if (  m_nCurrentPos < m_pHash->GetLength() )
+            // Walks the table's entries in order. Like every collection
+            // iterator, it is undone by changes to the table.
+        class CHashIterator : public CIterator
         {
-            pRetVal = m_pHash->Enum( m_nCurrentPos );
-            m_nCurrentPos++;
-        }
-
-        return pRetVal;
+            protected:
+                const CHash::Table     *m_pTable;
+                CHash::Table::const_iterator m_itCurrent;
+                size_t                  m_nPosition;
+            public:
+                                    CHashIterator( const CHash::Table *pTable ) : m_pTable( pTable ), m_itCurrent( pTable->begin() ), m_nPosition( 0 ) {}
+                                    DECLARE_OBJECT( CHashIterator, CIterator )
+                virtual            ~CHashIterator( void ) {}
+                virtual CObject    *Next( void )
+                {
+                    if ( m_itCurrent == m_pTable->end() )
+                        return NULL;
+                    CObject *pValue = m_itCurrent->Value;
+                    ++m_itCurrent;
+                    m_nPosition++;
+                    return pValue;
+                }
+                virtual CObject    *Prev( void )
+                {
+                    if ( m_nPosition == 0 )
+                        return NULL;
+                    m_nPosition--;
+                    m_itCurrent = m_pTable->begin();
+                    for ( size_t n = 0; n < m_nPosition; n++ )
+                        ++m_itCurrent;
+                    return m_itCurrent->Value;
+                }
+                virtual void        Reset( void ) { m_itCurrent = m_pTable->begin(); m_nPosition = 0; }
+                virtual bool        HasMore( void ) const { return m_itCurrent != m_pTable->end(); }
+        };
     }
 
-    CObject *CHashIterator::Prev( void )
-    {
-        CObject *pRetVal = NULL;
-
-        if ( ( m_nCurrentPos > 0 ) && ( m_nCurrentPos <= m_pHash->GetLength() ) )
-        {
-            m_nCurrentPos--;
-            pRetVal = m_pHash->Enum( m_nCurrentPos );
-        }
-
-        return pRetVal;
-    }
-
-    bool CHashIterator::HasMore( void ) const
-    {
-        bool bRetVal = false;
-
-        if ( m_nCurrentPos < m_pHash->GetLength() )
-        {
-            bRetVal = true;
-        }
-
-        return bRetVal;
-    }
-
-    IMPLEMENT_OBJECT( CHash, CObject );
+    IMPLEMENT_OBJECT( CHash, CCollection );
 
     CHash::CHash( HASH_SIZE eSize )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        switch ( eSize )
-        {
-            case TINY:
-                m_strSize = "TINY";
-                m_nArraySize = 37;
-                m_nHashKey = 67;
-                break;
-
-            case SMALL:
-                m_strSize = "SMALL";
-                m_nArraySize = 107;
-                m_nHashKey = 191;
-                break;
-
-            case NORMAL:
-                m_strSize = "NORMAL";
-                m_nArraySize = 347;
-                m_nHashKey = 421;
-                break;
-
-            case LARGE:
-                m_strSize = "LARGE";
-                m_nArraySize = 1019;
-                m_nHashKey = 1607;
-                break;
-
-            case ENORMOUS:
-                m_strSize = "HUGE";
-                m_nArraySize = 20333;
-                m_nHashKey = 32713;
-                break;
-
-            case GARGANTUAN:
-                m_strSize = "GARGANTUAN";
-                m_nArraySize = 509623;
-                m_nHashKey = 834299;
-                break;
-
-            default:
-                m_strSize = "NORMAL";
-                m_nArraySize = 347;
-                m_nHashKey = 421;
-                break;
-        }
-        m_aHashTable = new CHashBucket *[ m_nArraySize ];
-        for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
-            m_aHashTable[ nCount ] = NULL;
-
-        m_nElements = 0;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
+        static const char *SIZES[] = { "TINY", "SMALL", "NORMAL", "LARGE", "HUGE", "GARGANTUAN" };
+        Init( ( eSize >= TINY && eSize <= GARGANTUAN ) ? SIZES[ eSize ] : "NORMAL" );
     }
 
     CHash::CHash( const char *strSize )
     {
-        if ( strSize == NULL )
-        {
-            strSize = "NORMAL";
-        }
+        Init( strSize );
+    }
 
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        m_strSize = strSize;
+    void CHash::Init( const char *strSize )
+    {
+            // The table grows as entries are added, so the size is only a
+            // name now (it used to fix the number of buckets).
+        m_strSize = ( strSize != NULL ) ? strSize : "NORMAL";
         m_strSize.Trim();
         m_strSize.ToUpperCase();
-
-        // The length value should reflect the number of properties in the object, including
-        // the length property.
-
-        if ( m_strSize == "GARGANTUAN" )
+        if ( m_strSize != "TINY" && m_strSize != "SMALL" && m_strSize != "NORMAL" && m_strSize != "LARGE" &&
+             m_strSize != "HUGE" && m_strSize != "GARGANTUAN" )
         {
-            m_nArraySize = 509623;
-            m_nHashKey = 834299 ;
+            m_strSize = "NORMAL";
         }
-        else
-        {
-            if ( m_strSize == "HUGE" )
-            {
-                m_nArraySize = 20333;
-                m_nHashKey = 32713;
-            }
-            else
-            {
-                if ( m_strSize == "LARGE" )
-                {
-                    m_nArraySize = 1019;
-                    m_nHashKey = 1607;
-                }
-                else
-                {
-                    if ( m_strSize == "NORMAL" )
-                    {
-                        m_nArraySize = 347;
-                        m_nHashKey = 421;
-                    }
-                    else
-                    {
-                        if ( m_strSize == "SMALL" )
-                        {
-                            m_nArraySize = 107;
-                            m_nHashKey = 191;
-                        }
-                        else // TINY
-                        {
-                            m_nArraySize = 37;
-                            m_nHashKey = 67;
-                        }
-                    }
-                }
-            }
-        }
-
-        m_aHashTable = new CHashBucket *[ m_nArraySize ];
-        for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
-            m_aHashTable[ nCount ] = NULL;
-
-        m_nElements = 0;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
     }
 
 #ifdef IASLIB_DATABASE__
     CHash::CHash( CCursor *pData, const char *strKey, const char *strData )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        size_t nRows = 0;
-        if ( pData )
-            nRows = pData->Rows();
-
-        // The length value should reflect the number of properties in the object, including
-        // the length property.
-
-        if ( nRows > 1500 )
+        Init( "NORMAL" );
+        if ( pData != NULL )
         {
-            m_strSize = "HUGE";
-            m_nArraySize = 20333;
-            m_nHashKey = 32713;
-        }
-        else
-        {
-            if ( nRows > 500 )
+            m_hashTable.Reserve( pData->Rows() );
+            size_t nRows = pData->Rows();
+            for ( size_t nRow = 0; nRow < nRows; nRow++ )
             {
-                m_strSize = "LARGE";
-                m_nArraySize = 1019;
-                m_nHashKey = 1607;
+                Push( pData->GetColumn( strKey ), new CString( pData->GetColumn( strData ) ), true );
+                pData->Next();
             }
-            else
-            {
-                if ( nRows > 150 )
-                {
-                    m_strSize = "NORMAL";
-                    m_nArraySize = 347;
-                    m_nHashKey = 421;
-                }
-                else
-                {
-                    m_strSize = "SMALL";
-                    m_nArraySize = 107;
-                    m_nHashKey = 191;
-                }
-            }
-        }
-
-        m_aHashTable = new CHashBucket *[ m_nArraySize ];
-        for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
-            m_aHashTable[ nCount ] = NULL;
-
-        m_nElements = 0;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        while ( ( pData ) && ( pData->Rows() > m_nElements ) )
-        {
-            CString *pstrData = new CString( pData->GetColumn( strData ) );
-            Push( pData->GetColumn( strKey ), pstrData, true );
-            pData->Next();
         }
     }
 #endif // IASLIB_DATABASE__
 
-    CHash::CHash( const CHash &oSource )
-    {
-        m_nArraySize = oSource.m_nArraySize;
-        m_nHashKey = oSource.m_nHashKey;
-        m_strSize = oSource.m_strSize;
-        m_aHashTable = new CHashBucket *[ m_nArraySize ];
-        for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
-            m_aHashTable[ nCount ] = NULL;
-
-        m_nElements = oSource.m_nElements;
-
-        for ( size_t nX = 0; nX < m_nArraySize; nX++ )
-        {
-            if ( oSource.m_aHashTable[nX] )
-            {
-                CHashBucket *temp = new CHashBucket( *oSource.m_aHashTable[nX] );
-                m_aHashTable[nX] = temp;
-            }
-        }
-    }
-
     CHash::~CHash( void )
     {
         DeleteAll();
-        for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
-            m_aHashTable[ nCount ] = NULL;
-
-        delete [] m_aHashTable;
-        m_nElements = 0;
-        m_nArraySize = 0;
     }
 
-    CHash &CHash::operator =( const CHash &oSource )
+    CString CHash::NormalizeKey( const char *strKey )
     {
-        if ( &oSource != this )
-        {
-            m_nArraySize = oSource.m_nArraySize;
-            m_nHashKey = oSource.m_nHashKey;
-            m_strSize = oSource.m_strSize;
-            m_aHashTable = new CHashBucket *[ m_nArraySize ];
-            for ( size_t nCount = 0; nCount < m_nArraySize; nCount ++ )
-                m_aHashTable[ nCount ] = NULL;
-
-            m_nElements = oSource.m_nElements;
-
-            for ( size_t nX = 0; nX < m_nArraySize; nX++ )
-            {
-                if ( oSource.m_aHashTable[nX] )
-                {
-                    CHashBucket *temp = new CHashBucket( *oSource.m_aHashTable[nX] );
-                    m_aHashTable[nX] = temp;
-                }
-            }
-        }
-        return *this;
+        CString strNormal( strKey );
+        strNormal.Trim( " \t\r\n" );
+        return strNormal;
     }
 
-    /************************************************************************************
-    ** Push
-    **
-    **  This function adds an element to the hash.
-    **
-    **************************************************************************************/
+    CString CHash::NormalizeKey( int nKey )
+    {
+        CString strNormal;
+        strNormal = nKey;
+        return strNormal;
+    }
+
+    size_t CHash::GetLength( void ) const
+    {
+        IASLIB_HASH_LOCK__;
+        return m_hashTable.Length();
+    }
+
     void CHash::Push( const char *strKey, CObject *pElement, bool bDeleteCurrent )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        try
+        CString strNormal = NormalizeKey( strKey );
+        CObject *pReplaced = NULL;
         {
-            int nKey = BuildKey( strKey );
-
-            if ( m_aHashTable[ nKey ] == NULL )
+            IASLIB_HASH_LOCK__;
+            CObject **ppCurrent = m_hashTable.Find( strNormal );
+            if ( ppCurrent != NULL )
             {
-                m_aHashTable[ nKey ] = new CHashBucket();
+                if ( *ppCurrent != pElement && bDeleteCurrent )
+                    pReplaced = *ppCurrent;
+                *ppCurrent = pElement;
             }
-
-            if ( m_aHashTable[ nKey ]->Push( strKey, pElement, bDeleteCurrent ) )
-                m_nElements++;
+            else
+            {
+                m_hashTable.Put( strNormal, pElement );
+            }
         }
-        catch(...)
-        {
-            // Do nothing, this is just to make sure we always unlock the mutex
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
+        delete pReplaced;
     }
 
-    /*************************************************************************************
-    ** Push
-    **
-    **  This function adds an element to the hash.
-    **
-    **************************************************************************************/
     void CHash::Push( int nKey, CObject *pElement, bool bDeleteCurrent )
     {
-        int nSaveKey = nKey;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-
-        nKey = BuildKey( nKey );
-
-        if ( m_aHashTable[ nKey ] == NULL )
-        {
-            m_aHashTable[ nKey ] = new CHashBucket();
-        }
-
-        if ( m_aHashTable[ nKey ]->Push( nSaveKey, pElement, bDeleteCurrent ) )
-            m_nElements++;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
+        Push( NormalizeKey( nKey ), pElement, bDeleteCurrent );
     }
 
-    /*************************************************************************************
-    ** Get
-    **
-    **  This function retrieves an element from the hash.
-    **
-    **************************************************************************************/
-    CObject *CHash::Get( const char *strKey )
+    CObject *CHash::Get( const char *strKey ) const
     {
-        CObject *pRetVal = NULL;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        int nKey = BuildKey( strKey );
-
-        if ( m_aHashTable[ nKey ] )
-        {
-            pRetVal = m_aHashTable[ nKey ]->Get( strKey );
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        return pRetVal;
+        CString strNormal = NormalizeKey( strKey );
+        IASLIB_HASH_LOCK__;
+        return m_hashTable.Get( strNormal, NULL );
     }
 
-    /*************************************************************************************
-    ** HasKey
-    **
-    **  This function Checks if a key is represented in the hash.
-    **
-    **************************************************************************************/
-    bool CHash::HasKey( const char *strKey )
+    CObject *CHash::Get( int nKey ) const
     {
-        bool bRetVal = false;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        int nKey = BuildKey( strKey );
-
-        if ( m_aHashTable[ nKey ] )
-        {
-            bRetVal = m_aHashTable[ nKey ]->HasKey( strKey );
-        }
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        return bRetVal;
+        return Get( NormalizeKey( nKey ) );
     }
 
-    /*************************************************************************************
-    ** Get
-    **
-    **  This function retrieves an element from the hash.
-    **
-    **************************************************************************************/
-    CObject *CHash::Get( int nKey )
+    bool CHash::HasKey( const char *strKey ) const
     {
-        int nSaveKey = nKey;
-        CObject *pRetVal = NULL;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-
-        nKey = BuildKey( nKey );
-
-        if ( m_aHashTable[ nKey ] )
-        {
-            pRetVal = m_aHashTable[ nKey ]->Get( nSaveKey );
-        }
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        return pRetVal;
+        CString strNormal = NormalizeKey( strKey );
+        IASLIB_HASH_LOCK__;
+        return m_hashTable.HasKey( strNormal );
     }
 
-    /*************************************************************************************
-    ** HasKey
-    **
-    **  This function Checks if a key is represented in the hash.
-    **
-    **************************************************************************************/
-    bool CHash::HasKey( int nKey )
+    bool CHash::HasKey( int nKey ) const
     {
-        int nSaveKey = nKey;
-        bool bRetVal = false;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-
-        nKey = BuildKey( nKey );
-
-        if ( m_aHashTable[ nKey ] )
-        {
-            bRetVal = m_aHashTable[ nKey ]->HasKey( nSaveKey );
-        }
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        return  bRetVal;
+        return HasKey( NormalizeKey( nKey ) );
     }
 
-    /*************************************************************************************
-    ** BuildKey
-    **
-    **  This function builds the hash key from the string key and the two hash constants.
-    **
-    **************************************************************************************/
-    int CHash::BuildKey( const char *strKey )
-    {
-        if ( strKey == NULL )
-            return 0;
-
-        int nCount = 0;
-        int nWork = 0;
-        int nLength = 0;
-
-
-        while ( ( *strKey ) && ( ( *strKey == ' ' ) || ( *strKey == '\t' ) || ( *strKey == '\n' ) || ( *strKey == '\r' ) ) )
-        {
-            strKey++;
-        }
-
-        while ( strKey[ nCount ] )
-        {
-            if ( ( strKey[ nCount ] != ' ' ) && ( strKey[ nCount ] != '\t' ) && ( strKey[ nCount ] != '\n' ) && ( strKey[ nCount ] != '\r' ) )
-            {
-                nLength = nCount;
-            }
-            nCount++;
-        }
-
-        nCount = 0;
-
-        while ( ( *strKey ) && ( nLength > 0 ) )
-        {
-            nWork += (unsigned int)( *strKey ) * ( nCount + 1 );
-            strKey++;
-            nCount++;
-            nLength--;
-        }
-
-        return BuildKey( nWork );
-    }
-
-    int CHash::BuildKey( int nKey )
-    {
-        int nWork;
-        unsigned long nTemp = (unsigned long)nKey * (unsigned long)m_nHashKey;
-        unsigned long nTemp2 = nTemp % (unsigned long)m_nArraySize;
-        nWork = (int)nTemp2;
-        return nWork;
-    }
-
-    /*************************************************************************************
-    ** DeleteAll
-    **
-    **  This function removes all of the elements from the hash.
-    **
-    **************************************************************************************/
-    void CHash::DeleteAll( void )
-    {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        size_t nKey = 0;
-
-        while ( nKey < m_nArraySize )
-        {
-            if ( m_aHashTable[ nKey ] != NULL )
-            {
-                m_aHashTable[ nKey ]->DeleteAll();
-                delete m_aHashTable[ nKey ];
-            }
-            m_aHashTable[ nKey ] = NULL;
-            nKey++;
-        }
-        m_nElements = 0;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-    }
-
-    /*************************************************************************************
-    ** EmptyAll
-    **
-    **  This function empties the hash but does not delete the elements.
-    **
-    **************************************************************************************/
-    void CHash::EmptyAll( void )
-    {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        size_t nKey = 0;
-
-        while ( nKey < m_nArraySize )
-        {
-            if ( m_aHashTable[ nKey ] != NULL )
-            {
-                m_aHashTable[ nKey ]->Empty();
-                delete m_aHashTable[ nKey ];
-            }
-            m_aHashTable[ nKey ] = NULL;
-            nKey++;
-        }
-        m_nElements = 0;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-    }
-
-    /*************************************************************************************
-    ** Enum
-    **
-    **  This function returns an enumerated item from the hash. It is terribly inefficient
-    ** and should only be used as a last resort or to ensure a walk of all elements.
-    **
-    **************************************************************************************/
-    CObject *CHash::Enum( size_t nIndex )
-    {
-        size_t nWork = nIndex;
-        size_t nKey = 0;
-
-        if ( nIndex < m_nElements )
-        {
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutexProtect.Lock();
-#endif
-            while ( nKey < m_nArraySize )
-            {
-                if ( m_aHashTable[ nKey ] != NULL )
-                {
-                    if ( m_aHashTable[ nKey ]->GetLength() > nWork )
-                    {
-#ifdef IASLIB_MULTI_THREADED__
-                        m_mutexProtect.Unlock();
-#endif
-                        return m_aHashTable[ nKey ]->Enum( nWork );
-                    }
-                    nWork -= m_aHashTable[nKey]->GetLength();
-                }
-                nKey++;
-            }
-
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutexProtect.Unlock();
-#endif
-        }
-        return NULL;
-    }
-
-    /*************************************************************************************
-    ** Delete
-    **
-    **  This function deletes an element from the hash.
-    **
-    **************************************************************************************/
-    void CHash::Delete( const char *strKey )
-    {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        int nKey = BuildKey( strKey );
-
-        if ( m_aHashTable[ nKey ] == NULL )
-        {
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutexProtect.Unlock();
-#endif
-            return;
-        }
-
-            // If the deletion results in an empty bucket, delete the bucket.
-        if ( m_aHashTable[ nKey ]->Delete( strKey ) )
-        {
-            delete m_aHashTable[ nKey ];
-            m_aHashTable[ nKey ] = NULL;
-            m_nElements--;
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-    }
-
-    /*************************************************************************************
-    ** Delete
-    **
-    **  This function deletes an element from the hash.
-    **
-    **************************************************************************************/
-    void CHash::Delete( int nKey )
-    {
-        int nSaveKey = nKey;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-
-        nKey = ( nKey * m_nHashKey ) % (int)m_nArraySize;
-
-        if ( m_aHashTable[ nKey ] == NULL )
-        {
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutexProtect.Unlock();
-#endif
-            return;
-        }
-
-            // If the deletion results in an empty bucket, delete the bucket.
-        if ( m_aHashTable[ nKey ]->Delete( nSaveKey ) )
-        {
-            delete m_aHashTable[ nKey ];
-            m_aHashTable[ nKey ] = NULL;
-            m_nElements--;
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-    }
-
-    /*************************************************************************************
-    ** Remove
-    **
-    **  This function removes an element from the hash and returns it to the calling code.
-    **
-    **************************************************************************************/
     CObject *CHash::Remove( const char *strKey )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        int nKey = BuildKey( strKey );
-
-        if ( m_aHashTable[ nKey ] == NULL )
-        {
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutexProtect.Unlock();
-#endif
-            return NULL;
-        }
-
-        CObject *pRetVal = m_aHashTable[nKey]->Remove( strKey );
-
-            // If the removal results in an empty bucket, delete the bucket.
-        if ( pRetVal && m_aHashTable[ nKey ]->GetLength() == 0  )
-        {
-            delete m_aHashTable[ nKey ];
-            m_aHashTable[ nKey ] = NULL;
-            m_nElements--;
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        return pRetVal;
+        CString strNormal = NormalizeKey( strKey );
+        IASLIB_HASH_LOCK__;
+        CObject *pValue = NULL;
+        m_hashTable.Remove( strNormal, pValue );
+        return pValue;
     }
 
-    /*************************************************************************************
-    ** Remove
-    **
-    **  This function removes an element from the hash and returns it to the calling code.
-    **
-    **************************************************************************************/
     CObject *CHash::Remove( int nKey )
     {
-        int nSaveKey = nKey;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-
-        nKey = ( nKey * m_nHashKey ) % (int)m_nArraySize;
-
-        if ( m_aHashTable[ nKey ] == NULL )
-        {
-#ifdef IASLIB_MULTI_THREADED__
-            m_mutexProtect.Unlock();
-#endif
-            return NULL;
-        }
-
-        CObject *pRetVal = m_aHashTable[nKey]->Remove( nSaveKey );
-
-            // If the removal results in an empty bucket, delete the bucket.
-        if ( pRetVal && m_aHashTable[ nKey ]->GetLength() == 0  )
-        {
-            delete m_aHashTable[ nKey ];
-            m_aHashTable[ nKey ] = NULL;
-            m_nElements--;
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-        return pRetVal;
+        return Remove( NormalizeKey( nKey ) );
     }
 
-
-    /*************************************************************************************
-    ** Empty
-    **
-    **  This function removes all of the elements from the hash without deleting them.
-    **
-    **************************************************************************************/
-    void CHash::Empty( void )
+    void CHash::Delete( const char *strKey )
     {
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        size_t nKey = 0;
+        delete Remove( strKey );
+    }
 
-        while ( nKey < m_nArraySize )
+    void CHash::Delete( int nKey )
+    {
+        delete Remove( nKey );
+    }
+
+    void CHash::DeleteAll( void )
+    {
+        Table oTaken;
         {
-            if ( m_aHashTable[ nKey ] != NULL )
-            {
-                m_aHashTable[ nKey ]->Empty();
-                delete m_aHashTable[ nKey ];
-            }
-            m_aHashTable[ nKey ] = NULL;
-            nKey++;
+            IASLIB_HASH_LOCK__;
+            oTaken.Swap( m_hashTable );
         }
-        m_nElements = 0;
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
+        oTaken.DeleteAll();
+    }
+
+    void CHash::EmptyAll( void )
+    {
+        IASLIB_HASH_LOCK__;
+        Table oEmpty;
+        oEmpty.Swap( m_hashTable );
+    }
+
+    CObject *CHash::Enum( size_t nIndex ) const
+    {
+        IASLIB_HASH_LOCK__;
+        if ( nIndex >= m_hashTable.Length() )
+            return NULL;
+        Table::const_iterator it = m_hashTable.begin();
+        while ( nIndex-- > 0 )
+            ++it;
+        return it->Value;
     }
 
     CIterator *CHash::Enumerate( void )
     {
-        return new CHashIterator( this );
+        return new CHashIterator( &m_hashTable );
     }
 
-    CStringArray CHash::keySet( void )
+    CStringArray CHash::keySet( void ) const
     {
-        CStringArray retVal;
-
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Lock();
-#endif
-        for ( size_t nX = 0; nX < m_nArraySize; nX++ )
-        {
-            if ( m_aHashTable[nX] != NULL )
-            {
-                m_aHashTable[nX]->keySet( retVal );
-            }
-        }
-#ifdef IASLIB_MULTI_THREADED__
-        m_mutexProtect.Unlock();
-#endif
-
-        return retVal;
+        CStringArray aKeys;
+        IASLIB_HASH_LOCK__;
+        for ( Table::const_iterator it = m_hashTable.begin(); it != m_hashTable.end(); ++it )
+            aKeys.Push( it->Key );
+        return aKeys;
     }
-
 } // namespace IASLib

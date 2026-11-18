@@ -44,3 +44,7 @@ endif()
 add_executable(TestBaseTypes TestBaseTypes/TestBaseTypes.cpp)
 target_link_libraries(TestBaseTypes IASLib)
 add_test(test_base_types TestBaseTypes)
+
+add_executable(TestCollections TestCollections/TestCollections.cpp)
+target_link_libraries(TestCollections IASLib)
+add_test(test_collections TestCollections)

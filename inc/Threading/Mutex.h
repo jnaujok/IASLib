@@ -57,6 +57,23 @@ namespace IASLib
             void                Lock( void );
             void                Unlock( void );
             bool                IsLocked( void );
+
+        private:
+                                CMutex( const CMutex & );
+            CMutex             &operator =( const CMutex & );
+    };
+
+        // Locks a mutex for as long as it exists:
+        //      { CMutexLock oLock( m_mutex ); ... }
+    class CMutexLock
+    {
+            CMutex             &m_mutex;
+        public:
+            explicit            CMutexLock( CMutex &mutex ) : m_mutex( mutex ) { m_mutex.Lock(); }
+                               ~CMutexLock( void ) { m_mutex.Unlock(); }
+        private:
+                                CMutexLock( const CMutexLock & );
+            CMutexLock         &operator =( const CMutexLock & );
     };
 } // End of Namespace IASLib
 

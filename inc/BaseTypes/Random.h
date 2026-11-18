@@ -122,8 +122,8 @@ namespace IASLib
             }
 
             T operator ()( void ) { return rand(); }
-            static T min( void ) { return 0; }
-            static T max( void ) { return (T)~(T)0; }
+            static T ( min )( void ) { return 0; }
+            static T ( max )( void ) { return (T)~(T)0; }
 
                 // Reseeds with a, b, c and the N values of s (zeros if s is
                 // NULL).

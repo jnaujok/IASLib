@@ -1,27 +1,17 @@
-/**
- * Array Class
+/*
+ * CArray Class
  *
- *  This class provides a dynamically re-sizable array for use in
- * storing CObject derived pointers. Any object that has been
- * derived from the CObject type can be stored in this array.
- *  As more elements are added to the array, the array is
- * dynamically increased in size to hold the additional elements.
- * As elements are removed, the array is also made smaller to
- * more efficently use memory.
- *  The rate at which an array grows can be adjusted by setting
- * the "Scale" value.
- *  The array supports sorting via a comparison function that
- * must be passed to the Sort function. (c.f. CSortedArray)
- *  An array simply takes derived objects and makes no attempt
- * to correctly cast the returns to their appropriate sub-class
- * type.  That is left up to the user. To use a type safe version
- * of this class, you should use the TArray template class instead
- * of this class.
+ *  An array of CObject pointers, which the array owns (see CCollection).
+ * It grows as elements are added, and gives back room as they are
+ * removed (see Templates/TCommon.h); SetScale() sets the least it grows
+ * by. Get() and operator [] give NULL past the end. It is thread-safe:
+ * each call locks the array (but a sequence of calls is not atomic, and a
+ * Sort() comparison must not call back into the array).
+ *
+ *  For a type safe array, or an array of values, use TArray.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 1/15/1994
- *	Log:
- *	  $LOG$
+ *	Created: 1/15/1994 (rebuilt on the template collections 11/18/2026)
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -31,6 +21,7 @@
 #define IASLIB_ARRAY_H__
 
 #include "Collection.h"
+#include "../Templates/TArray.h"
 #ifdef IASLIB_MULTI_THREADED__
 #include "../Threading/Mutex.h"
 #endif
@@ -40,58 +31,68 @@ namespace IASLib
     class CArray : public CCollection
     {
         protected:
-            CObject           **m_apElements;
-            size_t              m_nSize;
-            size_t              m_nScale;
+            TArray<CObject *>   m_aElements;
 #ifdef IASLIB_MULTI_THREADED__
             mutable CMutex      m_mutex;
 #endif
         public:
                                 CArray( size_t nScale = 4 );
-                                CArray( const CArray &oSource );
             virtual            ~CArray( void );
 
                                 DEFINE_OBJECT( CArray );
 
+            virtual size_t      GetLength( void ) const;
+
             virtual size_t      Append( CObject *pNew ) { return Push( pNew ); }
             virtual size_t      Prepend( CObject *pNew ) { return Insert( 0, pNew ); }
 
+                // Inserts before nIndex (at the end if past it), returning
+                // the index it went to.
             virtual size_t      Insert( size_t nIndex, CObject *pNew );
-
             virtual size_t      Push( CObject *pNew );
 
+                // Replaces the element at nIndex without deleting the old one
+                // (past the end, appends), returning the index used.
             virtual size_t      Set( size_t nIndex, CObject *pSet );
 
             virtual CObject    *Get( size_t nIndex ) const;
             virtual CObject    *operator []( size_t nIndex ) const;
 
-            virtual CObject    *Remove( size_t nIndex );
+                // The index of pFind (the same pointer), or NOT_FOUND.
+            virtual size_t      Find( const CObject *pFind ) const;
 
+                // Takes the element out (the caller owns it), or NULL.
+            virtual CObject    *Remove( size_t nIndex );
+                // Takes the element out and deletes it.
             virtual bool        Delete( size_t nIndex );
 
             virtual void        DeleteAll( void );
             virtual void        EmptyAll( void );
 
+                // Sorts with fnCompare (negative, zero or positive, as
+                // strcmp), keeping equal elements in order.
             virtual void        Sort( int (*fnCompare)(const CObject *, const CObject *, void *), void *pCallbackData );
 
-            virtual void        SetScale( size_t nScale ) { if ( nScale > 0 ) m_nScale = nScale; }
+            virtual void        SetScale( size_t nScale ) { m_aElements.SetScale( nScale ); }
+            void                Reserve( size_t nCapacity );
+            void                Compact( void );
 
-			virtual bool		Swap( size_t nSwap1, size_t nSwap2 );
+            virtual bool        Swap( size_t nSwap1, size_t nSwap2 );
 
             virtual CIterator  *Enumerate( void );
-        protected:
-            void                Resize( bool bIncrease = true );
 
-            void                QuickSort( size_t nLow, size_t nHigh, int (*fnCompare)(const CObject *, const CObject *, void *), void *pCallback );
+        private:
+                                CArray( const CArray & );
+            CArray             &operator =( const CArray & );
     }; // End of class CArray
 
     class CArrayIterator : public CIterator
     {
         protected:
-            CArray             *m_pArray;
+            const CArray       *m_pArray;
             size_t              m_nCurrentPos;
         public:
-                                CArrayIterator( CArray *pArray ) { m_pArray = pArray; m_nCurrentPos = 0; }
+                                CArrayIterator( const CArray *pArray ) { m_pArray = pArray; m_nCurrentPos = 0; }
                                 DECLARE_OBJECT( CArrayIterator, CIterator )
             virtual            ~CArrayIterator( void ) {}
             virtual CObject    *Next( void );

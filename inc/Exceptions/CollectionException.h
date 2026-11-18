@@ -29,15 +29,15 @@ namespace IASLib
                                                       CException::ExceptionSeverity nExceptionLevel = CException::NORMAL );
             virtual            ~CCollectionException( void );
 
-                                DECLARE_OBJECT( CCollectionExcetption, CObject );
+                                DECLARE_OBJECT( CCollectionException, CException );
 
             virtual void        Throw( void ) { throw *this; }
 
 
     };
 
-#define IASLIB_THROW_COLLECTION_EXCEPTION(x) {static CCollectionException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
-#define IASLIB_THROW_COLLECTION_EXCEPTION2(x,y) {static CCollectionException oE(x,y);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_COLLECTION_EXCEPTION(x) {CCollectionException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_COLLECTION_EXCEPTION2(x,y) {CCollectionException oE(x,y);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 } // namespace IASLib
 

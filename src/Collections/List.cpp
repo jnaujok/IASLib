@@ -1,146 +1,51 @@
 /*
- * List Class
+ * CList Class
  *
- *  This class provides a dynamic linked list for storing pointers
- * to objects derived from CObject. The linked list is singly
- * linked and features O(1) insert and delete times. However, all
- * finds, insert at, and other such operations are O(n).
- *  Linked lists, more than any other data type, can grow to fill
- * all available memory space and are more efficient at using memory
- * since their elements do not need to be contiguous in memeory,
- * like an array.
- *  This class represents a singly linked list, to use a doubly linked
- * list, use the CDList class.
- *  To store objects other than CObject pointers, use the template
- * version of this class TList.
- *  Note: Unlike a typical singly linked list, we do store a "Last"
- * pointer to the last item in the array to make addition at either end
- * of the array an O(1) operation. That's really the only reason it's
- * there, honestly.
- *
- *	Author: Jeffrey R. Naujok
- *	Created: 10/26/2004
- *	Log:
- *	  $LOG$
+ *  A doubly linked list of CObject pointers.
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
-#ifdef IASLIB_WIN32
-#include "stdafx.h"
-#endif
-
-#include <memory>
 #include "List.h"
 
 namespace IASLib
 {
-    class CListIterator : public CIterator
+    namespace
     {
-        protected:
-            CList          *m_pList;
-            size_t          m_nCurrentPos;
-        public:
-                                CListIterator( CList *pList ) { m_pList = pList; m_nCurrentPos = 0; }
-                                DECLARE_OBJECT( CListIterator, CIterator )
-            virtual            ~CListIterator( void ) {}
-            virtual CObject    *Next( void );
-            virtual CObject    *Prev( void );
-
-            virtual void        Reset( void ) { m_nCurrentPos = 0; }
-            virtual bool        HasMore( void ) const;
-    };
-
-    CObject *CListIterator::Next( void )
-    {
-        CObject *pRetVal = NULL;
-
-        if ( m_nCurrentPos < m_pList->GetLength() )
+        class CListIterator : public CIterator
         {
-            pRetVal = m_pList->GetAt( m_nCurrentPos );
-            m_nCurrentPos++;
-        }
-
-        return pRetVal;
+            protected:
+                const TList<CObject *>     *m_pList;
+                TList<CObject *>::const_iterator m_itCurrent;
+            public:
+                                    CListIterator( const TList<CObject *> *pList ) : m_pList( pList ), m_itCurrent( pList->begin() ) {}
+                                    DECLARE_OBJECT( CListIterator, CIterator )
+                virtual            ~CListIterator( void ) {}
+                virtual CObject    *Next( void )
+                {
+                    if ( m_itCurrent == m_pList->end() )
+                        return NULL;
+                    CObject *pValue = *m_itCurrent;
+                    ++m_itCurrent;
+                    return pValue;
+                }
+                virtual CObject    *Prev( void )
+                {
+                    if ( m_itCurrent == m_pList->begin() )
+                        return NULL;
+                    --m_itCurrent;
+                    return *m_itCurrent;
+                }
+                virtual void        Reset( void ) { m_itCurrent = m_pList->begin(); }
+                virtual bool        HasMore( void ) const { return m_itCurrent != m_pList->end(); }
+        };
     }
 
-    CObject *CListIterator::Prev( void )
-    {
-        CObject *pRetVal = NULL;
-
-        if ( ( m_nCurrentPos > 0 ) && ( m_nCurrentPos <= m_pList->GetLength() ) )
-        {
-            m_nCurrentPos--;
-            pRetVal = m_pList->GetAt( m_nCurrentPos );
-        }
-
-        return pRetVal;
-    }
-
-    bool CListIterator::HasMore( void ) const
-    {
-        bool bRetVal = false;
-
-        if ( m_nCurrentPos < m_pList->GetLength() )
-        {
-            bRetVal = true;
-        }
-
-        return bRetVal;
-    }
-
-        // Forward reference to internal object
-    class CListNode : public CObject
-    {
-        protected:
-            CListNode  *m_pNext;
-            CObject    *m_pData;
-        public:
-                        CListNode( CObject *pObject, CListNode *pNext = NULL );
-            virtual    ~CListNode( void );
-
-                        DEFINE_OBJECT( CListNode )
-
-            CListNode  *GetNext( void ) { return m_pNext; }
-            void        SetNext( CListNode *pNext ) { m_pNext = pNext; }
-
-            CObject    *GetData( void ) { return m_pData; }
-            void        SetData( CObject *pData ) { m_pData = pData; }
-
-            void        Empty( void );
-
-            bool        IsLast( void ) { return (bool)(m_pNext == NULL); }
-    };
-
-    IMPLEMENT_OBJECT( CListNode, CObject );
-
-    CListNode::CListNode( CObject *pData, CListNode *pNext )
-    {
-        m_pData = pData;
-        m_pNext = pNext;
-    }
-
-    CListNode::~CListNode( void )
-    {
-        if ( m_pData )
-            delete m_pData;
-        m_pData = NULL;
-        m_pNext = NULL;
-    }
-
-    void CListNode::Empty( void )
-    {
-        m_pData = NULL;
-    }
-
-    IMPLEMENT_OBJECT( CList, CObject );
+    IMPLEMENT_OBJECT( CList, CCollection );
 
     CList::CList( void )
     {
-        m_pFirst = NULL;
-        m_pLast = NULL;
-        m_nElements = 0;
     }
 
     CList::~CList( void )
@@ -150,323 +55,83 @@ namespace IASLib
 
     size_t CList::AddFirst( CObject *pNew )
     {
-        CListNode   *pNewNode = new CListNode( pNew, m_pFirst );
-        if ( m_pFirst == NULL )
-            m_pLast = pNewNode;
-        m_pFirst = pNewNode;
-        m_nElements++;
-        return 0;
-    }
-
-    CObject *CList::RemoveFirst( void )
-    {
-        CListNode *pRetVal = NULL;
-        CObject   *pRet = NULL;
-
-        if ( m_pFirst )
-        {
-            pRetVal = m_pFirst;
-            m_pFirst = pRetVal->GetNext();
-            if ( m_pFirst == NULL )
-                m_pLast = NULL;
-            if ( m_pFirst->GetNext() == NULL )
-                m_pLast = m_pFirst;
-        }
-
-        if ( pRetVal )
-        {
-            pRet = pRetVal->GetData();
-            pRetVal->Empty();
-            delete pRetVal;
-            m_nElements--;
-        }
-
-        return pRet;
+        return m_lstElements.AddFirst( pNew );
     }
 
     size_t CList::AddLast( CObject *pNew )
     {
-        CListNode  *pNewNode = new CListNode( pNew, NULL );
-
-        if ( m_pLast )
-        {
-            m_pLast->SetNext( pNewNode );
-            m_pLast = pNewNode;
-        }
-        else
-        {
-            m_pLast = pNewNode;
-            m_pFirst = pNewNode;
-        }
-
-        m_nElements++;
-
-        return m_nElements;
-    }
-
-    CObject *CList::RemoveLast( void )
-    {
-        CListNode  *pRetNode = NULL;
-        CListNode  *pTrailer = NULL;
-        CObject    *pRetVal = NULL;
-
-        pRetNode = m_pFirst;
-        while ( pRetNode != m_pLast )
-        {
-            pTrailer = pRetNode;
-            pRetNode = pRetNode->GetNext();
-        }
-
-        if ( pRetNode )
-        {
-            if ( pTrailer )
-            {
-                pTrailer->SetNext( NULL );
-            }
-            else
-            {
-                m_pFirst = NULL;
-            }
-            m_pLast = pTrailer;
-
-            pRetVal = pRetNode->GetData();
-            pRetNode->Empty();
-            delete pRetNode;
-            m_nElements--;
-        }
-
-        return pRetVal;
+        return m_lstElements.AddLast( pNew );
     }
 
     size_t CList::AddAt( size_t nIndex, CObject *pNew )
     {
-        size_t nCount = 0;
-        CListNode  *pNextNode = m_pFirst;
-        CListNode  *pLastNode = NULL;
-        CListNode  *pNewNode = new CListNode( pNew, NULL );
-
-        while ( ( pNextNode ) && ( nCount < nIndex ) )
-        {
-            pLastNode = pNextNode;
-            pNextNode = pNextNode->GetNext();
-            nCount++;
-        }
-
-        if ( pNextNode )
-        {
-            pNewNode->SetNext( pNextNode );
-        }
-        else
-        {
-            m_pLast = pNewNode;
-        }
-
-        if ( pLastNode )
-        {
-            pLastNode->SetNext( pNewNode );
-        }
-        else
-        {
-            m_pFirst = pNewNode;
-        }
-
-        m_nElements++;
-
-        return nCount;
+        return m_lstElements.AddAt( nIndex, pNew );
     }
 
     size_t CList::AddBefore( CObject *pValue, CObject *pNew )
     {
-        CListNode  *pNextNode = m_pFirst;
-        CListNode  *pTrailer = NULL;
-        CListNode  *pNewNode = new CListNode( pNew, NULL );
-        size_t      nCount = 0;
-
-        while ( ( pNextNode ) && ( pNextNode->GetData() != pValue ) )
-        {
-            pTrailer = pNextNode;
-            pNextNode = pNextNode->GetNext();
-            nCount++;
-        }
-
-        if ( pNextNode )
-        {
-            pNewNode->SetNext( pNextNode );
-        }
-        else
-        {
-            m_pLast = pNewNode;
-        }
-
-        if ( pTrailer )
-        {
-            pTrailer->SetNext( pNewNode );
-        }
-        else
-        {
-            m_pFirst = pNewNode;
-        }
-
-        m_nElements++;
-
-        return nCount;
+        size_t nIndex = m_lstElements.Find( pValue );
+        if ( nIndex == NOT_FOUND )
+            return NOT_FOUND;
+        return m_lstElements.AddAt( nIndex, pNew );
     }
 
     size_t CList::AddAfter( CObject *pValue, CObject *pNew )
     {
-        CListNode  *pNextNode = m_pFirst;
-        CListNode  *pTrailer = NULL;
-        CListNode  *pNewNode = new CListNode( pNew, NULL );
-        size_t      nCount = 0;
-
-        while ( ( pNextNode ) && ( pNextNode->GetData() != pValue ) )
-        {
-            pTrailer = pNextNode;
-            pNextNode = pNextNode->GetNext();
-            nCount++;
-        }
-
-        if ( pNextNode )
-        {
-            if ( pNextNode->GetData() == pValue )
-            {
-                pTrailer = pNextNode;
-                pNextNode = pNextNode->GetNext();
-                nCount++;
-            }
-        }
-
-        if ( pNextNode )
-        {
-            pNewNode->SetNext( pNextNode );
-        }
-        else
-        {
-            m_pLast = pNewNode;
-        }
-
-        if ( pTrailer )
-        {
-            pTrailer->SetNext( pNewNode );
-        }
-        else
-        {
-            m_pFirst = pNewNode;
-        }
-
-        m_nElements++;
-
-        return nCount;
+        size_t nIndex = m_lstElements.Find( pValue );
+        if ( nIndex == NOT_FOUND )
+            return NOT_FOUND;
+        return m_lstElements.AddAt( nIndex + 1, pNew );
     }
 
-    CObject *CList::GetAt( size_t nIndex )
+    CObject *CList::RemoveFirst( void )
     {
-        size_t nCount = 0;
-        CListNode  *pNextNode = m_pFirst;
-
-        while ( ( pNextNode ) && ( nCount < nIndex ) )
-        {
-            pNextNode = pNextNode->GetNext();
-            nCount++;
-        }
-
-        if ( pNextNode )
-        {
-            return pNextNode->GetData();
-        }
-
-        return NULL;
+        return m_lstElements.IsEmpty() ? NULL : m_lstElements.RemoveFirst();
     }
 
-    CObject *CList::GetFirst( void )
+    CObject *CList::RemoveLast( void )
     {
-        if ( m_pFirst )
-        {
-            return m_pFirst->GetData();
-        }
-
-        return NULL;
+        return m_lstElements.IsEmpty() ? NULL : m_lstElements.RemoveLast();
     }
 
-    CObject *CList::GetLast( void )
+    CObject *CList::RemoveAt( size_t nIndex )
     {
-        if ( m_pLast )
-        {
-            return m_pLast->GetData();
-        }
-
-        return NULL;
+        return ( nIndex < m_lstElements.Length() ) ? m_lstElements.RemoveAt( nIndex ) : NULL;
     }
 
-    int CList::Find( CObject *pValue )
+    CObject *CList::GetAt( size_t nIndex ) const
     {
-        CListNode  *pNextNode = m_pFirst;
-        int         nCount = 0;
+        return m_lstElements.Get( nIndex, NULL );
+    }
 
-        while ( ( pNextNode ) && ( pNextNode->GetData() != pValue ) )
-        {
-            pNextNode = pNextNode->GetNext();
-            nCount++;
-        }
+    CObject *CList::GetFirst( void ) const
+    {
+        return m_lstElements.IsEmpty() ? NULL : m_lstElements.GetFirst();
+    }
 
-        if ( pNextNode )
-        {
-            return nCount;
-        }
+    CObject *CList::GetLast( void ) const
+    {
+        return m_lstElements.IsEmpty() ? NULL : m_lstElements.GetLast();
+    }
 
-        return -1;
+    int CList::Find( CObject *pValue ) const
+    {
+        size_t nIndex = m_lstElements.Find( pValue );
+        return ( nIndex == NOT_FOUND ) ? -1 : (int)nIndex;
     }
 
     void CList::DeleteAll( void )
     {
-        CListNode *pNext = m_pFirst;
-        CListNode *pLast = NULL;
-
-        while ( pNext )
-        {
-            pLast = pNext;
-            pNext = pNext->GetNext();
-
-            delete pLast;
-            pLast = NULL;
-        }
-
-        if ( pLast )
-            delete pLast;
-
-        m_pFirst = NULL;
-        m_pLast = NULL;
-        m_nElements = 0;
+        m_lstElements.DeleteAll();
     }
 
     void CList::EmptyAll( void )
     {
-        CListNode *pNext = m_pFirst;
-        CListNode *pLast = NULL;
-
-        while ( pNext )
-        {
-            pLast = pNext;
-            pNext = pNext->GetNext();
-            pLast->Empty();
-            delete pLast;
-            pLast = NULL;
-        }
-
-        if ( pLast )
-        {
-            pLast->Empty();
-            delete pLast;
-        }
-
-        m_pFirst = NULL;
-        m_pLast = NULL;
-        m_nElements = 0;
+        m_lstElements.Clear();
     }
 
     CIterator *CList::Enumerate( void )
     {
-        return new CListIterator( this );
+        return new CListIterator( &m_lstElements );
     }
-
-} // End of namespace (IASLib)
+} // End of Namespace IASLib

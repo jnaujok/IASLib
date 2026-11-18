@@ -36,6 +36,6 @@ namespace IASLib
     };
 } // namespace IASLib
 
-#define IASLIB_THROW_SOCKET_EXCEPTION(x) {static CSocketException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
+#define IASLIB_THROW_SOCKET_EXCEPTION(x) {CSocketException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 #endif // __SOCKETEXCEPTION_H__

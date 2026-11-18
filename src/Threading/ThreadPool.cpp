@@ -144,14 +144,15 @@ namespace IASLib
 
         delete pQ;
 
-        CArray aTempThreads( m_aBusyThreads );
+        TArray<CObject *> aTempThreads;
+        for ( size_t nX = 0; nX < m_aBusyThreads.Length(); nX++ )
+            aTempThreads.Push( m_aBusyThreads.Get( nX ) );
         m_aBusyThreads.EmptyAll();
         for ( size_t nX = 0; nX < aTempThreads.Length(); nX++ )
         {
-            CPooledThread *work = (CPooledThread *)aTempThreads.Get( nX );
+            CPooledThread *work = (CPooledThread *)aTempThreads[ nX ];
             work->ShutdownThread();
         }
-        aTempThreads.EmptyAll();
         
         m_mutexArray.Lock();
         for ( size_t nX = 0; nX < m_aAvailableThreads.Length(); nX ++ )

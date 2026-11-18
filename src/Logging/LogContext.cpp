@@ -88,8 +88,10 @@ namespace IASLib
 
     void CLogContext::addValue( const char *name, CArray &value )
     {
-        CArray *pushableArray = new CArray( value );
-        CContextValue *pValue = new CContextValue( name, pushableArray );
+            // The context refers to the caller's array, as it does to
+            // objects (it used to copy it, and both copies deleted the
+            // same objects).
+        CContextValue *pValue = new CContextValue( name, &value );
 
         m_hashValues.Push( name, pValue );
     }
