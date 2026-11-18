@@ -1,20 +1,20 @@
 /*
  * XML Index Class
  *
- *      This class is used to convert an XML file into an XML Index.
- * In general, this class is simply a container for XML Elements within
- * an XML file.
+ *      The top level of an XML document.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 06/15/2000
- *	Log:
- *	  $LOG$
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
 #include "XMLIndex.h"
+#include "XMLParser.h"
+#include "FileException.h"
+
+#include <memory>
 
 namespace IASLib
 {
@@ -26,154 +26,51 @@ namespace IASLib
 
     CXMLIndex::CXMLIndex( const char *strFileName, CFile *pFile )
     {
-        CFile *pXMLFile;
-
         m_strXMLFileName = strFileName;
 
-        if ( ! pFile )
+        std::unique_ptr<CFile> pOwned;
+        if ( pFile == NULL )
         {
-            pXMLFile = new CFile( m_strXMLFileName, CFile::READ );
+            try
+            {
+                pOwned.reset( new CFile( m_strXMLFileName, CFile::READ ) );
+            }
+            catch ( CFileException & )
+            {
+                return;     // a file that cannot be opened gives an empty index
+            }
+            pFile = pOwned.get();
         }
-        else
-        {
-            pXMLFile = pFile;
-        }
-
-        if ( ! pXMLFile->IsOpen() )
-        {
-            if ( ! pFile )
-                delete pXMLFile;
+        if ( ! pFile->IsOpen() )
             return;
-        }
 
-        CString strData;
-        char    achBuffer[65537];
-
-        while ( ! pXMLFile->IsEOF() )
-        {
-            int nRead;
-            nRead = pXMLFile->Read( achBuffer, 65536 );
-            achBuffer[ nRead ] = 0;
-            strData += achBuffer;
-        }
-
-        pXMLFile->Close();
-        delete pXMLFile;
-
-        while ( ( strData.GetLength() ) && ( strData.IndexOf( '<' ) != NOT_FOUND ) )
-        {
-            CXMLElement *pElement = new CXMLElement( strData );
-            m_aElements.Push( pElement );
-        }
+        std::unique_ptr<CXMLDocument> pDocument( CXMLParser::parseFile( pFile ) );
+        pFile->Close();
+        TakeFrom( *pDocument->GetIndex() );
     }
-
 
     CXMLIndex::~CXMLIndex( void )
     {
         m_aElements.DeleteAll();
     }
 
+    void CXMLIndex::Clear( void )
+    {
+        m_aElements.DeleteAll();
+    }
+
+    void CXMLIndex::TakeFrom( CXMLIndex &oOther )
+    {
+        if ( &oOther == this )
+            return;
+        for ( size_t n = 0; n < oOther.m_aElements.Length(); n++ )
+            m_aElements.Append( oOther.m_aElements.Get( n ) );
+        oOther.m_aElements.EmptyAll();
+    }
+
     CXMLChunk *CXMLIndex::GetChunk( size_t nCount ) const
     {
-        if ( nCount < GetChunkCount() )
-        {
-            return (CXMLChunk *)m_aElements[ nCount ];
-        }
-        return NULL;
-    }
-
-    CXMLElement *CXMLIndex::GetElement( size_t nCount ) const
-    {
-        CXMLChunk  *pChunk = NULL;
-
-        if ( nCount < GetElementCount() )
-        {
-            size_t      nStep = 0;
-            size_t      nFound = 0;
-
-            while ( nFound < ( nCount + 1 ) )
-            {
-               pChunk = (CXMLChunk *)m_aElements[ nStep ];
-               if ( pChunk->IsElement() )
-               {
-                  nFound++;
-               }
-               nStep++;
-            }
-        }
-        return (CXMLElement *)pChunk;
-    }
-
-    CXMLElement *CXMLIndex::GetElement( const char *strElementType, size_t nCount ) const
-    {
-        size_t          nIndex = 0;
-        CString         strEleType = strElementType;
-        CXMLElement    *pCompare;
-        CXMLChunk      *pChunk;
-
-        strEleType.Trim();
-
-        while ( nIndex < m_aElements.Length() )
-        {
-            pChunk = (CXMLChunk *)m_aElements[ nIndex ];
-            if ( pChunk->IsElement() )
-            {
-                pCompare = (CXMLElement *)pChunk;
-                if ( strEleType == pCompare->GetName() )
-                {
-                     if ( nCount > 0 )
-                     {
-                         nCount--;
-                     }
-                     else
-                     {
-                         return pCompare;
-                     }
-                }
-            }
-            nIndex++;
-        }
-
-        return NULL;
-    }
-
-    void CXMLIndex::AddElement( CXMLElement *pNew, size_t nCount )
-    {
-        if ( ( nCount == IASLib::NOT_FOUND ) || ( nCount > m_aElements.GetCount() ) )
-        {
-            m_aElements.Append( pNew );
-        }
-        else
-        {
-            m_aElements.Insert( nCount, pNew );
-        }
-    }
-
-    bool CXMLIndex::DeleteElement( size_t nCount )
-    {
-        if ( nCount < m_aElements.GetCount() )
-        {
-            m_aElements.Delete( nCount );
-            return true;
-        }
-        return false;
-    }
-
-    size_t CXMLIndex::GetElementCount( void ) const
-    {
-        size_t nCount = 0;
-        size_t nTotal = 0;
-
-        while ( nCount < m_aElements.Length() )
-        {
-            CXMLChunk *pChunk = (CXMLChunk *)m_aElements[nCount];
-            if ( pChunk->IsElement() )
-            {
-                nTotal++;
-            }
-            nCount++;
-        }
-        return nTotal;
+        return (CXMLChunk *)m_aElements.Get( nCount );
     }
 
     size_t CXMLIndex::GetChunkCount( void ) const
@@ -181,78 +78,111 @@ namespace IASLib
         return m_aElements.Length();
     }
 
+    void CXMLIndex::AddChunk( CXMLChunk *pChunk )
+    {
+        if ( pChunk != NULL )
+            m_aElements.Append( pChunk );
+    }
+
+    CXMLElement *CXMLIndex::GetElement( size_t nCount ) const
+    {
+        size_t nFound = 0;
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+        {
+            CXMLChunk *pChunk = (CXMLChunk *)m_aElements[n];
+            if ( pChunk->IsElement() && nFound++ == nCount )
+                return (CXMLElement *)pChunk;
+        }
+        return NULL;
+    }
+
+    CXMLElement *CXMLIndex::GetElement( const char *strElementType, size_t nCount ) const
+    {
+        CString strName( strElementType );
+        strName.Trim( " \t\r\n" );
+        size_t nFound = 0;
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+        {
+            CXMLChunk *pChunk = (CXMLChunk *)m_aElements[n];
+            if ( pChunk->IsElement() && strName == ((CXMLElement *)pChunk)->GetName() && nFound++ == nCount )
+                return (CXMLElement *)pChunk;
+        }
+        return NULL;
+    }
+
+    CXMLElement *CXMLIndex::GetRoot( void ) const
+    {
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+        {
+            CXMLChunk *pChunk = (CXMLChunk *)m_aElements[n];
+            if ( pChunk->IsElement() && ((CXMLElement *)pChunk)->IsPlainElement() )
+                return (CXMLElement *)pChunk;
+        }
+        return NULL;
+    }
+
+    size_t CXMLIndex::GetElementCount( void ) const
+    {
+        size_t nFound = 0;
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+            if ( ((CXMLChunk *)m_aElements[n])->IsElement() )
+                nFound++;
+        return nFound;
+    }
+
     size_t CXMLIndex::GetElementCount( const char *strElementType ) const
     {
-        size_t          nCount = 0;
-        size_t          nRetVal = 0;
-        CString         strEleType = strElementType;
-        CXMLElement    *pCompare;
-        CXMLChunk      *pChunk;
-
-        strEleType.Trim();
-
-        while ( nCount < m_aElements.Length() )
+        CString strName( strElementType );
+        strName.Trim( " \t\r\n" );
+        size_t nFound = 0;
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
         {
-            pChunk = (CXMLChunk *)m_aElements[ nCount ];
-            if ( pChunk->IsElement() )
-            {
-                pCompare = (CXMLElement *)pChunk;
-                if ( strEleType == pCompare->GetName() )
-                {
-                    nRetVal++;
-                }
-            }
-            nCount++;
+            CXMLChunk *pChunk = (CXMLChunk *)m_aElements[n];
+            if ( pChunk->IsElement() && strName == ((CXMLElement *)pChunk)->GetName() )
+                nFound++;
         }
+        return nFound;
+    }
 
-        return nRetVal;
+    void CXMLIndex::AddElement( CXMLElement *pNew, size_t nCount )
+    {
+        if ( pNew == NULL )
+            return;
+        if ( nCount == IASLib::NOT_FOUND || nCount >= m_aElements.GetCount() )
+            m_aElements.Append( pNew );
+        else
+            m_aElements.Insert( nCount, pNew );
+    }
+
+    bool CXMLIndex::DeleteElement( size_t nCount )
+    {
+        return m_aElements.Delete( nCount );
     }
 
     void CXMLIndex::AddData( CXMLData *pData )
     {
-        m_aElements.Append( pData );
-    }
-
-    size_t CXMLIndex::GetDataCount( void ) const
-    {
-        size_t nCount = 0;
-        size_t nTotal = 0;
-
-        while ( nCount < m_aElements.Length() )
-        {
-            CXMLChunk *pChunk = (CXMLChunk *)m_aElements[nCount];
-            if ( pChunk->IsData() )
-            {
-                nTotal++;
-            }
-            nCount++;
-        }
-        return nTotal;
+        if ( pData != NULL )
+            m_aElements.Append( pData );
     }
 
     CXMLData *CXMLIndex::GetData( size_t nCount ) const
     {
-        CXMLChunk  *pChunk = NULL;
-
-        if ( nCount < GetDataCount() )
+        size_t nFound = 0;
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
         {
-            size_t      nStep = 0;
-            size_t      nFound = 0;
-
-            while ( nFound < ( nCount + 1 ) )
-            {
-               pChunk = (CXMLChunk *)m_aElements[ nStep ];
-               if ( pChunk->IsData() )
-               {
-                  nFound++;
-               }
-               nStep++;
-            }
+            CXMLChunk *pChunk = (CXMLChunk *)m_aElements[n];
+            if ( pChunk->IsData() && nFound++ == nCount )
+                return (CXMLData *)pChunk;
         }
-        return (CXMLData *)pChunk;
+        return NULL;
     }
 
-
-
+    size_t CXMLIndex::GetDataCount( void ) const
+    {
+        size_t nFound = 0;
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+            if ( ((CXMLChunk *)m_aElements[n])->IsData() )
+                nFound++;
+        return nFound;
+    }
 } // namespace IASLib
-

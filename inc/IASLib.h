@@ -379,6 +379,8 @@
 #include "XML/XMLElement.h"
 #include "XML/XMLIndex.h"
 #include "XML/XMLProperty.h"
+#include "XML/XMLData.h"
+#include "XML/XMLParser.h"
 
 
 #endif // IASLIB__

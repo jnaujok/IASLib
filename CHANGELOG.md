@@ -40,6 +40,15 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `getBytes()` and `toString()` are `const`.
   - It no longer uses `TRandom`.
 - **`CStringTokenizer`:** with every delimiter counting, `"a,"` gives `"a"` and `""` (n delimiters, n + 1 tokens).
+- **XML:**
+  - Reading and writing are rewritten, keeping the classes and their methods.
+  - Entities and character references are now decoded on reading, and text and attribute values are escaped on writing (they were read and written as typed).
+  - Documents that aren't well formed are rejected with a line and column. That includes `\` escapes in attribute values, which XML doesn't have, and repeated attributes.
+  - Line breaks read as `"\n"`.
+  - Pretty-printed output no longer adds blank lines, and starts each top-level element on its own line.
+  - `CXMLData::GetData()` returns a `const CString &`.
+  - `CXMLElement( CString & )`, which parsed the start of a string, is removed.
+  - CXMLDocument and CXMLIndex can't be copied.
 - **`CMutex` can't be copied.** Copying one copied the operating system's mutex.
 - **`CMutex` is recursive on every platform.** The thread that holds it can lock it again, and must unlock it as many times. It was recursive on Windows (a kernel mutex) but not elsewhere, so code that worked on Windows deadlocked on Linux and macOS. On Windows it is now a critical section, which avoids a kernel call when the lock is free.
 
@@ -67,6 +76,13 @@ The base types and collections, reviewed one by one and cleaned up, and template
 - **`TRandom`:** `SeedFromSystem()`, and it works with the standard library's random distributions.
 - **`CVariant`:** `isEmpty()` and `isNumber()`. Its number getters convert, and read numbers from strings.
 - **`CMutexLock`:** locks a mutex for a scope.
+- **XML:**
+  - CDATA sections, DOCTYPE declarations (with simple text entities from the internal subset), and processing instructions with or without attributes.
+  - `CXMLParser` is implemented: `parseString()`, `parseFile()`, `parseStream()` and `parseSocket()`. Options set a single root, the nesting depth and the entity expansion limit.
+  - `CXMLDocument::Parse()` and `GetRoot()`.
+  - `CXMLElement`: `SetProperty()`, `HasProperty()`, `GetText()`, `GetChildText()`, `Clone()`, non-const `GetSubElement()`, the chunk accessors, and `IsDeclaration()`.
+  - `CXMLIndex::Clear()`, `TakeFrom()` and `AddChunk()`.
+- **`CException::GetMessage()`.**
 - **`CMutex::TryLock()`.**
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
@@ -141,6 +157,16 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CConnectionArray` freed memory with the wrong `delete`.
 - **Copies that freed twice:** `CLogContext::addValue( CArray & )` and the thread pool's shutdown each copied an owning array.
 - **`CStream << unsigned long`** wrote `"123ld"`. `printf` checking also found `size_t`s printed with `%d`.
+- **XML:**
+  - `&amp;`, `&lt;` and character references were never decoded, and nothing was escaped on output, so `<` or `&` in data produced XML that couldn't be read back.
+  - `</a >` (a space before `>`) was reported as mismatched.
+  - `<!--x-->` comments without a space weren't recognised.
+  - `DeleteProperty()` and `DeleteSubElement()` were declared but never defined, and `CXMLParser` had no implementation.
+  - A parse error leaked the partly built tree.
+  - `CXMLIndex( file )` used a second, string-searching parser that misread nested elements of the same name.
+  - Pretty printing put an element on the same line as a self-closing one before it.
+  - `TestXMLDocument` checked with `ASSERT`, which only prints, so it could never fail.
+- **Security:** external entities (XXE) are refused, and entity expansion ("billion laughs") is capped.
 - **Exceptions:**
   - The `IASLIB_THROW_*` macros threw a shared `static` exception, which two threads could change at once.
   - `CCollectionException` named itself `"CCollectionExcetption"`.

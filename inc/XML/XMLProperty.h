@@ -1,14 +1,11 @@
 /*
  * XML Property Class
  *
- *      This class provides a means of storing property=value pairs as
- * they are stored in XML files. This allows us to store and access
- * properties by name and get back their respective values. 
+ *      An attribute of an XML element: name="value", with the value as
+ * text (entities already replaced). Names are case sensitive.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 06/15/2000
- *	Log:
- *	  $LOG$
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -35,6 +32,8 @@ namespace IASLib
 
             const char *GetName( void ) const { return (const char *)m_strName; }
             const char *GetValue( void ) const { return (const char *)m_strValue; }
+            void        SetValue( const char *strValue ) { m_strValue = strValue; }
     };
 } // namespace IASLib
+
 #endif // IASLIB_XMLPROPERTY_H__

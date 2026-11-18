@@ -99,6 +99,7 @@ namespace IASLib
                                 DEFINE_OBJECT( CException )
 
                                 operator const char *( void ) { return (const char *) m_strExceptionMessage; }
+            const CString      &GetMessage( void ) const { return m_strExceptionMessage; }
 
             static const char  *ErrnoToText( int nErrno );
 

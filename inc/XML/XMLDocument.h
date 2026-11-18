@@ -1,19 +1,19 @@
-/**
- * @file XML Document Header file
+/*
+ * XML Document Class
  *
- * @class XML Document class
- * 
- *		This class implements a high-speed parser for XML to provide a 
- * fast and consistent means of loading an XML document from a stream.
- * Because streams can represent sockets, files, or other items, this will
- * improve the overall capability of the IAS Library versus the XML Index 
- * class which can only load files. 
- *		However, to retain compatibility, this class will actually load an
- * XML Index/Element/Property hierarchy as it runs. This should make any
- * conversion from the old system much simpler.
+ *      An XML document, read from a stream (or a string or file, through
+ * CXMLParser) and written back out. Its content is in the index
+ * (GetIndex()); GetRoot() is the root element.
  *
- *	@author Jeffrey R. Naujok
- *  @date 02/10/2006
+ *      Reading checks the document is well formed (XML 1.0): tags match
+ * and nest, attributes are quoted and not repeated, entities and
+ * character references are known, and so on; a document that is not
+ * throws a CXMLException giving the line and column. By default a
+ * document may have several root elements (as many configuration files
+ * do); CXMLParser can require exactly one.
+ *
+ *	Author: Jeffrey R. Naujok
+ *	Created: 06/15/2000
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -24,46 +24,45 @@
 
 #include "../BaseTypes/Object.h"
 #include "../Streams/Stream.h"
-#include "../Collections/Stack.h"
 #include "XMLIndex.h"
 #include "XMLElement.h"
 
 namespace IASLib
 {
-
     class CXMLDocument : public CObject
     {
         protected:
             CXMLIndex   m_xiIndex;
-            CStream    *m_pInput;
-            CStack      m_stackTags;
+
         public:
                         CXMLDocument( void );
+                            // Reads the stream (throws a CXMLException if the
+                            // document is not well formed).
                         CXMLDocument( CStream *pInput );
             virtual    ~CXMLDocument( void );
 
                         DECLARE_OBJECT(CXMLDocument,CObject);
 
+                // Replaces the content with what the stream holds; throws a
+                // CXMLException (leaving the document as it was) if it is not
+                // well formed. Returns true.
             bool        Read( CStream *pInput );
-            size_t      Write( CStream *pOutput, int indent = 0 );
+                // The same from text.
+            bool        Parse( const char *strXML, size_t nLength = NOT_FOUND );
+
+                // Writes the document (see CXMLChunk::toString()), returning
+                // how many bytes.
+            size_t      Write( CStream *pOutput, int indent = 0 ) const;
+            CString     toString( int indent = 0 ) const;
 
             CXMLIndex  *GetIndex( void ) { return &m_xiIndex; }
-
-            CString     toString( int indent = 0 );
+            const CXMLIndex *GetIndex( void ) const { return &m_xiIndex; }
+            CXMLElement *GetRoot( void ) const { return m_xiIndex.GetRoot(); }
 
         private:
-            enum TagReturns
-            {
-                OPEN_TAG,
-                SELF_CLOSE,
-                END_TAG,
-                ERROR_TAG
-            };
-
-            TagReturns  StartTag( CStream &oStream, CXMLElement *pTag );
-            TagReturns  StartProperty( CStream &oStream, CXMLElement *pTag, const CString& strName );
+                        CXMLDocument( const CXMLDocument & );
+            CXMLDocument &operator =( const CXMLDocument & );
     };
-
 }; // end of Namespace IASLib
 
 #endif // IASLIB_XMLDOCUMENT_H__

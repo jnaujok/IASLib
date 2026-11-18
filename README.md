@@ -103,7 +103,7 @@ It was years later that the movie "Sherlock Holmes", and the TV series of "Sherl
 - RFC 6962 Merkle trees with inclusion proofs.
 
 **Also included**
-- XML documents, SQLite access (with Sybase, MySQL and Oracle connectors as options), SHA-256, UUIDs and configuration files.
+- XML 1.0 documents (entities, CDATA, DOCTYPE, errors with line and column, safe against external entities), SQLite access (with Sybase, MySQL and Oracle connectors as options), SHA-256, UUIDs and configuration files.
 
 ## Platforms
 
@@ -273,7 +273,7 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 | `TestBlockchain` | SHA-256 and RFC 6962 test vectors, inclusion proofs, tamper detection, saving, and threads |
 | `TestBaseTypes` | `CObject`, `CString` (sharing, fixed buffers, numbers, searching, escaping, threads), the tokenizer, `CDataBlock`, UUIDs, ISAAC against Jenkins' test vector, and `CVariant` |
 | `TestCollections` | Every template collection against the standard library on random operations, with counted elements to catch leaks, and the classic collections |
-| `TestXMLDocument` | XML parsing and output |
+| `TestXMLDocument` | XML reading and writing, entities and CDATA, well-formedness errors with positions, XXE and entity-expansion protection, the element API, a real file, and fuzzing |
 
 The suites are run under AddressSanitizer/UndefinedBehaviorSanitizer, ThreadSanitizer and Valgrind during development:
 

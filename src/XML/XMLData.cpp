@@ -1,13 +1,10 @@
 /*
  * XML Data Class
  *
- *      This class derives from the XMLChunk type in order to store the
- * non-formatted data inside a 
+ *      The text of an XML document or element.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 03/09/2007
- *	Log:
- *	  $LOG$
  *
  * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -19,30 +16,62 @@ namespace IASLib
 {
     CXMLData::CXMLData( void )
     {
-        m_strData = "";
+        m_bCData = false;
     }
 
-    CXMLData::CXMLData( const CString &strData )
+    CXMLData::CXMLData( const CString &strData, bool bCData )
     {
         m_strData = strData;
+        m_bCData = bCData;
     }
-     
+
     CXMLData::~CXMLData( void )
     {
     }
 
-    CString CXMLData::toString(int offset, int indent ) const
+    bool CXMLData::IsWhitespace( void ) const
     {
-        CString temp = m_strData;
-        temp.Trim();
-        if (( indent > 0 ) && ( temp.GetLength() == 0 ) )
+        for ( size_t n = 0; n < m_strData.GetLength(); n++ )
         {
-            return temp;
+            char ch = m_strData[n];
+            if ( ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' )
+                return false;
+        }
+        return true;
+    }
+
+    CString CXMLData::toString( int offset, int indent ) const
+    {
+        CString strText;
+        if ( m_bCData )
+        {
+                // "]]>" cannot be in a CDATA section: split it across two.
+            CString strSafe = m_strData;
+            strSafe.Replace( "]]>", "]]]]><![CDATA[>" );
+            strText = "<![CDATA[";
+            strText += strSafe;
+            strText += "]]>";
         }
         else if ( indent > 0 )
         {
-            return temp.Pad( offset + temp.GetLength(), ' ', false ) + "\n";
+            CString strTrimmed = m_strData;
+            strTrimmed.Trim( " \t\r\n" );
+            if ( strTrimmed.IsEmpty() )
+                return CString();
+            strText = EscapeText( strTrimmed );
         }
-        return m_strData.Pad(offset + m_strData.GetLength(), ' ', false );
+        else
+        {
+            strText = EscapeText( m_strData );
+        }
+
+        if ( indent > 0 )
+        {
+            CString strLine = CString().Pad( ( offset > 0 ) ? (size_t)offset : 0 );
+            strLine += strText;
+            strLine += "\n";
+            return strLine;
+        }
+        return strText;
     }
 } // namespace IASLib

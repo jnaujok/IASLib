@@ -1,24 +1,25 @@
-/**
- * @file XML Parser Header file
+/*
+ * XML Parser Class
  *
- * @class XML Parser class
- * 
- *		This class implements a high-speed parser for XML to provide a 
- * fast and consistent means of loading an XML document from a multitude 
- * of sources. Internally, the parser will convert the source to a stream
- * for use. Streams can represent sockets, files, or other items, this will
- * improve the overall capability of the IAS Library versus the XML Index 
- * class which can only load files. 
- *		However, to retain compatibility, this class will actually load an
- * XML Index/Element/Property hierarchy as it runs. This should make any
- * conversion from the old system much simpler.
- *      As a builder class, most of the functions of this class are static
- * and don't require an instance to be created.
+ *      Reads XML 1.0 into a CXMLIndex (or a new CXMLDocument): elements,
+ * attributes, text, CDATA sections, comments, processing instructions,
+ * the XML declaration and a DOCTYPE. Text and attribute values have the
+ * predefined entities (&lt; &gt; &amp; &quot; &apos;) and character
+ * references (&#65; &#x41;) replaced, along with general entities
+ * declared in the DOCTYPE's internal subset (<!ENTITY name "text">),
+ * whose text is used as text (not parsed for markup). External entities
+ * are refused, and entity expansion is limited, so a document cannot
+ * read files or grow without bound. Line breaks are read as "\n", and
+ * attribute values have tabs and line breaks turned into spaces, as XML
+ * requires. Input is UTF-8 (a UTF-8 byte-order mark is skipped).
  *
- *	@author Jeffrey R. Naujok
- *  @date 04/16/2019
+ *      An error throws a CXMLException whose message gives the line and
+ * column ("line 3, column 7: ...").
  *
- * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
+ *	Author: Jeffrey R. Naujok
+ *	Created: 06/15/2000 (rewritten 11/18/2026)
+ *
+ * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
@@ -26,28 +27,57 @@
 #define IASLIB_XMLPARSER_H__
 
 #include "XMLDocument.h"
+#include "../Files/File.h"
+#ifdef IASLIB_NETWORKING__
 #include "../Sockets/Socket.h"
+#endif
 
 namespace IASLib
 {
-
     class CXMLParser : public CObject
     {
         public:
-                        CXMLParser( void );
-            virtual    ~CXMLParser( void );
+            static const size_t DEFAULT_MAX_DEPTH = 256;
+            static const size_t DEFAULT_MAX_ENTITY_EXPANSION = 1024 * 1024;
 
-                        DECLARE_OBJECT(CXMLParser,CObject);
+        protected:
+            bool            m_bSingleRoot;
+            size_t          m_nMaxDepth;
+            size_t          m_nMaxEntityExpansion;
 
+        public:
+                            CXMLParser( void );
+            virtual        ~CXMLParser( void );
+
+                            DECLARE_OBJECT(CXMLParser,CObject);
+
+                // Whether a document must have exactly one root element (the
+                // XML rule; off by default, for files of several).
+            void            SetSingleRoot( bool bSingleRoot ) { m_bSingleRoot = bSingleRoot; }
+                // How deeply elements may nest.
+            void            SetMaxDepth( size_t nMaxDepth ) { m_nMaxDepth = nMaxDepth; }
+                // How many characters entity references may produce in all.
+            void            SetMaxEntityExpansion( size_t nMax ) { m_nMaxEntityExpansion = nMax; }
+
+                // Parses into oIndex, replacing what it held (it is left as
+                // it was if the text is not well formed).
+            void            Parse( const char *pData, size_t nLength, CXMLIndex &oIndex ) const;
+
+                // New documents (the caller deletes them), throwing a
+                // CXMLException if the input is not well formed or, for
+                // files, cannot be read.
             static CXMLDocument *parseFile( CFile *file );
             static CXMLDocument *parseFile( CString fileName );
             static CXMLDocument *parseString( CString xmlData );
 #ifdef IASLIB_NETWORKING__
+                // Reads from the socket until it closes.
             static CXMLDocument *parseSocket( CSocket *socket );
-#endif      
+#endif
             static CXMLDocument *parseStream( CStream *stream );
-    };
 
+                // Everything left in a stream.
+            static CString  ReadAll( CStream *pStream );
+    };
 }; // end of Namespace IASLib
 
 #endif // IASLIB_XMLPARSER_H__
