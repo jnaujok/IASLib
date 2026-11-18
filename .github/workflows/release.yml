@@ -59,6 +59,18 @@ jobs:
           git tag -a "$TAG" -m "IASLib $VERSION"
           git push origin "refs/tags/$TAG"
 
+      - name: Build the documentation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen graphviz \
+            texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-plain-generic make zip
+          mkdir -p build/docs
+          doxygen Doxyfile
+          make -C build/docs/latex > build/docs/latex-build.log 2>&1 || { tail -60 build/docs/latex-build.log; exit 1; }
+          cp build/docs/latex/refman.pdf "IASLib-$VERSION-reference.pdf"
+          (cd build/docs && zip -q -r "../../IASLib-$VERSION-docs-html.zip" html)
+
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -66,4 +78,6 @@ jobs:
           gh release create "$TAG" \
             --title "IASLib $VERSION" \
             --notes-file notes.md \
-            --verify-tag
+            --verify-tag \
+            "IASLib-$VERSION-docs-html.zip" \
+            "IASLib-$VERSION-reference.pdf"

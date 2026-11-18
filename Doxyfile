@@ -20,6 +20,9 @@ RECURSIVE              = YES
 EXCLUDE_PATTERNS       = */IASLibConfig.h.in
 USE_MDFILE_AS_MAINPAGE = README.md
 MARKDOWN_SUPPORT       = YES
+# GitHub-style heading anchors, so the README's table of contents links work
+# (Doxygen 1.11 and later; older versions warn and ignore it).
+MARKDOWN_ID_STYLE      = GITHUB
 
 # Comments: /** ... */ and /// blocks; the first sentence is the brief.
 JAVADOC_AUTOBRIEF      = YES
@@ -97,5 +100,5 @@ CALL_GRAPH             = NO
 CALLER_GRAPH           = NO
 DOT_IMAGE_FORMAT       = svg
 INTERACTIVE_SVG        = NO
-DOT_GRAPH_MAX_NODES    = 60
+DOT_GRAPH_MAX_NODES    = 120
 DOT_MULTI_TARGETS      = YES

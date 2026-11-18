@@ -4,9 +4,9 @@ All notable changes to IASLib are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/) from 2.5.0 on.
 
-## [Unreleased] — 3.0 in progress
+## [3.0.0] — 2026-11-18
 
-The base types and collections, reviewed one by one and cleaned up, and template versions of every collection.
+Every folder of the library reviewed and brought up to date. The base types and collections were cleaned up, and every collection got a template version. The stubs are filled in: the memory manager, a resource archive and manager, memory-mapped files, an HTTP client, SMTP mail, and the SQLite driver's updatable cursors. Sockets support IPv6. Every public class, method and field has Doxygen documentation, and the build publishes it as HTML and PDF.
 
 ### ⚠️ Breaking changes
 
@@ -453,6 +453,17 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CCollectionException` named itself `"CCollectionExcetption"`, and `CXMLException` `"CXMLExcetption"`.
   - `CStringException` registered `CObject` as its parent class; its and `CXMLException`'s number constructors left "Unknown Exception" on the call stack.
   - `CFileException`'s `EOVERFLOW` message was behind a misspelt `IASLIB_SUN_` and never compiled.
+
+### Build and CI
+
+- **CMake:**
+  - The version is 3.0.0, and `IASLibConfig.h` gains `IASLib_VERSION_PATCH` and `IASLib_VERSION_STRING`.
+  - The `IASLib` target carries its include directories and feature macros as PUBLIC usage requirements, so a project using `add_subdirectory()` or `FetchContent` gets them by linking to it.
+  - The tests are built only when IASLib is the top-level project (`IASLIB_BUILD_TESTS`).
+- **Documentation:**
+  - A `Doxyfile` documents every public header, with `docs/Architecture.md` (mermaid diagrams) as an extra page.
+  - The *Documentation* workflow builds the HTML site and a PDF on every push and publishes them as the `IASLib-documentation` artifact (HTML zip, PDF and the warnings log). Releases attach both.
+- **The handler macros** (`IASLIB_SET_SIP_HANDLER`, `IASLIB_DEFINE_HTTP_HANDLER`) work outside `namespace IASLib`.
 
 ## [2.5.0] — 2026-11-17
 
