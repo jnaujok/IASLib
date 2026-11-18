@@ -1,12 +1,19 @@
 name: Release
 
-# Pushing a tag such as v2.5.0 creates a GitHub release for it, with that
-# version's section of CHANGELOG.md as the release notes.
+# Creates a GitHub release with that version's section of CHANGELOG.md as the
+# release notes, either when a tag such as v2.5.0 is pushed, or when the
+# workflow is run by hand with a version: then it also creates the tag, on
+# the commit it runs on.
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, such as 2.5.0 (tagged v2.5.0)'
+        required: true
 
 permissions:
   contents: write
@@ -17,23 +24,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Work out the tag
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="v${INPUT_VERSION#v}"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          case "$tag" in
+            v[0-9]*) ;;
+            *) echo "::error::Not a version tag: $tag"; exit 1 ;;
+          esac
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "VERSION=${tag#v}" >> "$GITHUB_ENV"
+
       - name: Extract the release notes from CHANGELOG.md
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
+          awk -v v="$VERSION" '
             /^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } }
             found { print }
           ' CHANGELOG.md > notes.md
           if [ ! -s notes.md ]; then
-            echo "::error::CHANGELOG.md has no section for $version"
+            echo "::error::CHANGELOG.md has no section for $VERSION"
             exit 1
           fi
+
+      - name: Create the tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "IASLib $VERSION"
+          git push origin "refs/tags/$TAG"
 
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "IASLib ${GITHUB_REF_NAME#v}" \
+          gh release create "$TAG" \
+            --title "IASLib $VERSION" \
             --notes-file notes.md \
             --verify-tag
