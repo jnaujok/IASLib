@@ -1,0 +1,215 @@
+/**
+ * @file Sjson.h
+ * @brief CSjson: compact binary encoding of JSON (SJSON packets).
+ *
+ *  SJSON packs a JSON document into a bitstream using a dictionary of field
+ * names, tight number and string encodings and, optionally, a schema and a
+ * stream mode that remembers recent values. It is wire-compatible with the
+ * reference Python library (https://github.com/jnaujok/sjson): packets from
+ * either decode in the other.
+ *
+ *  A packet:
+ *
+ * | field | description |
+ * |:------|:------------|
+ * | 16 bits | sender id |
+ * | 4 bits | packet version (4) |
+ * | 3 bits | flags: schema fingerprint follows, schema-encoded data, stream mode |
+ * | 8 + 3 bits | stream mode only: sequence number and cache width |
+ * | 32 bits | schema or dictionary fingerprint, only when flagged |
+ * | NybbleField | data length in bits |
+ * | ... | data |
+ * | 32 bits | CRC-32 of the zero-padded bytes of everything above |
+ *
+ *  Each receiver keeps a dictionary per sender. A receiver that meets a tag
+ * it does not know gets SJSON_ERROR_UNKNOWN_TAG from decode(); it asks the
+ * sender for the missing entries (a NAK, answered by nakDictionary()) and
+ * decodes the same packet again after loadDictionary().
+ *
+ * @code
+ *     CSjson sender( 1 ), receiver( 2 );
+ *     std::vector<unsigned char> packet;
+ *     sender.encode( *pDocument, packet );
+ *     CJsonNode *pCopy = receiver.decode( packet.data(), packet.size() );
+ *     if ( pCopy == NULL && receiver.lastError() == SJSON_ERROR_UNKNOWN_TAG )
+ *     {
+ *         std::vector<unsigned char> update = sender.nakDictionary( 1,
+ *             receiver.lastKnownTag( 1 ), receiver.lastKnownValue( 1 ) );
+ *         receiver.loadDictionary( update.data(), update.size() );
+ *         pCopy = receiver.decode( packet.data(), packet.size() );
+ *     }
+ * @endcode
+ *
+ *	Author: Jeffrey R. Naujok
+ *	Created: 11/18/2026
+ *	Log:
+ *	  $LOG$
+ *
+ * Copyright (C) 2026, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
+ */
+
+#ifndef IASLIB_SJSON_H__
+#define IASLIB_SJSON_H__
+
+#ifdef IASLIB_SJSON_SUPPORT__
+
+#include "SjsonBits.h"
+#include "SjsonDictionary.h"
+#include "SjsonStream.h"
+
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace IASLib
+{
+    class CJsonNode;
+    class CSjsonSchemaCodec;
+
+        /// Encodes JSON trees into SJSON packets and decodes them.
+        ///
+        /// One CSjson is one endpoint: it sends with its own sender id and
+        /// receives from any number of senders. Not thread-safe: use one per
+        /// thread, or lock around it.
+    class CSjson
+    {
+        public:
+                /// A parsed packet header.
+            struct Header
+            {
+                unsigned            nSenderId;      ///< The sender.
+                unsigned            nVersion;       ///< The packet version.
+                unsigned            nFlags;         ///< FLAG_ bits.
+                bool                bFingerprint;   ///< Whether nFingerprint is present.
+                unsigned            nFingerprint;   ///< The schema or dictionary fingerprint.
+                bool                bSequence;      ///< Stream mode: whether nSequence is present.
+                unsigned            nSequence;      ///< Stream mode: the sequence number (0 resets).
+                unsigned            nCacheWidth;    ///< Stream mode: the cache width.
+                size_t              nDataLength;    ///< Data bits.
+                size_t              nHeaderLength;  ///< Header bits.
+                    /// Header plus data, in bits (the CRC is not included).
+                size_t              messageLength( void ) const { return nHeaderLength + nDataLength; }
+            };
+
+            static const unsigned   VERSION = 4;
+            static const unsigned   FLAG_SCHEMA = 1;            ///< A fingerprint follows.
+            static const unsigned   FLAG_SCHEMA_ENCODED = 2;    ///< The data is schema-encoded.
+            static const unsigned   FLAG_STATEFUL = 4;          ///< Stream mode.
+            static const int        TEXT_LEVEL = 19;            ///< Default zstd level for the text channel.
+            static const int        TEXT_WINDOW_LOG = 20;       ///< Default zstd window (2^20 = 1 MiB) for stream mode.
+
+                /// An endpoint sending as nSenderId (16 bits). bStateful turns
+                /// on stream mode for links that deliver packets in order; each
+                /// field then remembers 2^nCacheWidth recent values.
+            explicit                CSjson( unsigned nSenderId, bool bStateful = false, unsigned nCacheWidth = 3 );
+                                   ~CSjson( void );
+
+            unsigned                senderId( void ) const { return m_nSenderId; }
+            bool                    stateful( void ) const { return m_bStateful; }
+
+                /// @name Pre-loaded dictionaries
+                ///@{
+                /// Sends with a copy of dictionary's pre-loaded entries (from a
+                /// schema or a compiled dictionary), and registers it.
+            void                    setDictionary( const CSjsonDictionary &dictionary );
+                /// Lets this endpoint decode packets that name dictionary's
+                /// fingerprint; returns the fingerprint.
+            unsigned                registerDictionary( const CSjsonDictionary &dictionary );
+                ///@}
+
+                /// Use the schema-driven encoding when the dictionary has a
+                /// schema and a document fits it (the default).
+            void                    setSchemaEncoding( bool bOn ) { m_bSchemaEncoding = bOn; }
+                /// Allow the LZ4 string form (only used if liblz4 was found).
+            void                    setLz4( bool bOn ) { m_bLz4 = bOn; }
+                /// The zstd level for the text channel (1 to 22; default 19).
+            void                    setTextLevel( int nLevel ) { m_nTextLevel = nLevel; }
+                /// The zstd window for stream mode, as a power of two (10 to
+                /// 27; default 20). A stream's compressor needs roughly
+                /// 18 * 2^nWindowLog bytes: about 19 MB at the default, 4 MB at
+                /// 17 and 90 MB at 23 (zstd's own default, which the Python
+                /// library uses). Decoders accept any window either side uses.
+            void                    setTextWindowLog( int nWindowLog ) { m_nTextWindowLog = nWindowLog; }
+
+                /// Encodes document into packet (zero-padded bytes). Returns
+                /// false (see lastError()) if it cannot be encoded. pBits, if
+                /// given, receives the packet length in bits.
+            bool                    encode( const CJsonNode &document, std::vector<unsigned char> &packet, size_t *pBits = NULL );
+                /// Decodes a packet; the caller owns the result. NULL on error,
+                /// with lastError() saying why. The data may carry padding.
+            CJsonNode              *decode( const unsigned char *pData, size_t nLength );
+
+            SjsonError              lastError( void ) const { return m_eError; }
+            const std::string      &lastErrorText( void ) const { return m_strError; }
+
+                /// Parses a packet header; false if the data is too short or
+                /// the version is not supported.
+            static bool             readHeader( const unsigned char *pData, size_t nLength, Header &header );
+
+                /// @name Dictionary exchange
+                ///@{
+                /// Entries of nSenderId's dictionary after the given ids (the
+                /// answer to a NAK).
+            std::vector<unsigned char> nakDictionary( unsigned nSenderId, unsigned long long nLastTag, unsigned long long nLastValue = 0 );
+                /// Loads an answer to a NAK. Entries about this endpoint's own
+                /// sender id are ignored.
+            bool                    loadDictionary( const unsigned char *pData, size_t nLength );
+                /// The highest tag id known for a sender: what to NAK with.
+            unsigned long long      lastKnownTag( unsigned nSenderId ) const;
+                /// The highest interned-value id known for a sender.
+            unsigned long long      lastKnownValue( unsigned nSenderId ) const;
+                /// The dictionary for a sender (created empty if new).
+            CSjsonDictionary       &dictionary( unsigned nSenderId );
+                ///@}
+
+                /// Stream mode: forgets all cached values and everything learnt
+                /// since the pre-loaded dictionary. The next packet carries
+                /// sequence 0, which tells receivers to do the same.
+            void                    resetStream( void );
+
+                /// True if this build can compress the text channel (libzstd).
+            static bool             zstdAvailable( void );
+
+        private:
+                                    CSjson( const CSjson & );
+            CSjson                 &operator=( const CSjson & );
+
+            struct ReceiveStream
+            {
+                std::unique_ptr<CSjsonStreamState> pState;  ///< The receiver's caches.
+                unsigned            nNext;                  ///< The next sequence number.
+            };
+
+            CSjsonDictionary       &dictionaryFor( const Header &header );
+            CSjsonStreamState      *streamFor( const Header &header, std::unique_ptr<CSjsonStreamState> &pFresh );
+            CSjsonSchemaCodec      &codec( CSjsonDictionary &dictionary );
+            void                    dropCodec( const CSjsonDictionary *pDictionary );
+            std::string             compressText( CSjsonDictionary &dictionary, const std::string &strText, bool bStream );
+            std::string             readText( const Header &header, CSjsonBitReader &in, CSjsonDictionary &dictionary );
+            void                    fail( SjsonError eError, const std::string &strText );
+
+            unsigned                m_nSenderId;    ///< This endpoint's sender id.
+            bool                    m_bStateful;    ///< Stream mode.
+            unsigned                m_nCacheWidth;  ///< Stream mode cache width.
+            bool                    m_bSchemaEncoding;  ///< Use the schema codec when possible.
+            bool                    m_bLz4;         ///< Allow LZ4.
+            int                     m_nTextLevel;   ///< zstd level.
+            int                     m_nTextWindowLog;   ///< zstd window log in stream mode.
+            std::unique_ptr<CSjsonStreamState> m_pStream;   ///< The sending stream state.
+            unsigned                m_nSequence;    ///< The next sequence number to send.
+            std::map<unsigned, CSjsonDictionary *> m_mapDictionaries;  ///< Per sender (owned).
+            std::map<unsigned, CSjsonDictionary *> m_mapKnown;         ///< By fingerprint (owned).
+            std::map<unsigned, ReceiveStream> m_mapStreams;            ///< Receiving stream state per sender.
+            std::map<const CSjsonDictionary *, CSjsonSchemaCodec *> m_mapCodecs;  ///< Schema codecs (owned).
+            void                   *m_pTextOut;     ///< zstd compression stream (ZSTD_CCtx).
+            std::map<unsigned, void *> m_mapTextIn; ///< zstd decompression streams (ZSTD_DCtx) per sender.
+            std::map<unsigned, std::pair<std::pair<unsigned, std::string>, std::string> > m_mapTextRetry;  ///< Last text per sender.
+            SjsonError              m_eError;       ///< The last error.
+            std::string             m_strError;     ///< Its description.
+    };
+} // namespace IASLib
+
+#endif // IASLIB_SJSON_SUPPORT__
+#endif // IASLIB_SJSON_H__

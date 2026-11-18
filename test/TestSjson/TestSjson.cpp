@@ -1,0 +1,372 @@
+/***********************************************************************
+**  TestSjson
+**
+**  Tests for SJSON (CSjson): bit I/O and NybbleFields, Python-compatible
+**  float text, byte-for-byte agreement with packets written by the
+**  reference Python library (sjson_vectors.json, from make_vectors.py),
+**  decoding Python's tagged and stream-mode packets, round trips, the NAK
+**  exchange, stream sequencing, gaps and resets, and a fuzz pass over
+**  damaged packets.
+***********************************************************************/
+
+#include "IASLib.h"
+
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <memory>
+#include <random>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using namespace IASLib;
+
+static int g_nChecks = 0;
+static int g_nFailures = 0;
+
+#define CHECK( condition ) \
+    do { \
+        g_nChecks++; \
+        if ( ! ( condition ) ) { \
+            g_nFailures++; \
+            printf( "  FAILED %s:%d: %s\n", __FILE__, __LINE__, #condition ); \
+        } \
+    } while ( 0 )
+
+#define CHECK_EQ_STR( what, got, expected ) \
+    do { \
+        g_nChecks++; \
+        std::string _got = ( got ); \
+        std::string _exp = ( expected ); \
+        if ( _got != _exp ) { \
+            g_nFailures++; \
+            printf( "  FAILED %s:%d: %s gave [%s], expected [%s]\n", __FILE__, __LINE__, std::string( what ).c_str(), _got.substr( 0, 300 ).c_str(), _exp.substr( 0, 300 ).c_str() ); \
+        } \
+    } while ( 0 )
+
+static std::string toHex( const std::vector<unsigned char> &aBytes )
+{
+    static const char s_szDigits[] = "0123456789abcdef";
+    std::string strOut;
+    for ( size_t n = 0; n < aBytes.size(); n++ )
+    {
+        strOut += s_szDigits[ aBytes[ n ] >> 4 ];
+        strOut += s_szDigits[ aBytes[ n ] & 15 ];
+    }
+    return strOut;
+}
+
+static std::vector<unsigned char> fromHex( const std::string &strHex )
+{
+    std::vector<unsigned char> aOut;
+    for ( size_t n = 0; n + 1 < strHex.size(); n += 2 )
+        aOut.push_back( (unsigned char)strtoul( strHex.substr( n, 2 ).c_str(), NULL, 16 ) );
+    return aOut;
+}
+
+static std::string json( const CJsonNode *pNode )
+{
+    return pNode ? pNode->toJson() : std::string( "(null)" );
+}
+
+    // Decodes, answering one NAK if needed.
+static CJsonNode *decodeWithNak( CSjson &receiver, CSjson &sender, const std::vector<unsigned char> &packet )
+{
+    CJsonNode *pValue = receiver.decode( packet.data(), packet.size() );
+    if ( pValue == NULL && receiver.lastError() == SJSON_ERROR_UNKNOWN_TAG )
+    {
+        unsigned nSender = sender.senderId();
+        std::vector<unsigned char> update = sender.nakDictionary( nSender, receiver.lastKnownTag( nSender ), receiver.lastKnownValue( nSender ) );
+        receiver.loadDictionary( update.data(), update.size() );
+        pValue = receiver.decode( packet.data(), packet.size() );
+    }
+    return pValue;
+}
+
+static void testBits( void )
+{
+    printf( "Bits and NybbleFields\n" );
+    CSjsonBitWriter out;
+    out.writeBinary( "101" );
+    out.writeBits( 0x3, 2 );
+    out.writeNybble( 300 );
+    out.writeBytes( std::string( "ab" ) );
+    CHECK_EQ_STR( "bits", out.binString(), "10111" "110" "000100101100" "0110000101100010" );
+    CSjsonBitReader in( out.bytes().data(), out.bitLength() );
+    CHECK( in.readBits( 3 ) == 5 && in.readBits( 2 ) == 3 && in.readNybble() == 300 && in.readBytes( 2 ) == "ab" && in.remaining() == 0 );
+    const unsigned long long aValues[] = { 0, 15, 16, 255, 256, 4095, 4096, 65535, 65536, 1ULL << 20, 1ULL << 24, 1ULL << 28, 0xFFFFFFFFULL };
+    for ( size_t n = 0; n < sizeof( aValues ) / sizeof( aValues[ 0 ] ); n++ )
+    {
+        CSjsonBitWriter w;
+        w.writeNybble( aValues[ n ] );
+        CHECK( w.bitLength() == CSjsonBitWriter::nybbleBits( aValues[ n ] ) );
+        CSjsonBitReader r( w.bytes().data(), w.bitLength() );
+        CHECK( r.readNybble() == aValues[ n ] );
+    }
+    bool bThrew = false;
+    try { CSjsonBitWriter w; w.writeNybble( 1ULL << 32 ); } catch ( const CSjsonException & ) { bThrew = true; }
+    CHECK( bThrew );
+    bThrew = false;
+    try { CSjsonBitReader r( out.bytes().data(), 4 ); r.readBits( 5 ); } catch ( const CSjsonException & ) { bThrew = true; }
+    CHECK( bThrew );
+}
+
+static void testFloatRepr( const CJsonNode &vectors )
+{
+    printf( "Python float text\n" );
+    const CJsonNode &list = vectors.path( "float_reprs" );
+    int nBad = 0;
+    for ( int n = 0; n < list.size(); n++ )
+    {
+        std::vector<unsigned char> aBits = fromHex( list.path( n ).path( 0 ).asText().c_str() );
+        unsigned long long u = 0;
+        for ( size_t k = 0; k < 8; k++ )
+            u = ( u << 8 ) | aBits[ k ];
+        double d;
+        memcpy( &d, &u, sizeof( d ) );
+        std::string strExpected = list.path( n ).path( 1 ).textString();
+        std::string strGot = SjsonUtil::floatRepr( d );
+        if ( strGot != strExpected && nBad++ < 5 )
+            printf( "    repr mismatch: %s vs Python %s\n", strGot.c_str(), strExpected.c_str() );
+    }
+    g_nChecks++;
+    if ( nBad )
+        g_nFailures++;
+    printf( "    %d values, %d mismatches\n", list.size(), nBad );
+    CHECK_EQ_STR( "-0.0", SjsonUtil::floatRepr( -0.0 ), "-0.0" );
+    CHECK_EQ_STR( "inf", SjsonUtil::floatRepr( HUGE_VAL ), "inf" );
+}
+
+static void testPythonVectors( const CJsonNode &vectors, const char *pszSet, bool bExact )
+{
+    printf( "Python vectors: %s\n", pszSet );
+    const CJsonNode &sets = vectors.path( pszSet );
+    unsigned nSender = (unsigned)vectors.path( "sender_id" ).asInt();
+    for ( int s = 0; s < sets.size(); s++ )
+    {
+        const CJsonNode &set = sets.path( s );
+        std::string strName = set.path( "name" ).textString();
+        const CJsonNode &documents = set.path( "documents" );
+        const CJsonNode &packets = set.path( "packets" );
+        int nSame = 0, nDecoded = 0, nRoundTrip = 0;
+
+            // 1. C++ writes the same bytes as Python.
+        if ( bExact )
+        {
+            CSjson sender( nSender );
+            sender.setLz4( false );
+            for ( int n = 0; n < documents.size(); n++ )
+            {
+                std::vector<unsigned char> packet;
+                CHECK( sender.encode( documents.path( n ), packet ) );
+                std::string strExpected = packets.path( n ).textString();
+                if ( toHex( packet ) == strExpected )
+                    nSame++;
+                else if ( nSame + 1 >= n )
+                    CHECK_EQ_STR( strName + " #" + std::to_string( n ) + " " + json( &documents.path( n ) ).substr( 0, 80 ), toHex( packet ), strExpected );
+            }
+            std::vector<unsigned char> nak = sender.nakDictionary( nSender, 0, 0 );
+            CHECK_EQ_STR( strName + " NAK", toHex( nak ), set.path( "nak" ).textString() );
+        }
+
+            // 2. C++ reads Python's packets.
+        CSjson receiver( 2 );
+        if ( set.path( "nak" ).isTextual() )
+        {
+            std::vector<unsigned char> nak = fromHex( set.path( "nak" ).textString() );
+            CHECK( receiver.loadDictionary( nak.data(), nak.size() ) );
+        }
+        for ( int n = 0; n < documents.size(); n++ )
+        {
+            std::vector<unsigned char> packet = fromHex( packets.path( n ).textString() );
+            std::unique_ptr<CJsonNode> pValue( receiver.decode( packet.data(), packet.size() ) );
+            if ( pValue && SjsonCodec::sameValue( pValue.get(), &documents.path( n ) ) )
+                nDecoded++;
+            else
+            {
+                CHECK_EQ_STR( strName + " decode #" + std::to_string( n ) + " (" + receiver.lastErrorText() + ")", json( pValue.get() ), json( &documents.path( n ) ) );
+                break;
+            }
+        }
+
+            // 3. C++ round trip, with LZ4 if available.
+        CSjson sender( 5, std::string( pszSet ) == "stream" );
+        CSjson other( 6 );
+        for ( int n = 0; n < documents.size(); n++ )
+        {
+            std::vector<unsigned char> packet;
+            CHECK( sender.encode( documents.path( n ), packet ) );
+            std::unique_ptr<CJsonNode> pValue( decodeWithNak( other, sender, packet ) );
+            if ( pValue && SjsonCodec::sameValue( pValue.get(), &documents.path( n ) ) )
+                nRoundTrip++;
+            else
+            {
+                CHECK_EQ_STR( strName + " round trip #" + std::to_string( n ) + " (" + other.lastErrorText() + ")", json( pValue.get() ), json( &documents.path( n ) ) );
+                break;
+            }
+        }
+        g_nChecks += 2;
+        if ( nDecoded != documents.size() ) g_nFailures++;
+        if ( nRoundTrip != documents.size() ) g_nFailures++;
+        printf( "    %-22s %3d documents: %s%d decoded, %d round trips\n", strName.c_str(), documents.size(),
+                bExact ? ( std::to_string( nSame ) + " identical bytes, " ).c_str() : "", nDecoded, nRoundTrip );
+    }
+}
+
+static CJsonNode *document( int n )
+{
+    CObjectNode *pObject = new CObjectNode();
+    pObject->put( "id", "6f9619ff-8b86-4011-b42d-00c04fc964ff" );
+    pObject->put( "seq", n );
+    pObject->put( "lat", 0.6 + n * 1e-5 );
+    pObject->put( "label", n % 2 ? "ALPHA ONE" : "BRAVO TWO" );
+    pObject->put( "note", std::string( "a fairly long free-text note number " ) + std::to_string( n % 3 ) );
+    pObject->put( "url", std::string( "https://example.com/items/" ) + std::to_string( n % 4 ) );
+    pObject->putArray( "flags" )->add( true )->add( n % 2 == 0 )->addNull();
+    return pObject;
+}
+
+static void testStreamMode( void )
+{
+    printf( "Stream mode\n" );
+    for ( unsigned nWidth = 0; nWidth <= 5; nWidth += 5 )
+    {
+        CSjson sender( 7, true, nWidth ), receiver( 8 ), plain( 9 );
+        size_t nStream = 0, nPlain = 0;
+        bool bOk = true;
+        for ( int n = 0; n < 60; n++ )
+        {
+            std::unique_ptr<CJsonNode> pDoc( document( n ) );
+            std::vector<unsigned char> packet, other;
+            sender.encode( *pDoc, packet );
+            plain.encode( *pDoc, other );
+            nStream += packet.size();
+            nPlain += other.size();
+            std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size() ) );
+            bOk = bOk && pBack && SjsonCodec::sameValue( pBack.get(), pDoc.get() );
+        }
+        CHECK( bOk );
+        CHECK( nStream * 2 < nPlain );
+        printf( "    width %u: %zu bytes in stream mode, %zu without\n", nWidth, nStream, nPlain );
+    }
+
+        // A lost packet is detected; a reset recovers (even after a new name).
+    CSjson sender( 7, true ), receiver( 8 );
+    std::vector<unsigned char> packet;
+    std::unique_ptr<CJsonNode> p0( document( 0 ) ), p1( document( 1 ) ), p2( document( 2 ) );
+    sender.encode( *p0, packet );
+    std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size() ) );
+    CHECK( pBack != NULL );
+    static_cast<CObjectNode *>( p1.get() )->put( "brand new", 1 );
+    sender.encode( *p1, packet );   // lost
+    sender.encode( *p2, packet );
+    pBack.reset( receiver.decode( packet.data(), packet.size() ) );
+    CHECK( pBack == NULL && receiver.lastError() == SJSON_ERROR_STREAM_GAP );
+    sender.resetStream();
+    static_cast<CObjectNode *>( p2.get() )->put( "brand new", 2 );
+    sender.encode( *p2, packet );
+    pBack.reset( receiver.decode( packet.data(), packet.size() ) );
+    CHECK( pBack && SjsonCodec::sameValue( pBack.get(), p2.get() ) );
+
+        // The sequence number wraps.
+    CSjson wrapSender( 7, true ), wrapReceiver( 8 );
+    bool bOk = true;
+    for ( int n = 0; n < 600 && bOk; n++ )
+    {
+        CObjectNode doc;
+        doc.put( "i", n );
+        wrapSender.encode( doc, packet );
+        pBack.reset( wrapReceiver.decode( packet.data(), packet.size() ) );
+        bOk = pBack && SjsonCodec::sameValue( pBack.get(), &doc );
+    }
+    CHECK( bOk );
+}
+
+static void testFuzz( void )
+{
+    printf( "Fuzz\n" );
+    std::mt19937 rng( 7 );
+    int nDecoded = 0, nRejected = 0;
+        // (Stream senders are fewer: each new one sets up a zstd context.)
+    for ( int round = 0; round < 3000; round++ )
+    {
+        bool bStream = round % 10 == 1;
+        CSjson sender( 1, bStream ), receiver( 2 );
+        std::unique_ptr<CJsonNode> pDoc( document( round ) );
+        std::vector<unsigned char> packet;
+        sender.encode( *pDoc, packet );
+        size_t nFlips = 1 + rng() % 4;
+        for ( size_t k = 0; k < nFlips; k++ )
+            packet[ rng() % packet.size() ] ^= (unsigned char)( 1 << ( rng() % 8 ) );
+        if ( rng() % 4 == 0 )
+            packet.resize( rng() % packet.size() );
+        std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size() ) );
+        if ( pBack ) nDecoded++; else nRejected++;
+    }
+    CHECK( nRejected > 2500 );     // the CRC catches nearly all damage
+    printf( "    3000 damaged packets: %d rejected, %d decoded (CRC collisions)\n", nRejected, nDecoded );
+
+        // Damage behind a valid CRC: the decoder itself must reject or cope,
+        // never crash or hang.
+    int nHandled = 0;
+    for ( int round = 0; round < 20000; round++ )
+    {
+        bool bStream = round % 40 == 1;
+        CSjson sender( 1, bStream ), receiver( 2 );
+        std::unique_ptr<CJsonNode> pDoc( document( round ) );
+        std::vector<unsigned char> packet;
+        size_t nBits = 0;
+        sender.encode( *pDoc, packet, &nBits );
+        CSjson::Header header;
+        CHECK( CSjson::readHeader( packet.data(), packet.size(), header ) );
+        size_t nMessage = header.messageLength();
+        size_t nFlips = 1 + rng() % 6;
+        for ( size_t k = 0; k < nFlips; k++ )
+        {
+            size_t nBit = header.nHeaderLength + rng() % ( nMessage - header.nHeaderLength );
+            packet[ nBit / 8 ] ^= (unsigned char)( 0x80 >> ( nBit % 8 ) );
+        }
+            // Re-sign: CRC of the zero-padded message bytes.
+        std::vector<unsigned char> aMessage( packet.begin(), packet.begin() + (long)( ( nMessage + 7 ) / 8 ) );
+        if ( nMessage & 7 )
+            aMessage.back() &= (unsigned char)( 0xFF << ( 8 - ( nMessage & 7 ) ) );
+        unsigned nCrc = SjsonUtil::crc32( aMessage.data(), aMessage.size() );
+        for ( int k = 0; k < 32; k++ )
+        {
+            size_t nBit = nMessage + (size_t)k;
+            unsigned char byMask = (unsigned char)( 0x80 >> ( nBit % 8 ) );
+            if ( ( nCrc >> ( 31 - k ) ) & 1 ) packet[ nBit / 8 ] |= byMask; else packet[ nBit / 8 ] &= (unsigned char)~byMask;
+        }
+        std::unique_ptr<CJsonNode> pBack( receiver.decode( packet.data(), packet.size() ) );
+        nHandled++;
+    }
+    CHECK( nHandled == 20000 );
+    printf( "    20000 damaged packets behind a valid CRC handled\n" );
+}
+
+int main( void )
+{
+    printf( "SJSON (LZ4 %s, zstd %s)\n", SjsonUtil::lz4Available() ? "on" : "off", CSjson::zstdAvailable() ? "on" : "off" );
+    std::ifstream file( "sjson_vectors.json", std::ios::binary );
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::unique_ptr<CJsonNode> pVectors( CJsonParser::parse( buffer.str() ) );
+    CHECK( pVectors != NULL );
+
+    testBits();
+    if ( pVectors )
+    {
+        testFloatRepr( *pVectors );
+        testPythonVectors( *pVectors, "exact", true );
+        testPythonVectors( *pVectors, "lz4", false );
+        if ( CSjson::zstdAvailable() )
+            testPythonVectors( *pVectors, "stream", false );
+    }
+    testStreamMode();
+    testFuzz();
+
+    printf( "\n%d checks, %d failures\n", g_nChecks, g_nFailures );
+    return g_nFailures == 0 ? 0 : 1;
+}

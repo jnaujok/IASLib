@@ -47,6 +47,13 @@ if(USE_JSON)
     add_test(test_json TestJson)
 endif()
 
+if(USE_JSON AND USE_SJSON)
+    configure_file(TestSjson/sjson_vectors.json sjson_vectors.json COPYONLY)
+    add_executable(TestSjson TestSjson/TestSjson.cpp)
+    target_link_libraries(TestSjson IASLib)
+    add_test(test_sjson TestSjson)
+endif()
+
 if(USE_NETWORK AND OPENSSL_FOUND)
     add_executable(TestTls TestTls/TestTls.cpp)
     target_link_libraries(TestTls IASLib)
