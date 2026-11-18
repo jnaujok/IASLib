@@ -1,65 +1,92 @@
-/***********************************************************************
-**  Resource Class
-**
-**  Description:
-**      This class gives us access to a resource contained inside of 
-** the compiled resource file. It also is used when the resource file
-** is generated. A resource is normally returned to the program from
-** a call to the Resource File class.
-**
-**      Note that typed resources are derived from this class.
-**
-**  $AUTHOR$
-**  $LOG$
-**
-***********************************************************************/
+/**
+ *  Resource
+ *
+ *      One resource: a block of data with a folder tag and a resource tag
+ * (together its ID), a name, a type number for the program's own use, and
+ * when and by whom it was last changed. Resources are kept in a
+ * CResourceFile archive: Load() reads one, Save() writes one.
+ *
+ *	Author: Jeffrey R. Naujok
+ *	Created: 2007
+ *	Log:
+ *	  $LOG$
+ *
+ * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
+ */
 
 #ifndef IASLIB_RESOURCE_H__
 #define IASLIB_RESOURCE_H__
 
+#include <stdint.h>
+#include <vector>
 #include "../BaseTypes/Object.h"
-#include "../BaseTypes/IASLib_String.h"
+#include "../BaseTypes/String_.h"
 #include "../BaseTypes/Date.h"
-#include "ResourceFile.h"
+#include "ResourceIndex.h"
 
 namespace IASLib
 {
+    class CResourceFile;
+
     class CResource : public CObject
     {
         protected:
-            union
-            {
-                struct
-                {
-                    short int       m_nFolderTag;
-                    short int       m_nResourceTag;
-                };
-                long int            m_nResourceID;
-            } m_ID;
+            short                   m_nFolder;
+            short                   m_nResource;
             CString                 m_strName;
             CDate                   m_dttLastModified;
             CString                 m_strModifiedBy;
-            long                    m_nDataLength;
             int                     m_nType;
-            long                    m_nReserved;
-            bool                    m_bCompressed;
-            long                    m_nCompressedLength;
-            void                   *m_pData;
+            std::vector<unsigned char> m_aData;
 
         public:
                                     DEFINE_OBJECT(CResource);
 
                                     CResource( void );
-                                    CResource( short int nFolder, short int nResource );
-                                    CResource( short int nFolder, short int nResource, const char *strName, const char *strModifier, int nType, const char *strFilename );
-
+                                    CResource( short nFolder, short nResource );
+                                    // With the data read from strFilename
+                                    // (none if it cannot be read: see
+                                    // LoadData()).
+                                    CResource( short nFolder, short nResource, const char *strName, const char *strModifier, int nType, const char *strFilename );
+                                    CResource( const CResource &oSource );
+            CResource              &operator =( const CResource &oSource );
             virtual                ~CResource( void );
 
-            virtual bool            Load( short int nFolder, short int nResource );
-            virtual bool            Save( void );
+                // Reads the resource with these tags from the archive (false
+                // if there is none, or its data is damaged).
+            virtual bool            Load( CResourceFile &oFile, short nFolder, short nResource );
+                // Writes this resource to the archive, replacing one with the
+                // same tags.
+            virtual bool            Save( CResourceFile &oFile );
 
-            virtual long            getLength() { return m_nDataLength; }
+            short                   GetFolder( void ) const { return m_nFolder; }
+            short                   GetResource( void ) const { return m_nResource; }
+            uint32_t                GetID( void ) const { return CResourceIndexEntry::MakeID( m_nFolder, m_nResource ); }
+            void                    SetTags( short nFolder, short nResource ) { m_nFolder = nFolder; m_nResource = nResource; }
 
+            const CString          &GetName( void ) const { return m_strName; }
+            void                    SetName( const char *strName ) { m_strName = ( strName ) ? strName : ""; }
+            const CString          &GetModifiedBy( void ) const { return m_strModifiedBy; }
+            void                    SetModifiedBy( const char *strWho ) { m_strModifiedBy = ( strWho ) ? strWho : ""; }
+            const CDate            &GetLastModified( void ) const { return m_dttLastModified; }
+            void                    SetLastModified( const CDate &dttWhen ) { m_dttLastModified = dttWhen; }
+                // The program's own kind of resource. (Not GetType(), which
+                // every CObject has: the class name.)
+            int                     GetResourceType( void ) const { return m_nType; }
+            void                    SetResourceType( int nType ) { m_nType = nType; }
+
+                // The data (GetData() is NULL when there is none).
+            const unsigned char    *GetData( void ) const { return m_aData.empty() ? NULL : &m_aData[0]; }
+            size_t                  GetLength( void ) const { return m_aData.size(); }
+            virtual long            getLength() { return (long)m_aData.size(); }
+                // Replaces the data (and marks it changed now).
+            void                    SetData( const void *pData, size_t nLength );
+                // Replaces the data with a file's contents; false if it cannot
+                // be read.
+            bool                    LoadData( const char *strFilename );
+                // Writes the data to a file.
+            bool                    SaveData( const char *strFilename ) const;
     };
 } // namespace IASLib
 

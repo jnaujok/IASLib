@@ -17,6 +17,9 @@
 #include "File.h"
 #include "FileException.h"
 #include <errno.h>
+#ifdef IASLIB_WIN32__
+#include <share.h>
+#endif
 #include <iostream>
 
 #ifndef IASLIB_WIN32__
@@ -165,7 +168,10 @@ namespace IASLib
         }
 
 #ifdef IASLIB_WIN32__
-        fopen_s( &m_fpFile, m_strFileName, strMode );
+            // Shared, as fopen() is elsewhere: fopen_s() opens files that no
+            // one else can open, so a log could not be read while it was
+            // being written.
+        m_fpFile = _fsopen( m_strFileName, strMode, _SH_DENYNO );
 #else
 		m_fpFile = fopen( m_strFileName, strMode );
 #endif

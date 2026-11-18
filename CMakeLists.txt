@@ -85,6 +85,7 @@ file( GLOB NETWORK_SERVICES
         "src/NetworkServices/HTTP/Handlers/*.cpp"
         "src/NetworkServices/SIP/*.cpp"
         "src/NetworkServices/SIP/Handlers/*.cpp")
+file( GLOB RESOURCES "src/Resources/*.cpp")
 file( GLOB SOCKETS "src/Sockets/*.cpp")
 file( GLOB STATS "src/Stats/*.cpp")
 file( GLOB STATUS "src/Status/*.cpp")
@@ -111,7 +112,7 @@ set(
         ${STREAMS}
         ${THREADING}
         ${XML}
-        src/Resources/Resource.cpp)
+        ${RESOURCES})
 
 if(USE_JSON)
     list(APPEND SOURCES ${JSON})

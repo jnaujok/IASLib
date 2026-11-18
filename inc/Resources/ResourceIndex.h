@@ -1,52 +1,64 @@
-/***********************************************************************
-**  Resource Index Class
-**
-**  Description:
-**      This class gives us access to the index generated and stored in
-** a resource file. 
-**
-**      There are two different uses for this index. One is when the 
-** index is generated. In this case, the index ties individual resources 
-** and their identifiers into a map and tries to organize the index for 
-** best-speed retrieval results. In order to do this, it uses a file --
-** generated during debugging -- that shows which resources are used 
-** most often and clusters them together at the front of the file. The
-** resources used least often are clustered at the end of the file.
-**
-**      In use, the resource Index actually has the ability to write
-** this data to a file when the destructor is called, and the code
-** has been built in debugging mode.
-**
-**      The second use is to load the resource index into memory when
-** the program is actually running. This use loads and maintains the 
-** resource map, and the number of accesses to each item in the map.
-**
-**      Note that typed resources are derived from this class.
-**
-**  $AUTHOR$
-**  $LOG$
-**
-***********************************************************************/
+/**
+ *  Resource Index Entry
+ *
+ *      What a resource archive's index records about one resource: its
+ * folder and resource tags (together its ID), name, type, when and by whom
+ * it was last changed, and where its data is in the file, with the data's
+ * length and CRC-32.
+ *
+ *	Author: Jeffrey R. Naujok
+ *	Created: 2007
+ *	Log:
+ *	  $LOG$
+ *
+ * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
+ */
 
 #ifndef IASLIB_RESOURCE_INDEX_H__
 #define IASLIB_RESOURCE_INDEX_H__
 
+#include <stdint.h>
 #include "../BaseTypes/Object.h"
-#include "../BaseTypes/IASLib_String.h"
+#include "../BaseTypes/String_.h"
+#include "../BaseTypes/Date.h"
 
 namespace IASLib
 {
+        // Compression of a resource's data. Only NONE is written; an archive
+        // that names another is refused when that resource is read.
+    static const int RESFILE_COMPRESSION_NONE       = 0;
+    static const int RESFILE_COMPRESSION_DEFLATE    = 1;
+
     class CResourceIndexEntry : public CObject
     {
-        protected:
-            int         m_nResourceID;
-            CString     m_strResourceName;
-            long        m_nUsage;
-            long        m_nOffset;
         public:
+            short       m_nFolder;
+            short       m_nResource;
+            CString     m_strResourceName;
+            int         m_nType;
+            CDate       m_dttLastModified;
+            CString     m_strModifiedBy;
+            uint64_t    m_nOffset;          // of the data in the file
+            uint64_t    m_nLength;          // of the data
+            uint32_t    m_nCRC;             // CRC-32 of the data
+            int         m_nCompression;
+            long        m_nUsage;           // reads since the archive was opened
 
+                        CResourceIndexEntry( void );
+                        CResourceIndexEntry( const CResourceIndexEntry &oSource );
+            virtual    ~CResourceIndexEntry( void );
+            CResourceIndexEntry &operator =( const CResourceIndexEntry &oSource );
+
+                        DEFINE_OBJECT( CResourceIndexEntry )
+
+                // The folder and resource tags as one number.
+            uint32_t    GetID( void ) const { return MakeID( m_nFolder, m_nResource ); }
+            static uint32_t MakeID( short nFolder, short nResource )
+            {
+                return ( (uint32_t)(unsigned short)nFolder << 16 ) | (uint32_t)(unsigned short)nResource;
+            }
     };
 } // namespace IASLib
 
 #endif // IASLIB_RESOURCE_INDEX_H__
-

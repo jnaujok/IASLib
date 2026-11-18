@@ -86,6 +86,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CLogFile` and `CRotatingLogFile` take an auto-flush argument; lines at ERROR and above are always flushed. A file that cannot be opened leaves the log closed instead of throwing.
   - `CRotatingLogFile` deletes all but the newest `nFilesToKeep` files that match its template. It used to keep everything.
   - `CLogContext::getArrayValue()` returns NULL for a missing name, not a shared empty array.
+- **Resources:** `CResource::Load()` and `Save()` take the `CResourceFile` to use (they were declared without one and never defined). The compression constants are in `ResourceIndex.h`.
 - **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
 
 ### Added
@@ -159,6 +160,15 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CMemoryDebugHeap`: fenceposts, double and foreign frees, spoiling freed memory, and optional leak tracking by type, file and line, with `ReportLeaks()` and `CheckAll()`.
   - `IASLIB_NEW`, a `new` that records the file and line.
   - `TestMemory`, and a CI job for the memory manager without the debugging heap.
+- **Resource archive** (it was an empty skeleton):
+  - `CResourceFile` keeps resources in one file, found by folder and resource tags or by name, and is thread-safe.
+  - Data and index are CRC-checked. A crash part-way through a write leaves the archive as it was at the last `Flush()`.
+  - Auto-flush, or batched writes with `Flush()`. `Compact()` reclaims space left by replaced or removed resources.
+  - An LRU cache with a byte limit hands out `shared_ptr`s, so an evicted resource stays valid for whoever holds it.
+  - `CResource` holds the data, name, type, and when and by whom it was changed. It loads from and saves to files, with `Load()`/`Save()` against an archive.
+  - `CResourceDirectoryNode` and `CResourceFileNode` give a folder view.
+  - `CResourceFile::CRC32()`.
+  - `TestResources`.
 - **Stats and status:**
   - `CHistogram::GetCount()` and `GetCategoryCount()`.
   - `CCoverageMap::IsUsed()`, `GetRunCount()` and `GetFragmentation()`.
@@ -319,6 +329,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - Log messages were cut at 4096 bytes.
   - On Windows, the source file kept its whole path.
   - `CConsoleLog` did not flush its output.
+- **Files:** on Windows, `CFile` opened files with `fopen_s()`, which nothing else can open at the same time, so a log could not be read while it was being written. It opens them shared, as on other systems.
 - **Memory manager:** `MemoryManager.h` defined `new` as a macro for every file that included it, defined an inline replacement `operator delete`, and declared an allocator pointer that was never defined, so `USE_MEMORY_MANAGER` did not compile.
 - **Stats:**
   - `CHistogram`:

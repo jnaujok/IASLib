@@ -1,46 +1,41 @@
-/*
- * Resource File Node
+/**
+ *  Resource File Node
  *
- *	This class defines a file stored in the resource file. A node
- * stores the information about the file in the resource and includes
- * physical location and other information about the file within the 
- * resource file.
+ *      A resource in a view of an archive folder: its index entry.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 09/17/2004
+ *	Created: 2007
  *	Log:
  *	  $LOG$
  *
+ * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
+ * [A division of BlackStar Enterprises, LLC.]
  */
 
 #ifndef ISALIB_RESOURCEFILENODE_H__
 #define ISALIB_RESOURCEFILENODE_H__
 
-#include "../BaseTypes/Object.h"
 #include "ResourceNode.h"
-
-static const int RESFILE_COMPRESSION_NONE		= 0;
-static const int RESFILE_COMPRESSION_DEFLATE	= 1;
-
-#ifndef INT64__
-#define INT64__ long long
-#endif
+#include "ResourceIndex.h"
 
 namespace IASLib
 {
 	class CResourceFileNode : public CResourceNode
 	{
 		protected:
-			CString			m_strFileName;
-			unsigned long	m_nFileLength;
-			unsigned long	m_nCRC;
-			INT64__			m_nPhysicalOffset;
-			unsigned long	m_nPhysicalLength;
-			unsigned long	m_nPhysicalCRC;
-			bool			m_bCompressed;
-			int				m_nCompressionAlgorithm;
+			CResourceIndexEntry m_entry;
 		public:
+			CResourceFileNode( void ) {}
+			CResourceFileNode( const CResourceIndexEntry &oEntry ) : m_entry( oEntry ) {}
+			DECLARE_OBJECT( CResourceFileNode, CResourceNode );
+
+			virtual bool                IsDirectory( void ) const { return false; }
+			const CResourceIndexEntry  &GetEntry( void ) const { return m_entry; }
+			const CString              &GetName( void ) const { return m_entry.m_strResourceName; }
+			uint64_t                    GetLength( void ) const { return m_entry.m_nLength; }
+			uint32_t                    GetCRC( void ) const { return m_entry.m_nCRC; }
+			short                       GetResource( void ) const { return m_entry.m_nResource; }
+			bool                        IsCompressed( void ) const { return m_entry.m_nCompression != RESFILE_COMPRESSION_NONE; }
 	};
 } // namespace IASLib
 #endif // IASLIB_RESOURCEFILENODE_H__
-

@@ -68,7 +68,12 @@ static std::string readFile( const std::string &strPath )
     std::ifstream in( strPath.c_str(), std::ios::binary );
     std::stringstream ss;
     ss << in.rdbuf();
-    return ss.str();
+        // Log files are text: Windows ends their lines with CR LF.
+    std::string strText = ss.str(), strOut;
+    for ( size_t n = 0; n < strText.size(); n++ )
+        if ( strText[n] != '\r' )
+            strOut += strText[n];
+    return strOut;
 }
 
 static void removeFile( const char *strPath )

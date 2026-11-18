@@ -74,3 +74,7 @@ add_test(NAME test_logging COMMAND TestLogging WORKING_DIRECTORY ${CMAKE_CURRENT
 add_executable(TestMemory TestMemory/TestMemory.cpp)
 target_link_libraries(TestMemory IASLib)
 add_test(test_memory TestMemory)
+
+add_executable(TestResources TestResources/TestResources.cpp)
+target_link_libraries(TestResources IASLib)
+add_test(NAME test_resources COMMAND TestResources WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
