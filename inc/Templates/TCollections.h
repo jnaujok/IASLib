@@ -1,5 +1,6 @@
-/*
- * The template collections
+/**
+ * @file
+ * @brief The template collections.
  *
  *      TArray          a growable array
  *      TSortedArray    an array kept in order, with binary search

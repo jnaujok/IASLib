@@ -1,5 +1,6 @@
-/*
- * Stream Exception Class
+/**
+ * @file
+ * @brief Stream Exception Class.
  *
  *      This class is used for throwing whenever an exception occurs in
  * the stream handling classes. Stream exceptions can fall into multiple
@@ -22,19 +23,27 @@
 
 namespace IASLib
 {
+    /// Thrown by the stream classes, for example on a read past the end
+    /// or a write to a read-only stream.
     class CStreamException : public CException
     {
         public:
+                        /// Makes a stream exception with NORMAL severity.
+                        /// @param strMessage The message text.
                         CStreamException( const char *strMessage );
+            /// Destructor.
             virtual    ~CStreamException( void );
 
                         DECLARE_OBJECT( CStreamException,CException );
 
+            /// Throws a copy of this exception with its real type.
+            /// @throws CStreamException always.
             virtual void        Throw( void ) { throw *this; }
 
 
     };
 
+/// Throws a CStreamException with message @p x, recording the current file and line.
 #define IASLIB_THROW_STREAM_EXCEPTION(x) {CStreamException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 } // namespace IASLib
