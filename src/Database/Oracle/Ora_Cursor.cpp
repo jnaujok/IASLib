@@ -31,6 +31,38 @@ extern "C"
 
 namespace IASLib
 {
+    namespace
+    {
+            // A value for the SQL text: quoted, with quotes doubled, unless
+            // it is a number in a column that takes one. (Values went in as
+            // they were, so a quote in one broke - or rewrote - the
+            // statement.)
+        CString SqlValue( const CString &strValue, bool bQuote )
+        {
+            if ( ! bQuote && strValue.GetLength() > 0 )
+            {
+                bool bNumber = true;
+                for ( size_t n = 0; n < strValue.GetLength() && bNumber; n++ )
+                {
+                    char c = strValue[ n ];
+                    bNumber = ( c >= '0' && c <= '9' ) || c == '.' || c == '-' || c == '+' || c == 'e' || c == 'E';
+                }
+                if ( bNumber )
+                    return strValue;
+            }
+            CString strQuoted( "'" );
+            for ( size_t n = 0; n < strValue.GetLength(); n++ )
+            {
+                if ( strValue[ n ] == '\'' )
+                    strQuoted += "''";
+                else
+                    strQuoted += strValue[ n ];
+            }
+            strQuoted += "'";
+            return strQuoted;
+        }
+    }
+
         // Number of bytes to fetch on each xLOB fetch.
     #define BLOB_SIZE   1024
 
@@ -152,7 +184,7 @@ namespace IASLib
             if ( odefin( m_pCDA, (sword)nCount + 1, bindColumns[ nCount ], dsize+1, nType, -1, (sb2 *)&(aIndicators[ nCount ]), (text *)NULL, -1, -1, &(aDataLength[ nCount ] ), &(aRetCodes[ nCount ] ) ) )
             {
                 for ( nI = 0; nI <= nCount; nI++ )
-                    delete bindColumns[ nI ];
+                    delete [] bindColumns[ nI ];
                 delete [] bindColumns;
                 delete [] aDataLength;
                 delete [] aRetCodes;
@@ -169,7 +201,7 @@ namespace IASLib
         if ( oexec( m_pCDA ) )
         {
             for ( nI = 0; nI < m_nColumns; nI++ )
-                delete bindColumns[ nI ];
+                delete [] bindColumns[ nI ];
             delete [] bindColumns;
             delete [] aDataLength;
             delete [] aRetCodes;
@@ -196,7 +228,7 @@ namespace IASLib
                 CStringArray  **aaTemp = new CStringArray *[m_nRows + GROW_BY];
                 for (size_t nStep = 0; nStep < m_nRows ; nStep++ )
                     aaTemp[ nStep ] = m_aastrData[ nStep ];
-                delete m_aastrData;
+                delete [] m_aastrData;
                 m_aastrData = aaTemp;
             }
 
@@ -247,7 +279,7 @@ namespace IASLib
 	    }
 
         for ( nI = 0; nI < m_nColumns; nI++ )
-            delete bindColumns[ nI ];
+            delete [] bindColumns[ nI ];
         delete [] bindColumns;
         delete [] aDataLength;
         delete [] aRetCodes;
@@ -270,8 +302,8 @@ namespace IASLib
                 m_aastrData[nStep]->DeleteAll();
                 delete m_aastrData[ nStep ];
             }
-            delete m_aastrData;
-            delete m_anColumnWidths;
+            delete [] m_aastrData;
+            delete [] m_anColumnWidths;
             m_nRows = 0;
             m_aastrData = NULL;
             m_bValid = false;
@@ -303,14 +335,7 @@ namespace IASLib
             strDeleteCommand += m_astrHeaders[ nCount ];
             strDeleteCommand += "=";
 
-            if  ( NeedsQuotes( nCount ) )
-            {
-                strDeleteCommand += "'";
-                strDeleteCommand += m_aastrData[ m_nCurrentRow ]->Get( nCount );
-                strDeleteCommand += "'";
-            }
-            else
-                strDeleteCommand += m_aastrData[ m_nCurrentRow ]->Get( nCount );
+            strDeleteCommand += SqlValue( m_aastrData[ m_nCurrentRow ]->Get( nCount ), NeedsQuotes( nCount ) );
 
             nCount++;
             if ( nCount < m_nColumns )
@@ -319,7 +344,7 @@ namespace IASLib
             }
         }
 
-        return m_pConnection->Execute( strDeleteCommand );
+        return m_pConnection->Execute( strDeleteCommand ) ? IASLIB_DB_OK : IASLIB_DB_ERROR_BAD_QUERY;
     }
 
     int COracleCursor::InsertRow( const char *strTable )
@@ -331,6 +356,7 @@ namespace IASLib
 
         CString strInsertCommand = "insert into ";
         strInsertCommand += strTable;
+        strInsertCommand += " ( ";         // (it was missing)
         size_t nCount = 0;
 
         while ( nCount < m_nColumns )
@@ -348,14 +374,7 @@ namespace IASLib
         nCount = 0;
         while ( nCount < m_nColumns )
         {
-            if  ( NeedsQuotes( nCount ) )
-            {
-                strInsertCommand += "'";
-                strInsertCommand += m_astrNewValues[ nCount ];
-                strInsertCommand += "'";
-            }
-            else
-                strInsertCommand += m_astrNewValues[ nCount ];
+            strInsertCommand += SqlValue( m_astrNewValues[ nCount ], NeedsQuotes( nCount ) );
 
             nCount++;
             if ( nCount < m_nColumns )
@@ -365,7 +384,7 @@ namespace IASLib
         }
         strInsertCommand += ")";
 
-        return m_pConnection->Execute( strInsertCommand );
+        return m_pConnection->Execute( strInsertCommand ) ? IASLIB_DB_OK : IASLIB_DB_ERROR_BAD_QUERY;
     }
 
     int COracleCursor::UpdateRow( const char *strTable )
@@ -384,14 +403,7 @@ namespace IASLib
         {
             strUpdateCommand += m_astrHeaders[ nCount ];
             strUpdateCommand += "=";
-            if  ( NeedsQuotes( nCount ) )
-            {
-                strUpdateCommand += "'";
-                strUpdateCommand += m_astrNewValues[ nCount ];
-                strUpdateCommand += "'";
-            }
-            else
-                strUpdateCommand += m_astrNewValues[ nCount ];
+            strUpdateCommand += SqlValue( m_astrNewValues[ nCount ], NeedsQuotes( nCount ) );
 
             nCount++;
 
@@ -409,14 +421,7 @@ namespace IASLib
             strUpdateCommand += m_astrHeaders[ nCount ];
             strUpdateCommand += "=";
 
-            if  ( NeedsQuotes( nCount ) )
-            {
-                strUpdateCommand += "'";
-                strUpdateCommand += m_aastrData[ m_nCurrentRow ]->Get( nCount );
-                strUpdateCommand += "'";
-            }
-            else
-                strUpdateCommand += m_aastrData[ m_nCurrentRow ]->Get( nCount );
+            strUpdateCommand += SqlValue( m_aastrData[ m_nCurrentRow ]->Get( nCount ), NeedsQuotes( nCount ) );
 
             nCount++;
             if ( nCount < m_nColumns )
@@ -425,7 +430,7 @@ namespace IASLib
             }
         }
 
-        return m_pConnection->Execute( strUpdateCommand );
+        return m_pConnection->Execute( strUpdateCommand ) ? IASLIB_DB_OK : IASLIB_DB_ERROR_BAD_QUERY;
     }
 
 

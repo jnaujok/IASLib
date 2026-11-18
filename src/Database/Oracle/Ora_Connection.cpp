@@ -236,7 +236,7 @@ namespace IASLib
             ologof( m_pLDA );
 
             delete m_pLDA;
-            delete m_pHDA;
+            delete [] m_pHDA;
         }
         return true;
     }

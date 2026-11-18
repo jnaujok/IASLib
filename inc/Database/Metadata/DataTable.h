@@ -45,11 +45,17 @@ namespace IASLib
 
                                 DEFINE_OBJECT( CDataTable )
 
+                // The table from the definition: its columns, indexes and
+                // the <initialize> statements (one per line), in one
+                // transaction. False, with nothing left behind, if any part
+                // fails or a name in the definition is not a valid SQL name.
+                // (The commit's result was ignored, and an invalid name went
+                // into the SQL as written.)
             bool                DropTable( CConnection *pConnection );
             bool                CreateTable( CConnection *pConnection );
 
-            bool                LoadTable( const char *strTableName, CConnection *pConnection );
-            bool                LoadTable( CString strTableName, CConnection *pConnection );
+            size_t              GetFieldCount( void ) const { return m_aDataFields.Length(); }
+            size_t              GetIndexCount( void ) const { return m_aDataIndexes.Length(); }
 
             const char         *GetName( void ) const { return (const char *)m_strName; }
     };

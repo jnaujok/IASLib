@@ -133,8 +133,8 @@ namespace IASLib
             if ( odefin( m_pCDA, (sword)nCount + 1, bindColumns[ nCount ], dsize+1, nType, -1, (sb2 *)NULL, (text *)NULL, -1, -1, &(aDataLength[ nCount ] ), &(aRetCodes[ nCount ] ) ) )
             {
                 for ( nI = 0; nI <= nCount; nI++ )
-                    delete bindColumns[ nI ];
-                delete bindColumns;
+                    delete [] bindColumns[ nI ];
+                delete [] bindColumns;
                 delete aDataLength;
                 delete aRetCodes;
                 m_nColumns = 0;
@@ -160,7 +160,7 @@ namespace IASLib
                 CStringArray  **aaTemp = new CStringArray *[m_nRows + GROW_BY];
                 for (size_t nStep = 0; nStep < m_nRows ; nStep++ )
                     aaTemp[ nStep ] = m_aastrData[ nStep ];
-                delete m_aastrData;
+                delete [] m_aastrData;
                 m_aastrData = aaTemp;
             }
 
@@ -180,7 +180,7 @@ namespace IASLib
 	    }
 
         for ( nI = 0; nI < m_nColumns; nI++ )
-            delete bindColumns[ nI ];
+            delete [] bindColumns[ nI ];
         delete [] bindColumns;
         delete [] aDataLength;
         delete [] aRetCodes;
@@ -201,7 +201,7 @@ namespace IASLib
                 m_aastrData[nStep]->DeleteAll();
                 delete m_aastrData[ nStep ];
             }
-            delete m_aastrData;
+            delete [] m_aastrData;
             delete m_apnTypes;
             m_nRows = 0;
             m_aastrData = NULL;

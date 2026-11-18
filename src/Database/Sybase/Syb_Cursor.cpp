@@ -149,7 +149,7 @@ CSybaseCursor::CSybaseCursor( CSybaseConnection *pConnection, CS_COMMAND *pComma
             CStringArray  **aaTemp = new CStringArray *[m_nRows + GROW_BY];
             for (int nStep = 0; nStep < m_nRows ; nStep++ )
                 aaTemp[ nStep ] = m_aastrData[ nStep ];
-            delete m_aastrData;
+            delete [] m_aastrData;
             m_aastrData = aaTemp;
             AddSize( sizeof( CStringArray * ) * GROW_BY );
         }
@@ -191,7 +191,7 @@ CSybaseCursor::CSybaseCursor( CSybaseConnection *pConnection, CS_COMMAND *pComma
             m_aastrData[nStep]->DeleteAll();
             delete m_aastrData[ nStep ];
         }
-        delete m_aastrData;
+        delete [] m_aastrData;
         while ( m_nRows % GROW_BY ) m_nRows++;
         AddSize( -((int)( sizeof( CStringArray *) * m_nRows )) );
         m_nRows = 0;
@@ -235,14 +235,14 @@ int CSybaseCursor::Close( void )
         m_aastrData[nStep]->DeleteAll();
         delete m_aastrData[ nStep ];
     }
-    delete m_aastrData;
+    delete [] m_aastrData;
     while ( m_nRows % GROW_BY ) m_nRows++;
     AddSize( -((int)( sizeof( CStringArray *) * m_nRows )) );
 
     delete m_apnTypes;
     AddSize( -((int)( sizeof( CS_INT ) * m_nColumns )) );
 
-    delete m_anColumnWidths;
+    delete [] m_anColumnWidths;
     AddSize( -((int)( sizeof( CS_INT ) * m_nColumns )) );
 
     m_nRows = 0;

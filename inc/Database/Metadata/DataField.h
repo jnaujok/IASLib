@@ -42,7 +42,17 @@ namespace IASLib
 
                             DECLARE_OBJECT( CDataField, CObject );
 
+                // The column's definition for CREATE TABLE ("name type
+                // [not null]"), or "" when the name or type is not valid.
             CString         CreateField( void );
+            const char     *GetName( void ) const { return (const char *)m_strFieldName; }
+
+                // SQL names from a definition file are put into statements
+                // as they are, so they are checked first: letters, digits,
+                // '_' and '$' (not first), and '.' between parts.
+            static bool     IsIdentifier( const char *strName );
+                // A column type: letters, digits, spaces, '_' and "(10,2)".
+            static bool     IsColumnType( const char *strType );
     };
 } // namespace IASLib
 

@@ -43,8 +43,6 @@ namespace IASLib
             bool            CreateIndex( const char *strTableName, CConnection *pCon );
             bool            DropIndex( const char *strTableName, CConnection *pCon );
 
-            bool            LoadIndex( const char *strIndexName, CConnection *pCon );
-            bool            LoadIndex( CString strIndexName, CConnection *pCon );
     };
 } // namespace IASLib
 

@@ -65,6 +65,8 @@ namespace IASLib
     {
         CString strCommand;
 
+        if ( ! CDataField::IsIdentifier( m_strName ) )
+            return false;
         strCommand.Format( "drop table %s", (const char *)m_strName );
 
         if ( ! pConnection->Execute( strCommand ) )
@@ -77,7 +79,16 @@ namespace IASLib
         CString strCommand;
         size_t nCount;
 
-        pConnection->BeginTransaction();
+        if ( ! CDataField::IsIdentifier( m_strName ) || m_aDataFields.Length() == 0 )
+            return false;
+        for ( nCount = 0; nCount < m_aDataFields.Length(); nCount++ )
+        {
+            if ( ( (CDataField *)m_aDataFields[ nCount ] )->CreateField().GetLength() == 0 )
+                return false;
+        }
+
+        if ( ! pConnection->BeginTransaction() )
+            return false;
 
         strCommand.Format( "create table %s(", (const char *)m_strName );
 
@@ -128,6 +139,8 @@ namespace IASLib
 
                 nStart = nEnd + 1;
                 strTemp.Trim();
+                if ( strTemp.GetLength() == 0 )
+                    continue;
 
                 if ( ! pConnection->Execute( strTemp ) )
                 {
@@ -137,9 +150,7 @@ namespace IASLib
             }
         }
 
-        pConnection->CommitTransaction();
-
-        return true;
+        return pConnection->CommitTransaction();
     }
 } // namespace IASLib
 

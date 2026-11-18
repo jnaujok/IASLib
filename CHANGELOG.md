@@ -98,6 +98,8 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - The SQLite driver uses SQLite directly (it went through `CDynamicLibrary`) with prepared statements. `Execute()` and `Cursor()` take bound parameters; a cursor takes one statement that returns rows.
   - Transactions are real `BEGIN`/`COMMIT`/`ROLLBACK` (they were emulated by buffering the SQL text). A failed commit rolls back.
   - `CSQLiteDatabase::Connection()` returns NULL when the database cannot be opened, with the error on the database. `SetTimeout()` returns true.
+  - `CDataTable`, `CDataIndex` and `CDataField` refuse names from a definition that are not SQL names (they went into the SQL as written). `CreateTable()` returns the commit's result and skips blank `<initialize>` lines; `DropIndex()` writes `drop index name` except on Sybase. The undefined `LoadTable()` and `LoadIndex()` declarations are removed.
+  - Oracle cursors quote values with quotes doubled, return `IASLIB_DB_OK` on success (they returned the `bool`), and their `InsertRow()` writes the `(` it was missing. Arrays in the Oracle and Sybase drivers are freed with `delete []`.
   - `CBaseResult::Next()` stops at the last row (it kept counting), and column names match without regard to case.
 - **Configuration:**
   - `CProfile` is rewritten with the same interface. It no longer throws for a missing file (it reads as empty and the first write creates it). Every write saves at once through a temporary file, keeping comments, blank lines and order; without the cache, reads see changes made by others. The `const char *` `GetString()` stays valid (it pointed into storage a later call could free); the buffer form always ends its text; `GetInt()` gives the default for text that is not a number.

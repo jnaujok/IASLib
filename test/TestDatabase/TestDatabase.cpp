@@ -15,8 +15,13 @@
     #include "Database/Sqlite/Sqlt_Connection.h"
 #endif
 
+#include "Database/Metadata/DataTable.h"
+#include "XML/XMLDocument.h"
+#include "XML/XMLParser.h"
+
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 using namespace IASLib;
 
@@ -213,6 +218,69 @@ static void testTransactions( CSQLiteConnection *pCon )
     CHECK( ! pCon->CommitTransaction() );
 }
 
+static CXMLElement *parseTable( CXMLDocument &oDocument, const std::string &strXML )
+{
+    CXMLParser oParser;
+    oParser.Parse( strXML.data(), strXML.size(), *oDocument.GetIndex() );
+    return oDocument.GetRoot();
+}
+
+static void testMetadata( CSQLiteConnection *pCon )
+{
+    section( "Tables from definitions" );
+    CXMLDocument oDocument;
+    CXMLElement *pTable = parseTable( oDocument,
+        "<table name=\"users\">"
+        "<field name=\"id\" type=\"char(16)\" null=\"no\"/>"
+        "<field name=\"name\" type=\"varchar(40)\"/>"
+        "<index name=\"users_by_id\" unique=\"yes\">id</index>"
+        "<initialize>\n insert into users values( 'admin', 'Admin' );\n\n insert into users values( 'guest', 'Guest' );\n</initialize>"
+        "</table>" );
+    CHECK( pTable != NULL );
+    if ( pTable == NULL )
+        return;
+    CDataTable oTable( pTable );
+    CHECK( oTable.GetFieldCount() == 2 && oTable.GetIndexCount() == 1 );
+    CHECK( oTable.CreateTable( pCon ) );
+    CHECK( countRows( pCon, "SELECT COUNT(*) FROM users" ) == 2 );
+        // The unique index is there.
+    CHECK( ! pCon->Execute( "INSERT INTO users VALUES ( 'admin', 'Again' )" ) );
+        // A second create fails and leaves the first table alone.
+    CHECK( ! oTable.CreateTable( pCon ) );
+    CHECK( countRows( pCon, "SELECT COUNT(*) FROM users" ) == 2 );
+    CHECK( oTable.DropTable( pCon ) );
+    CHECK( pCon->Cursor( "SELECT * FROM users" ) == NULL );
+
+        // Names that are not SQL names are refused before any SQL runs.
+    CXMLDocument oBad;
+    CXMLElement *pBad = parseTable( oBad,
+        "<table name=\"evil; drop table people\">"
+        "<field name=\"id\" type=\"int\"/>"
+        "</table>" );
+    CHECK( pBad != NULL );
+    if ( pBad )
+    {
+        CDataTable oEvil( pBad );
+        CHECK( ! oEvil.CreateTable( pCon ) );
+        CHECK( ! oEvil.DropTable( pCon ) );
+    }
+    CXMLDocument oBadType;
+    CXMLElement *pBadType = parseTable( oBadType,
+        "<table name=\"t2\">"
+        "<field name=\"id\" type=\"int); drop table people; --\"/>"
+        "</table>" );
+    if ( pBadType )
+    {
+        CDataTable oEvil( pBadType );
+        CHECK( ! oEvil.CreateTable( pCon ) );
+    }
+    CHECK( countRows( pCon, "SELECT COUNT(*) FROM people" ) >= 1 );
+    CHECK( CDataField::IsIdentifier( "schema.table_1" ) );
+    CHECK( ! CDataField::IsIdentifier( "1table" ) );
+    CHECK( ! CDataField::IsIdentifier( "a..b" ) );
+    CHECK( ! CDataField::IsIdentifier( "" ) );
+}
+
 static void testDatabase( void )
 {
     section( "Database and connections" );
@@ -252,6 +320,7 @@ int main( void )
         testCursors( pCon );
         testUpdatable( pCon );
         testTransactions( pCon );
+        testMetadata( pCon );
     }
     delete pDB;
     testDatabase();
