@@ -85,13 +85,13 @@ namespace
             }
             result.nBytes += packet.size();
             t0 = Clock::now();
-            CJsonNode *pValue = receiver.decode( packet.data(), packet.size() );
+            CJsonNode *pValue = receiver.decode( packet.data(), packet.size(), nSender );
             if ( pValue == NULL && receiver.lastError() == SJSON_ERROR_UNKNOWN_TAG )
             {
                 std::vector<unsigned char> update = pSender->nakDictionary( nSender, receiver.lastKnownTag( nSender ), receiver.lastKnownValue( nSender ) );
                 result.nNak += update.size();
                 receiver.loadDictionary( update.data(), update.size() );
-                pValue = receiver.decode( packet.data(), packet.size() );
+                pValue = receiver.decode( packet.data(), packet.size(), nSender );
             }
             t1 = Clock::now();
             result.dDecode += std::chrono::duration<double>( t1 - t0 ).count();
