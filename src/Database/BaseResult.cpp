@@ -44,7 +44,7 @@ namespace IASLib
             ClearRows();
     }
 
-    void CBaseResult::AddRow( CStringArray *pRow, const std::vector<unsigned char> *pNulls )
+    void CBaseResult::AddRow( CStringArray *pRow, const std::vector<unsigned char> *pNulls, const std::map<size_t, CDataBlock> *pBlobs )
     {
         if ( m_nRows == m_nAllocatedRows )
         {
@@ -59,6 +59,7 @@ namespace IASLib
         }
         m_aastrData[ m_nRows ] = pRow;
         m_aabNull.push_back( ( pNulls ) ? *pNulls : std::vector<unsigned char>() );
+        m_aaBlobs.push_back( ( pBlobs ) ? *pBlobs : std::map<size_t, CDataBlock>() );
         m_nRows++;
     }
 
@@ -72,6 +73,7 @@ namespace IASLib
         m_nAllocatedRows = 0;
         m_nCurrentRow = 0;
         m_aabNull.clear();
+        m_aaBlobs.clear();
     }
 
     size_t CBaseResult::FindColumn( const char *pszColumn ) const
@@ -169,6 +171,35 @@ namespace IASLib
     {
         size_t nColumn = FindColumn( pszColumn );
         return nColumn != NOT_FOUND && IsNull( nColumn );
+    }
+
+    bool CBaseResult::IsBlob( size_t nColumn )
+    {
+        if ( ! m_bValid || m_nCurrentRow >= m_aaBlobs.size() )
+            return false;
+        return m_aaBlobs[ m_nCurrentRow ].count( nColumn ) != 0;
+    }
+
+    bool CBaseResult::IsBlob( const char *pszColumn )
+    {
+        size_t nColumn = FindColumn( pszColumn );
+        return nColumn != NOT_FOUND && IsBlob( nColumn );
+    }
+
+    CDataBlock CBaseResult::GetBlob( size_t nColumn )
+    {
+        if ( IsBlob( nColumn ) )
+            return m_aaBlobs[ m_nCurrentRow ].find( nColumn )->second;
+        if ( IsNull( nColumn ) )
+            return CDataBlock();
+        CString strValue = GetColumn( nColumn );
+        return CDataBlock( (const char *)strValue, strValue.GetLength() );
+    }
+
+    CDataBlock CBaseResult::GetBlob( const char *pszColumn )
+    {
+        size_t nColumn = FindColumn( pszColumn );
+        return ( nColumn == NOT_FOUND ) ? CDataBlock() : GetBlob( nColumn );
     }
 } // namespace IASLib
 

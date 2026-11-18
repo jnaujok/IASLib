@@ -2,8 +2,8 @@
  *  SQL Lite Cursor
  *
  *      See Sqlt_Cursor.h. (Rows came through sqlite3_exec()'s callback,
- * which lost SQL NULLs and recorded no column names for an empty result;
- * the updates were unimplemented.)
+ * which lost SQL NULLs, cut blobs at their first zero byte, and recorded
+ * no column names for an empty result; the updates were unimplemented.)
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 05/13/2003
@@ -21,6 +21,7 @@
 #include "Sqlt_Connection.h"
 #include "Database.h"
 
+#include <map>
 #include <vector>
 
 namespace IASLib
@@ -81,6 +82,7 @@ namespace IASLib
         {
             CStringArray *pRow = new CStringArray;
             std::vector<unsigned char> abNull( m_nColumns, 0 );
+            std::map<size_t, CDataBlock> mapBlobs;
             for ( size_t n = 0; n < m_nColumns; n++ )
             {
                 int nType = sqlite3_column_type( pStatement, (int)n );
@@ -91,9 +93,11 @@ namespace IASLib
                 }
                 else if ( nType == SQLITE_BLOB )
                 {
+                        // Kept as bytes; the text column is empty.
                     const void *pBytes = sqlite3_column_blob( pStatement, (int)n );
                     int nBytes = sqlite3_column_bytes( pStatement, (int)n );
-                    pRow->Push( CString::FromBytes( pBytes, (size_t)nBytes ) );
+                    mapBlobs[ n ] = CDataBlock( (const unsigned char *)pBytes, (size_t)nBytes );
+                    pRow->Push( CString( "" ) );
                 }
                 else
                 {
@@ -102,7 +106,7 @@ namespace IASLib
                     pRow->Push( CString::FromBytes( pText, (size_t)nBytes ) );
                 }
             }
-            AddRow( pRow, &abNull );
+            AddRow( pRow, &abNull, &mapBlobs );
         }
         if ( nResult != SQLITE_DONE )
         {
@@ -132,8 +136,14 @@ namespace IASLib
 
         CString strTable2 = QuoteIdentifier( strTable );
         CString strSQL;
-        std::vector<CString> aValues;
-        std::vector<bool> abValueNull;
+            // The values to bind, in order: text, NULL or a blob.
+        struct SValue
+        {
+            enum { TEXT, NULLVALUE, BLOB } eKind;
+            CString     strText;
+            CDataBlock  oBlob;
+        };
+        std::vector<SValue> aValues;
 
             // The row, by all of its original values (IS matches NULLs), and
             // one row only, through its rowid.
@@ -160,8 +170,12 @@ namespace IASLib
                 if ( strSet.GetLength() )
                     strSet += ", ";
                 strSet += QuoteIdentifier( m_astrHeaders.Get( n ) ) + " = ?";
-                aValues.push_back( GetNewValue( n ) );
-                abValueNull.push_back( false );
+                SValue oValue;
+                oValue.eKind = IsNewValueBlob( n ) ? SValue::BLOB : SValue::TEXT;
+                oValue.strText = GetNewValue( n );
+                if ( oValue.eKind == SValue::BLOB )
+                    oValue.oBlob = GetNewBlob( n );
+                aValues.push_back( oValue );
             }
             if ( strSet.GetLength() == 0 )
                 return IASLIB_DB_OK;            // nothing changed
@@ -185,8 +199,12 @@ namespace IASLib
                 }
                 strColumns += QuoteIdentifier( m_astrHeaders.Get( n ) );
                 strMarks += "?";
-                aValues.push_back( GetNewValue( n ) );
-                abValueNull.push_back( false );
+                SValue oValue;
+                oValue.eKind = IsNewValueBlob( n ) ? SValue::BLOB : SValue::TEXT;
+                oValue.strText = GetNewValue( n );
+                if ( oValue.eKind == SValue::BLOB )
+                    oValue.oBlob = GetNewBlob( n );
+                aValues.push_back( oValue );
             }
             strSQL = ( strColumns.GetLength() ) ? "INSERT INTO " + strTable2 + " (" + strColumns + ") VALUES (" + strMarks + ")"
                                                 : "INSERT INTO " + strTable2 + " DEFAULT VALUES";
@@ -197,8 +215,12 @@ namespace IASLib
             CStringArray *pRow = m_aastrData[ m_nCurrentRow ];
             for ( size_t n = 0; n < m_nColumns; n++ )
             {
-                aValues.push_back( pRow->Get( n ) );
-                abValueNull.push_back( IsNull( n ) );
+                SValue oValue;
+                oValue.eKind = IsNull( n ) ? SValue::NULLVALUE : IsBlob( n ) ? SValue::BLOB : SValue::TEXT;
+                oValue.strText = pRow->Get( n );
+                if ( oValue.eKind == SValue::BLOB )
+                    oValue.oBlob = GetBlob( n );
+                aValues.push_back( oValue );
             }
         }
 
@@ -214,10 +236,13 @@ namespace IASLib
         }
         for ( size_t n = 0; n < aValues.size(); n++ )
         {
-            if ( abValueNull[n] )
+            const SValue &oValue = aValues[n];
+            if ( oValue.eKind == SValue::NULLVALUE )
                 sqlite3_bind_null( pStatement, (int)n + 1 );
+            else if ( oValue.eKind == SValue::BLOB )
+                sqlite3_bind_blob( pStatement, (int)n + 1, (const void *)oValue.oBlob, (int)oValue.oBlob.GetSize(), SQLITE_TRANSIENT );
             else
-                sqlite3_bind_text( pStatement, (int)n + 1, (const char *)aValues[n], (int)aValues[n].GetLength(), SQLITE_TRANSIENT );
+                sqlite3_bind_text( pStatement, (int)n + 1, (const char *)oValue.strText, (int)oValue.strText.GetLength(), SQLITE_TRANSIENT );
         }
         nResult = sqlite3_step( pStatement );
         sqlite3_finalize( pStatement );
@@ -244,6 +269,13 @@ namespace IASLib
                     (*pRow)[ n ] = GetNewValue( n );
                     if ( m_nCurrentRow < m_aabNull.size() && n < m_aabNull[ m_nCurrentRow ].size() )
                         m_aabNull[ m_nCurrentRow ][ n ] = 0;
+                    if ( m_nCurrentRow < m_aaBlobs.size() )
+                    {
+                        if ( IsNewValueBlob( n ) )
+                            m_aaBlobs[ m_nCurrentRow ][ n ] = GetNewBlob( n );
+                        else
+                            m_aaBlobs[ m_nCurrentRow ].erase( n );
+                    }
                 }
             }
         }
@@ -255,6 +287,8 @@ namespace IASLib
             m_nRows--;
             if ( m_nCurrentRow < m_aabNull.size() )
                 m_aabNull.erase( m_aabNull.begin() + (long)m_nCurrentRow );
+            if ( m_nCurrentRow < m_aaBlobs.size() )
+                m_aaBlobs.erase( m_aaBlobs.begin() + (long)m_nCurrentRow );
             if ( m_nCurrentRow >= m_nRows && m_nRows > 0 )
                 m_nCurrentRow = m_nRows - 1;
         }

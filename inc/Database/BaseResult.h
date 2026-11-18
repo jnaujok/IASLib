@@ -25,6 +25,9 @@
 
 #ifdef IASLIB_DATABASE__
 
+#include "../BaseTypes/DataBlock.h"
+
+#include <map>
 #include <vector>
 
 namespace IASLib
@@ -47,11 +50,14 @@ namespace IASLib
                 // Per row, per column: 1 for a SQL NULL (drivers that record
                 // NULLs fill it; empty otherwise).
             std::vector< std::vector<unsigned char> > m_aabNull;
+                // Per row: the binary values, by column. A blob's text
+                // column is empty; GetBlob() gives its bytes.
+            std::vector< std::map<size_t, CDataBlock> > m_aaBlobs;
             size_t              m_nAllocatedRows;
 
                 // For drivers: adds a row (taking the array), with which of
                 // its columns are NULL (may be NULL: none are).
-            void                AddRow( CStringArray *pRow, const std::vector<unsigned char> *pNulls = NULL );
+            void                AddRow( CStringArray *pRow, const std::vector<unsigned char> *pNulls = NULL, const std::map<size_t, CDataBlock> *pBlobs = NULL );
                 // Frees every row (the headers stay).
             void                ClearRows( void );
                 // The index of a column by name, or NOT_FOUND.
@@ -82,6 +88,15 @@ namespace IASLib
                 // Whether the current row's value is SQL NULL.
             virtual bool        IsNull( size_t nColumn );
             virtual bool        IsNull( const char *pszColumn );
+                // Whether the current row's value is binary (a BLOB), and
+                // its bytes. GetBlob() of any other value gives its text as
+                // bytes, and of a NULL an empty block. (Blobs came back as
+                // strings, which stop at a zero byte where they are used as
+                // text.)
+            virtual bool        IsBlob( size_t nColumn );
+            virtual bool        IsBlob( const char *pszColumn );
+            virtual CDataBlock  GetBlob( size_t nColumn );
+            virtual CDataBlock  GetBlob( const char *pszColumn );
 
         private:
                                 CBaseResult( const CBaseResult & );

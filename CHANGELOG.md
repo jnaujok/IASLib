@@ -218,7 +218,8 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CCPUUsage::GetTotalMicroseconds()` and the user and system equivalents.
   - `TestStats`.
 - **Database:**
-  - SQL NULLs (`CBaseResult::IsNull()`), blobs with zero bytes, and the column names of an empty result.
+  - SQL NULLs (`CBaseResult::IsNull()`) and the column names of an empty result.
+  - Blobs as data: `CBaseResult::IsBlob()` and `GetBlob()` give a `CDataBlock` (zero bytes included; a blob's text column is empty), and `CCursor::SetColumn( column, const CDataBlock & )` writes one, bound as a BLOB. The updatable SQLite cursor also matches rows by their blobs.
   - The updatable SQLite cursor: `InsertRow()`, `UpdateRow()` and `DeleteRow()` (unimplemented), with values bound and names quoted. `CCursor::IsChanged()`, `GetNewValue()`, `ClearChanges()` and `IsUpdatable()`.
   - `CSQLiteConnection::Changes()`, `LastInsertId()` and `GetHandle()`.
   - `CConnectionArray::Find()` and `Remove()`.

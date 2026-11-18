@@ -129,17 +129,48 @@ static void testCursors( CSQLiteConnection *pCon )
     CHECK( pCursor != NULL && pCursor->Rows() == 2 );
     delete pCursor;
 
-        // Blobs keep their zero bytes.
-    CHECK( pCon->Execute( "CREATE TABLE blobs ( b BLOB ); INSERT INTO blobs VALUES ( x'41004243' );" ) );
-    pCursor = pCon->Cursor( "SELECT b FROM blobs" );
+        // Blobs come back as data, zero bytes included.
+    CHECK( pCon->Execute( "CREATE TABLE blobs ( id INTEGER, b BLOB ); INSERT INTO blobs VALUES ( 1, x'41004243' );" ) );
+    pCursor = pCon->Cursor( "SELECT id, b FROM blobs" );
     CHECK( pCursor != NULL );
     if ( pCursor )
     {
-        CString strBlob = pCursor->GetColumn( (size_t)0 );
-        CHECK( strBlob.GetLength() == 4 );
-        CHECK( memcmp( (const char *)strBlob, "A\0BC", 4 ) == 0 );
+        CHECK( pCursor->IsBlob( "b" ) );
+        CHECK( ! pCursor->IsBlob( "id" ) );
+        CDataBlock oBlob = pCursor->GetBlob( "b" );
+        CHECK( oBlob.GetSize() == 4 );
+        CHECK( memcmp( (const char *)oBlob, "A\0BC", 4 ) == 0 );
+            // Other values as bytes.
+        CDataBlock oId = pCursor->GetBlob( "id" );
+        CHECK( oId.GetSize() == 1 && ((const char *)oId)[0] == '1' );
         delete pCursor;
     }
+
+        // Written, matched and rewritten through the updatable cursor.
+    pCursor = pCon->Cursor( "SELECT id, b FROM blobs", true );
+    CHECK( pCursor != NULL );
+    if ( pCursor )
+    {
+        const unsigned char abNew[] = { 0, 1, 2, 0, 255 };
+        CHECK( pCursor->SetColumn( "b", CDataBlock( abNew, sizeof( abNew ) ) ) == 1 );
+        CHECK( pCursor->IsNewValueBlob( 1 ) );
+        CHECK( pCursor->UpdateRow( "blobs" ) == IASLIB_DB_OK );       // matched by its old blob
+        CHECK( pCursor->GetBlob( "b" ).GetSize() == 5 );
+        CHECK( pCursor->SetColumn( "id", 2 ) == 1 );
+        CHECK( pCursor->SetColumn( "b", CDataBlock( abNew, 2 ) ) == 1 );
+        CHECK( pCursor->InsertRow( "blobs" ) == IASLIB_DB_OK );
+        delete pCursor;
+    }
+    CHECK( countRows( pCon, "SELECT COUNT(*) FROM blobs WHERE b = x'00010200ff'" ) == 1 );
+    CHECK( countRows( pCon, "SELECT COUNT(*) FROM blobs WHERE id = 2 AND b = x'0001'" ) == 1 );
+    CHECK( countRows( pCon, "SELECT COUNT(*) FROM blobs WHERE typeof( b ) = 'blob'" ) == 2 );
+    pCursor = pCon->Cursor( "SELECT b FROM blobs WHERE id = 1", true );
+    if ( pCursor )
+    {
+        CHECK( pCursor->DeleteRow( "blobs" ) == IASLIB_DB_OK );       // matched by its blob
+        delete pCursor;
+    }
+    CHECK( countRows( pCon, "SELECT COUNT(*) FROM blobs" ) == 1 );
 
         // A cursor needs one statement that returns rows.
     CHECK( pCon->Cursor( "UPDATE people SET age = age" ) == NULL );

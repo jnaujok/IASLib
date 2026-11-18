@@ -34,6 +34,7 @@ namespace IASLib
         protected:
             CStringArray        m_astrNewValues;
             std::vector<bool>   m_abChanged;
+            std::map<size_t, CDataBlock> m_mapNewBlobs;     // staged binary values
             bool                m_bUpdatable;
 
                 // (The staged values were never sized, so every SetColumn()
@@ -60,7 +61,33 @@ namespace IASLib
                 // Whether a column has a staged value, and that value.
             bool                IsChanged( size_t nColumn ) const { return nColumn < m_abChanged.size() && m_abChanged[ nColumn ]; }
             CString             GetNewValue( size_t nColumn ) const { return ( nColumn < m_astrNewValues.Length() ) ? m_astrNewValues.Get( nColumn ) : CString( "" ); }
-            void                ClearChanges( void ) { m_abChanged.assign( m_abChanged.size(), false ); }
+                // Whether a column's staged value is binary, and its bytes.
+            bool                IsNewValueBlob( size_t nColumn ) const { return IsChanged( nColumn ) && m_mapNewBlobs.count( nColumn ) != 0; }
+            CDataBlock          GetNewBlob( size_t nColumn ) const
+                                {
+                                    std::map<size_t, CDataBlock>::const_iterator it = m_mapNewBlobs.find( nColumn );
+                                    return ( it != m_mapNewBlobs.end() ) ? it->second : CDataBlock();
+                                }
+            void                ClearChanges( void ) { m_abChanged.assign( m_abChanged.size(), false ); m_mapNewBlobs.clear(); }
+
+                // Stages a binary value (written as a BLOB).
+            virtual int         SetColumn( size_t nColumn, const CDataBlock &oValue )
+                                {
+                                    if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
+                                    {
+                                        EnsureNewValues();
+                                        m_astrNewValues[ nColumn ] = "";
+                                        m_mapNewBlobs[ nColumn ] = oValue;
+                                        m_abChanged[ nColumn ] = true;
+                                        return 1;
+                                    }
+                                    return 0;
+                                }
+            virtual size_t      SetColumn( const char *pszColumn, const CDataBlock &oValue )
+                                {
+                                    size_t nColumn = FindColumn( pszColumn );
+                                    return ( nColumn == NOT_FOUND ) ? 0 : (size_t)SetColumn( nColumn, oValue );
+                                }
 
             virtual int         SetColumn( size_t nColumn, const char *strValue )
                                 {
@@ -68,6 +95,7 @@ namespace IASLib
                                     {
                                         EnsureNewValues();
                                         m_astrNewValues[ nColumn ] = ( strValue ) ? strValue : "";
+                                        m_mapNewBlobs.erase( nColumn );
                                         m_abChanged[ nColumn ] = true;
                                         return 1;
                                     }
