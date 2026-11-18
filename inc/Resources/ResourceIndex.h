@@ -1,4 +1,5 @@
 /**
+ *  @file
  *  Resource Index Entry
  *
  *      What a resource archive's index records about one resource: its
@@ -26,35 +27,45 @@
 
 namespace IASLib
 {
-        // Compression of a resource's data. Only NONE is written; an archive
-        // that names another is refused when that resource is read.
+        /// Compression of a resource's data: none.
+        /// Only NONE is written; an archive that names another is refused
+        /// when that resource is read.
     static const int RESFILE_COMPRESSION_NONE       = 0;
+        /// Compression of a resource's data: deflate (recognized, but not read or written).
     static const int RESFILE_COMPRESSION_DEFLATE    = 1;
 
+        /// One resource's entry in an archive's index.
+        ///
+        /// A plain record with public fields, copied freely.
     class CResourceIndexEntry : public CObject
     {
         public:
-            short       m_nFolder;
-            short       m_nResource;
-            CString     m_strResourceName;
-            int         m_nType;
-            CDate       m_dttLastModified;
-            CString     m_strModifiedBy;
-            uint64_t    m_nOffset;          // of the data in the file
-            uint64_t    m_nLength;          // of the data
-            CSha256Digest m_digest;         // SHA-256 of the data
-            int         m_nCompression;
-            long        m_nUsage;           // reads since the archive was opened
+            short       m_nFolder;          ///< The folder tag.
+            short       m_nResource;        ///< The resource tag.
+            CString     m_strResourceName;  ///< The resource's name.
+            int         m_nType;            ///< The program's own kind of resource.
+            CDate       m_dttLastModified;  ///< When it was last changed.
+            CString     m_strModifiedBy;    ///< Who last changed it.
+            uint64_t    m_nOffset;          ///< Where the data is in the file.
+            uint64_t    m_nLength;          ///< The data's length.
+            CSha256Digest m_digest;         ///< SHA-256 of the data.
+            int         m_nCompression;     ///< RESFILE_COMPRESSION_NONE or another method.
+            long        m_nUsage;           ///< Reads since the archive was opened (not stored).
 
+                        /// Creates an empty entry (tags 0/0, no data).
                         CResourceIndexEntry( void );
+                        /// Copies an entry.
                         CResourceIndexEntry( const CResourceIndexEntry &oSource );
+                        /// Destroys the entry.
             virtual    ~CResourceIndexEntry( void );
+            /// Copies an entry.
             CResourceIndexEntry &operator =( const CResourceIndexEntry &oSource );
 
                         DEFINE_OBJECT( CResourceIndexEntry )
 
-                // The folder and resource tags as one number.
+                /// The folder and resource tags as one number.
             uint32_t    GetID( void ) const { return MakeID( m_nFolder, m_nResource ); }
+                /// The ID of a pair of tags: the folder in the high 16 bits, the resource in the low.
             static uint32_t MakeID( short nFolder, short nResource )
             {
                 return ( (uint32_t)(unsigned short)nFolder << 16 ) | (uint32_t)(unsigned short)nResource;
