@@ -39,3 +39,4 @@ cmake-build-release/*
 # CMake build trees
 build/
 cmake-build-*/
+.claude/worktrees/
