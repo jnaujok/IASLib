@@ -24,22 +24,24 @@
 
 namespace IASLib
 {
+        // An IPv4 UDP socket. Errors are thrown only by the constructors (a
+        // CSocketException); Read() and Send() return -1 instead.
     class CUDPSocket : public CObject
     {
         protected:
-    #ifdef IASLIB_WIN32__
-            static bool     m_bInitialized;     // Used to assure WSA is initialized in Windoze
-            static WSADATA  m_wsaData;          // Data used by Winsock.
-    #endif
             SOCKET          m_hSocket;
             int             m_nPort;
-            CInternetAddress *m_addrIPAddress;
+            CInternetAddress *m_addrIPAddress;      // never NULL
             CString         m_strAddress;
             CString         m_strSocketName;
+
+            void            Open( int nPort );
+
         public:
-                            // Server socket
+                            // Server socket, bound to nPort (0: any free port)
+                            // on every IPv4 address.
 	                        CUDPSocket( int nPort );
-                            // client socket
+                            // Client socket, bound to a free port.
                             CUDPSocket( void );
 	        virtual        ~CUDPSocket( void );
 
@@ -49,15 +51,24 @@ namespace IASLib
             virtual CString getName( void ) { return m_strSocketName; }
             virtual bool            IsConnected( void ) { return (m_hSocket != NULL_SOCKET ) ? true:false; }
                 // Reads one datagram (blocking). Returns its length, or -1 on
-                // error. The data is NUL-terminated when it fits in the buffer.
+                // error. A datagram longer than the buffer is cut short (on
+                // every platform). The data is NUL-terminated when it fits in
+                // the buffer.
             virtual int             Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress );
                 // As above, but waits at most nTimeoutMs milliseconds. Returns
                 // CSocket::READ_TIMEOUT if nothing arrived in time.
             virtual int             Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress, int nTimeoutMs );
+                // Sends one datagram to the target's IPv4 address. Returns the
+                // bytes sent, or -1.
             virtual int             Send( const char *pchBuffer, int nBufferSize, const CInternetAddress &targetAddress );
             virtual int             GetPort( void ) { return m_nPort; }
+                // The address the socket is bound to.
             virtual const CInternetAddress &GetAddress( void ) const { return *m_addrIPAddress; }
             virtual void            Close( void );
+
+        private:
+                                    CUDPSocket( const CUDPSocket & );
+            CUDPSocket             &operator =( const CUDPSocket & );
     };
 } // namespace IASLib
 

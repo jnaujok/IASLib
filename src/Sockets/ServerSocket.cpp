@@ -18,94 +18,86 @@
 #include "ServerSocket.h"
 #include "SocketException.h"
 #include "SocketWait.h"
-#include <stdio.h>
 #include <errno.h>
-#ifndef IASLIB_WIN32__
-#include <fcntl.h>
-#include <poll.h>
-#endif
-
-#ifdef IASLIB_WIN32__
-typedef int socklen_t;
-#endif
+#include <string.h>
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CServerSocket, CSocket );
 
+        // (listen() was never checked.)
+    void CServerSocket::Listen( int nBacklog )
+    {
+        if ( m_hSocket == NULL_SOCKET )
+            return;
+        if ( nBacklog <= 0 )
+            nBacklog = SOMAXCONN;
+        if ( listen( m_hSocket, nBacklog ) == SOCKET_ERROR )
+        {
+            int nError = LastError();
+            Close();
+            IASLIB_THROW_SOCKET_EXCEPTION( nError );
+        }
+    }
+
     /**
      * Server Socket Constructor
      *
-     * This constructor builds a server socket. It binds to a port
-     * and can be used to wait for a connection to be made.
-     *
      * @param nPort
-     *      The port number to bind the server to. Only connections
-     *      made to this port will connect to this server socket.
+     *      The port number to bind the server to (0 for any free port).
      * @param nMaxBacklog
      *      The maximum number of connections that can be waiting on
      *      this socket without being "accepted".
+     * @param bSecure
+     *      Informational: whether the connections will be wrapped in TLS.
      */
     CServerSocket::CServerSocket( int nPort, int nMaxBacklog, bool bSecure ) : CSocket( nPort )
     {
-        if ( m_hSocket != NULL_SOCKET )
-            listen( m_hSocket, nMaxBacklog );
         m_bSecure = bSecure;
+        Listen( nMaxBacklog );
     }
 
-    /**
-     * Server Socket Destructor
-     *
-     * The destructor cleans up the socket object.
-     */
+        // (This was declared but never defined.)
+    CServerSocket::CServerSocket( CSocketConfig oConfig, int nPort, const char *bindAddress )
+        : CSocket( oConfig, nPort, bindAddress ), config( oConfig )
+    {
+        m_bSecure = false;
+        Listen( config.getBacklogSize() );
+    }
+
+        // (It set the reuse option on the handle about to be closed, which
+        // has no effect.)
     CServerSocket::~CServerSocket( void )
     {
-        int nOption = 1;
-            // We have to set the re-use address so that we can re-start the server without waiting
-            // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
-            // We had to un-set this before we did an accept, so we re-set it here, just in case
-            // there's a carry-over between processes, which there shouldn't be.
-
-    #ifdef IASLIB_WIN32__
-        setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (const char *)&nOption , sizeof( nOption )  );
-    #else
-        setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
-    #endif
     }
 
-    /**
-     * Accept
-     *
-     * This method waits for a connection to be made from a client
-     * to a server socket. It returns a new <code>CSocket</code>
-     * object that contains the new connection to the client
-     * computer.
-     */
+        // (The address length was allocated but its value never set on some
+        // paths, the error was thrown as a pointer, and errno is not the
+        // socket error on Windows.)
     CSocket *CServerSocket::Accept( void )
     {
-        SOCKET              hSocket;
-        CSocket            *pRetVal = NULL;
-        struct sockaddr_in *pSockAddr = new struct sockaddr_in;
-        socklen_t          *pnAddrLen = new socklen_t;
+        if ( m_hSocket == NULL_SOCKET )
+            IASLIB_THROW_SOCKET_EXCEPTION( ENOTCONN );
 
-        *pnAddrLen = sizeof( struct sockaddr_in );
-
-        hSocket = accept( m_hSocket, (struct sockaddr *)pSockAddr, pnAddrLen );
-
-
-        if ( hSocket == SOCKET_ERROR )
+        for ( ;; )
         {
-            throw( new CSocketException( errno ) );
+            struct sockaddr_storage sockAddr;
+            socklen_t nAddrLen = sizeof( sockAddr );
+            memset( &sockAddr, 0, sizeof( sockAddr ) );
+
+            SOCKET hSocket = accept( m_hSocket, (struct sockaddr *)&sockAddr, &nAddrLen );
+            if ( hSocket != INVALID_SOCKET )
+                return new CSocket( hSocket, "Accepted Socket", &sockAddr );
+
+            int nError = LastError();
+            if ( nError == EINTR || nError == ECONNABORTED )
+                continue;           // a signal, or a client that gave up
+            if ( ! m_bBlocking && ( nError == EWOULDBLOCK || nError == EAGAIN ) )
+                return NULL;
+            IASLIB_THROW_SOCKET_EXCEPTION( nError );
         }
-
-        if ( ( hSocket != INVALID_SOCKET ) && ( hSocket != SOCKET_ERROR ) )
-            pRetVal = new CSocket( hSocket, "New Socket", pSockAddr );
-
-        delete pnAddrLen;
-        delete pSockAddr;
-
-        return pRetVal;
     }
+
     CSocket *CServerSocket::Accept( int nTimeoutMs )
     {
         if ( m_hSocket == NULL_SOCKET )
@@ -118,12 +110,12 @@ namespace IASLib
             return NULL;
         }
 
-        struct sockaddr_in sockAddr;
-        socklen_t nAddrLen = sizeof( struct sockaddr_in );
+        struct sockaddr_storage sockAddr;
+        socklen_t nAddrLen = sizeof( sockAddr );
+        memset( &sockAddr, 0, sizeof( sockAddr ) );
 
         SOCKET hSocket = accept( m_hSocket, (struct sockaddr *)&sockAddr, &nAddrLen );
-
-        if ( ( hSocket == SOCKET_ERROR ) || ( hSocket == INVALID_SOCKET ) )
+        if ( hSocket == INVALID_SOCKET )
         {
             return NULL;
         }

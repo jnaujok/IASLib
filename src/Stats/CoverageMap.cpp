@@ -16,320 +16,225 @@
  */
 
 #include "CoverageMap.h"
-
-#ifndef IASLIB_WIN32
-#include <iostream>
-#else
-#include <ostream>
-#endif
-
-#ifdef IASLIB_STATS__
+#include "../BaseTypes/String_.h"
 
 namespace IASLib
 {
-    class CCoverageObject : public CObject
-    {
-        protected:
-            size_t      m_nLocation;
-            size_t      m_nSize;
-        public:
-                        CCoverageObject( size_t nLoc, size_t nSize )
-                        {
-                            m_nLocation = nLoc;
-                            m_nSize = nSize;
-                        }
-            virtual    ~CCoverageObject() { }
-
-                        DECLARE_OBJECT( CCoverageObject, CObject );
-
-            size_t      GetSize( void ) { return m_nSize; }
-            size_t      GetLocation( void ) {return m_nLocation; }
-
-            void        SetSize( size_t nSize ) { m_nSize = nSize; }
-    };
-
-    static int ObjectCompareFunc( const CObject *p1, const CObject *p2 )
-    {
-        if ( p1 == p2 )
-            return 0;
-
-        return -1;
-    }
+    IMPLEMENT_OBJECT( CCoverageMap, CObject );
 
     CCoverageMap::CCoverageMap( void )
-        : m_aCoverageMap( ObjectCompareFunc, 2048 )
     {
-        m_nMinimum = IASLib::NOT_FOUND;
+        m_nMinimum = 0;
         m_nMaximum = 0;
-        m_fFragmentation = 0.0;
         m_nUsed = 0;
-        m_nFree = 0;
         m_nBlockSize = 4096;
     }
 
     CCoverageMap::~CCoverageMap( void )
     {
-        m_aCoverageMap.DeleteAll();
     }
 
     bool CCoverageMap::Allocate( size_t nBase, size_t nSize )
     {
-        CCoverageObject *pNew = new CCoverageObject( nBase, nSize );
-        bool bRetVal = true;
-        size_t nEnd = nBase + nSize;
+        if ( nSize == 0 )
+            return false;
+            // (base + size could wrap.)
+        size_t nEnd = ( nSize > (size_t)-1 - nBase ) ? (size_t)-1 : nBase + nSize;
+        if ( nEnd == nBase )
+            return false;
 
-        size_t nFound = m_aCoverageMap.Find( pNew );
-        if ( nFound != IASLib::NOT_FOUND )
+        bool bFresh = ( UsedIn( nBase, nEnd ) == 0 );
+
+            // Merge with every run that overlaps or touches [nBase, nEnd).
+        std::map<size_t, size_t>::iterator it = m_mapRuns.upper_bound( nBase );
+        if ( it != m_mapRuns.begin() )
         {
-            delete pNew;
-            pNew = (CCoverageObject *)m_aCoverageMap.Get( nFound );
-            if ( ( pNew->GetLocation() + pNew->GetSize() ) < nEnd )
-            {
-                pNew->SetSize( nEnd - pNew->GetLocation() );
-            }
-            bRetVal = false;
+            std::map<size_t, size_t>::iterator prev = it;
+            --prev;
+            if ( prev->second >= nBase )
+                it = prev;
+        }
+        while ( it != m_mapRuns.end() && it->first <= nEnd )
+        {
+            if ( it->first < nBase )
+                nBase = it->first;
+            if ( it->second > nEnd )
+                nEnd = it->second;
+            m_nUsed -= it->second - it->first;
+            m_mapRuns.erase( it++ );
+        }
+        m_mapRuns[ nBase ] = nEnd;
+        m_nUsed += nEnd - nBase;
+
+        if ( m_nMaximum == m_nMinimum )
+        {
+            m_nMinimum = nBase;
+            m_nMaximum = nEnd;
         }
         else
         {
-            m_aCoverageMap.Append( pNew );            
+            if ( nBase < m_nMinimum )
+                m_nMinimum = nBase;
+            if ( nEnd > m_nMaximum )
+                m_nMaximum = nEnd;
         }
-        if ( nBase < m_nMinimum )
-        {
-            m_nMinimum = nBase;
-        }
-        if ( nEnd > m_nMaximum )
-        {
-            m_nMaximum = nEnd;
-        }
-        return bRetVal;
+        return bFresh;
     }
 
     bool CCoverageMap::Release( size_t nBase, size_t nSize )
     {
-        CCoverageObject *pNew;
-        bool bRetVal = true;
-
-        if ( nSize != IASLib::NOT_FOUND )
+        size_t nEnd;
+        if ( nSize == IASLib::NOT_FOUND )
         {
-            pNew = new CCoverageObject( nBase, nSize );
+                // To the end of the run nBase is in.
+            std::map<size_t, size_t>::iterator it = m_mapRuns.upper_bound( nBase );
+            if ( it == m_mapRuns.begin() )
+                return false;
+            --it;
+            if ( it->second <= nBase )
+                return false;
+            nEnd = it->second;
         }
         else
         {
-            pNew = new CCoverageObject( nBase, 0 );
+            if ( nSize == 0 )
+                return false;
+            nEnd = ( nSize > (size_t)-1 - nBase ) ? (size_t)-1 : nBase + nSize;
         }
 
-        size_t nFound = m_aCoverageMap.Find( pNew );
-
-        delete pNew;
-
-        pNew = (CCoverageObject *)m_aCoverageMap.Get( nFound );
-
-        if ( nFound == IASLib::NOT_FOUND )
+        bool bReleased = false;
+        std::map<size_t, size_t>::iterator it = m_mapRuns.upper_bound( nBase );
+        if ( it != m_mapRuns.begin() )
         {
-            bRetVal = false;
+            std::map<size_t, size_t>::iterator prev = it;
+            --prev;
+            if ( prev->second > nBase )
+                it = prev;
         }
-        else
+        while ( it != m_mapRuns.end() && it->first < nEnd )
         {
-            if ( nBase != pNew->GetLocation() )
+            size_t nRunStart = it->first;
+            size_t nRunEnd = it->second;
+            m_mapRuns.erase( it++ );
+            m_nUsed -= nRunEnd - nRunStart;
+            bReleased = true;
+
+                // Keep what lies outside [nBase, nEnd).
+            if ( nRunStart < nBase )
             {
-                // Uh-oh, we have a chunk being freed out of the middle 
-                // of a block, or possibly crossing two or more blocks.
-                // We need to figure out how to do this...
-                if ( nBase < pNew->GetLocation() )
-                {
-                    // we have to back up through the coverage array and 
-                    // look for the first block that contains this memory
-                    // block.
-                    while ( ( nFound > 0 ) && ( nBase < pNew->GetLocation() ) )
-                    {
-                        nFound--;
-                        pNew = (CCoverageObject *)m_aCoverageMap.Get( nFound );
-                    }
-                    
-                    if ( ( pNew->GetLocation() < nBase ) && 
-                         ( nBase > ( pNew->GetLocation() + pNew->GetSize() ) ) )
-                    {
-                        nFound++;
-                    }
-
-                    // Well, by here we've found the bottom edge. Now
-                    // we have to walk forward until we have cleaned up to
-                    // the top edge. This might mean making two partial 
-                    // blocks (one at the begining, one at the end.
-                    if ( pNew->GetLocation() != nBase )
-                    {
-                        pNew->SetSize( nBase - pNew->GetLocation() );
-                    }
-                    else
-                    {
-
-                    }
-                }
+                m_mapRuns[ nRunStart ] = nBase;
+                m_nUsed += nBase - nRunStart;
             }
-            else
+            if ( nRunEnd > nEnd )
             {
-                if ( nSize == IASLib::NOT_FOUND )
-                {
-                    nSize = pNew->GetSize();
-                }
-            }
-
-            if ( nSize < pNew->GetSize() )
-            {
-                // We need to split this item into one or more blocks.
+                m_mapRuns[ nEnd ] = nRunEnd;
+                m_nUsed += nRunEnd - nEnd;
+                break;
             }
         }
-        return bRetVal;
+        return bReleased;
+    }
+
+    size_t CCoverageMap::UsedIn( size_t nStart, size_t nEnd ) const
+    {
+        size_t nUsed = 0;
+        std::map<size_t, size_t>::const_iterator it = m_mapRuns.upper_bound( nStart );
+        if ( it != m_mapRuns.begin() )
+        {
+            std::map<size_t, size_t>::const_iterator prev = it;
+            --prev;
+            if ( prev->second > nStart )
+                it = prev;
+        }
+        for ( ; it != m_mapRuns.end() && it->first < nEnd; ++it )
+        {
+            size_t nFrom = ( it->first > nStart ) ? it->first : nStart;
+            size_t nTo = ( it->second < nEnd ) ? it->second : nEnd;
+            if ( nTo > nFrom )
+                nUsed += nTo - nFrom;
+        }
+        return nUsed;
+    }
+
+    bool CCoverageMap::IsUsed( size_t nBase, size_t nSize ) const
+    {
+        if ( nSize == 0 )
+            return true;
+        size_t nEnd = ( nSize > (size_t)-1 - nBase ) ? (size_t)-1 : nBase + nSize;
+        return UsedIn( nBase, nEnd ) == nEnd - nBase;
+    }
+
+    double CCoverageMap::GetFragmentation( void ) const
+    {
+        size_t nFree = GetFree();
+        if ( nFree == 0 )
+            return 0.0;
+
+        size_t nLargest = 0;
+        size_t nLast = m_nMinimum;
+        for ( std::map<size_t, size_t>::const_iterator it = m_mapRuns.begin(); it != m_mapRuns.end(); ++it )
+        {
+            if ( it->first > nLast && it->first - nLast > nLargest )
+                nLargest = it->first - nLast;
+            nLast = it->second;
+        }
+        if ( m_nMaximum > nLast && m_nMaximum - nLast > nLargest )
+            nLargest = m_nMaximum - nLast;
+        return 1.0 - (double)nLargest / (double)nFree;
     }
 
     void CCoverageMap::Dump( CStream &oStream, OutputFormatSpecifier nFormat, bool bFillInGaps )
     {
-        CIterator  *pIterator1 = m_aCoverageMap.Enumerate();
-        size_t      nBucket;
-        size_t      nStart = IASLib::NOT_FOUND;
-        size_t      nCurrent = IASLib::NOT_FOUND;
+        CString strLine;
 
-        FormatStart( oStream, nFormat );
-        FormatStartLine( oStream, nFormat );
-        size_t      nTemp = 0;
+        if ( nFormat == CCoverageMap::XML )
+            strLine = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<table>\n"
+                      "  <tr>\n    <td>Start</td>\n    <td>Used</td>\n    <td>Free</td>\n  </tr>\n";
+        else
+            strLine = "Start, Used, Free\n";
+        oStream.PutBuffer( (const char *)strLine, (int)strLine.GetLength() );
 
-            // Leave an empty column for Bucket Name
-        FormatValue( oStream, "", nFormat );
-
-        FormatEnd( oStream, nFormat );
-        if ( pIterator1 )
+        if ( ! m_mapRuns.empty() )
         {
-            delete pIterator1;
-        }
-    }
+            size_t nFirst = ( m_mapRuns.begin()->first / m_nBlockSize ) * m_nBlockSize;
+            size_t nLast = m_mapRuns.rbegin()->second;
 
-    void CCoverageMap::FormatStartLine( CStream &oStream, OutputFormatSpecifier nFormat )
-    {
-        CString strTemp;
+            for ( size_t nBlock = nFirst; nBlock < nLast; )
+            {
+                size_t nBlockEnd = ( m_nBlockSize > (size_t)-1 - nBlock ) ? (size_t)-1 : nBlock + m_nBlockSize;
+                size_t nUsed = UsedIn( nBlock, nBlockEnd );
 
-        switch ( nFormat )
-        {
-            case CCoverageMap::CSV:
-                break;
-
-            case CCoverageMap::XML:
-                strTemp = "  <tr>\n";
-                break;
-
-            default:
-                break;
-        }
-
-        oStream.PutBuffer( (const char *)strTemp, (int)strTemp.GetLength() );
-        m_nLinePosition = 0;
-    }
-
-    void CCoverageMap::FormatEndLine( CStream &oStream, OutputFormatSpecifier nFormat )
-    {
-        CString strTemp;
-
-        switch ( nFormat )
-        {
-            case CCoverageMap::CSV:
-                strTemp = "\n";
-                break;
-
-            case CCoverageMap::XML:
-                strTemp = "  </tr>\n";
-                break;
-
-            default:
-                break;
-        }
-
-        oStream.PutBuffer( (const char *)strTemp, (int)strTemp.GetLength() );
-        m_nLinePosition = 0;
-    }
-
-    void CCoverageMap::FormatValue( CStream &oStream, int nValue, OutputFormatSpecifier nFormat )
-    {
-        CString strTemp;
-
-        strTemp.Format( "%d", nValue );
-
-        FormatValue( oStream, strTemp, nFormat );
-    }
-
-    void CCoverageMap::FormatValue( CStream &oStream, const char *strValue, OutputFormatSpecifier nFormat )
-    {
-        CString strTemp;
-
-        switch ( nFormat )
-        {
-            case CCoverageMap::CSV:
-                if ( m_nLinePosition != 0 )
+                if ( nUsed || bFillInGaps )
                 {
-                    strTemp = ", ";
+                    if ( nFormat == CCoverageMap::XML )
+                        strLine.Format( "  <tr>\n    <td>%llu</td>\n    <td>%llu</td>\n    <td>%llu</td>\n  </tr>\n",
+                                        (unsigned long long)nBlock, (unsigned long long)nUsed,
+                                        (unsigned long long)( nBlockEnd - nBlock - nUsed ) );
+                    else
+                        strLine.Format( "%llu, %llu, %llu\n", (unsigned long long)nBlock, (unsigned long long)nUsed,
+                                        (unsigned long long)( nBlockEnd - nBlock - nUsed ) );
+                    oStream.PutBuffer( (const char *)strLine, (int)strLine.GetLength() );
                 }
-                strTemp += strValue;
-                break;
-
-            case CCoverageMap::XML:
-                strTemp.Format( "    <td>%s</td>\n", strValue );
-                break;
-
-            default:
-                break;
+                else
+                {
+                        // Skip straight to the next used run.
+                    std::map<size_t, size_t>::const_iterator it = m_mapRuns.upper_bound( nBlock );
+                    if ( it == m_mapRuns.end() )
+                        break;
+                    size_t nNext = ( it->first / m_nBlockSize ) * m_nBlockSize;
+                    if ( nNext > nBlock )
+                    {
+                        nBlock = nNext;
+                        continue;
+                    }
+                }
+                if ( nBlockEnd == (size_t)-1 )
+                    break;
+                nBlock = nBlockEnd;
+            }
         }
 
-        oStream.PutBuffer( (const char *)strTemp, (int)strTemp.GetLength() );
-        m_nLinePosition += (int)strTemp.GetLength();
-    }
-
-    void CCoverageMap::FormatStart( CStream &oStream, OutputFormatSpecifier nFormat )
-    {
-        CString strTemp;
-
-        m_nLinePosition = 0;
-
-        switch ( nFormat )
-        {
-            case CCoverageMap::CSV:
-                break;
-
-            case CCoverageMap::XML:
-                strTemp = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n<table>\n";
-                break;
-
-            default:
-                break;
-        }
-
-        oStream.PutBuffer( (const char *)strTemp, (int)strTemp.GetLength() );
-    }
-
-    void CCoverageMap::FormatEnd( CStream &oStream, OutputFormatSpecifier nFormat )
-    {
-        CString strTemp;
-
-        switch ( nFormat )
-        {
-            case CCoverageMap::CSV:
-                break;
-
-            case CCoverageMap::XML:
-                strTemp = "</table>\n";
-                break;
-
-            default:
-                break;
-        }
-
-        oStream.PutBuffer( (const char *)strTemp, (int)strTemp.GetLength() );
-    }
-
-    size_t CCoverageMap::FindCategory( const char *strCategoryName )
-    {
-        size_t nCount = 0;
-
-        return IASLib::NOT_FOUND;
+        if ( nFormat == CCoverageMap::XML )
+            oStream.PutBuffer( "</table>\n", 9 );
     }
 } // namespace IASLib
-
-#endif // IASLIB_STATS__
-

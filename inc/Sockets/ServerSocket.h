@@ -22,6 +22,8 @@
 
 namespace IASLib
 {
+        // A listening TCP socket. The constructors throw a CSocketException
+        // if the port cannot be bound or listened on.
     class CServerSocket : public CSocket
     {
         protected:
@@ -29,17 +31,27 @@ namespace IASLib
             CSocketConfig config;
 
         public:
-                        CServerSocket( CSocketConfig config, int nPort, const char *bindAddress );
+                            // Binds nPort (0: any free port) on bindAddress
+                            // (NULL: every IPv4 address), with the
+                            // configuration's backlog and options (which
+                            // accepted connections inherit).
+                        CServerSocket( CSocketConfig config, int nPort, const char *bindAddress = NULL );
 	                    CServerSocket( int nPort, int nMaxBacklog = 16, bool bSecure = false );
 	        virtual    ~CServerSocket( void );
 
                         DEFINE_OBJECT( CServerSocket )
 
+                // Waits for a connection. Throws a CSocketException on an
+                // error; on a non-blocking socket, returns NULL if none is
+                // waiting.
             virtual CSocket    *Accept( void );
                 // Waits at most nTimeoutMs milliseconds for a connection.
                 // Returns NULL if none arrived in time or on error; never throws.
             virtual CSocket    *Accept( int nTimeoutMs );
             virtual bool        isSecure( void ) { return m_bSecure; }
+
+        private:
+            void                Listen( int nBacklog );
     };
 }
 

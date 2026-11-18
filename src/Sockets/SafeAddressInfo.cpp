@@ -22,94 +22,123 @@
 #ifdef IASLIB_NETWORKING__
 
 #include "SafeAddressInfo.h"
+#include <string.h>
 
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CSafeAddressInfo, CObject );
 
-    CSafeAddressInfo::CSafeAddressInfo( struct addrinfo *addr )
+    CSafeAddressInfo::CSafeAddressInfo( const struct addrinfo *pAddr )
     {
-        flags = addr->ai_flags;
-        family = addr->ai_family;
-        socktype = addr->ai_socktype;
-        protocol = addr->ai_protocol;
-        addrlen = addr->ai_addrlen;
-        if ( family == AF_INET6 )
-            this->addr = (struct sockaddr *)new struct sockaddr_in6();
+        next = NULL;
+        flags = pAddr->ai_flags;
+        family = pAddr->ai_family;
+        socktype = pAddr->ai_socktype;
+        protocol = pAddr->ai_protocol;
+        memset( &storage, 0, sizeof( storage ) );
+            // (It allocated a sockaddr_in or sockaddr_in6 and copied
+            // ai_addrlen bytes into it, whatever that was.)
+        addrlen = (socklen_t)pAddr->ai_addrlen;
+        if ( addrlen > (socklen_t)sizeof( storage ) )
+            addrlen = (socklen_t)sizeof( storage );
+        if ( pAddr->ai_addr )
+            memcpy( &storage, pAddr->ai_addr, addrlen );
         else
-            this->addr = (struct sockaddr *)new struct sockaddr_in();
-        memcpy( this->addr, addr->ai_addr, addrlen );
-        canonname = addr->ai_canonname;
-        if ( addr->ai_next )
+            addrlen = 0;
+        if ( pAddr->ai_canonname )
+            canonname = pAddr->ai_canonname;
+
+            // The rest of the list, without recursing.
+        CSafeAddressInfo *pLast = this;
+        for ( const struct addrinfo *pNext = pAddr->ai_next; pNext; pNext = pNext->ai_next )
         {
-            next = new CSafeAddressInfo( addr->ai_next );
-        }
-        else
-        {
-            next = NULL;
+            CSafeAddressInfo *pNew = new CSafeAddressInfo( pNext->ai_addr, (socklen_t)pNext->ai_addrlen, pNext->ai_socktype );
+            pNew->flags = pNext->ai_flags;
+            pNew->family = pNext->ai_family;
+            pNew->protocol = pNext->ai_protocol;
+            if ( pNext->ai_canonname )
+                pNew->canonname = pNext->ai_canonname;
+            pLast->next = pNew;
+            pLast = pNew;
         }
     }
 
-    CSafeAddressInfo::CSafeAddressInfo( const CSafeAddressInfo &oSource )
+    CSafeAddressInfo::CSafeAddressInfo( const struct sockaddr *pAddr, socklen_t nLength, int nSocketType )
+    {
+        next = NULL;
+        flags = 0;
+        socktype = nSocketType;
+        protocol = 0;
+        memset( &storage, 0, sizeof( storage ) );
+        if ( pAddr == NULL )
+            nLength = 0;
+        if ( nLength > (socklen_t)sizeof( storage ) )
+            nLength = (socklen_t)sizeof( storage );
+        addrlen = nLength;
+        if ( nLength )
+            memcpy( &storage, pAddr, nLength );
+        family = ( nLength ) ? storage.ss_family : AF_UNSPEC;
+    }
+
+    void CSafeAddressInfo::CopyFrom( const CSafeAddressInfo &oSource )
     {
         flags = oSource.flags;
         family = oSource.family;
         socktype = oSource.socktype;
         protocol = oSource.protocol;
         addrlen = oSource.addrlen;
-        if ( family == AF_INET6 )
-            this->addr = (struct sockaddr *)new struct sockaddr_in6();
-        else
-            this->addr = (struct sockaddr *)new struct sockaddr_in();
-        memcpy( this->addr, oSource.addr, addrlen );
+        memcpy( &storage, &oSource.storage, sizeof( storage ) );
         canonname = oSource.canonname;
-        if ( oSource.next )
+        next = NULL;
+
+        CSafeAddressInfo *pLast = this;
+        for ( const CSafeAddressInfo *pFrom = oSource.next; pFrom; pFrom = pFrom->next )
         {
-            next = new CSafeAddressInfo( *oSource.next );
+            CSafeAddressInfo *pNew = new CSafeAddressInfo( pFrom->getAddr(), pFrom->addrlen, pFrom->socktype );
+            pNew->flags = pFrom->flags;
+            pNew->family = pFrom->family;
+            pNew->protocol = pFrom->protocol;
+            pNew->canonname = pFrom->canonname;
+            pLast->next = pNew;
+            pLast = pNew;
         }
-        else
-        {
-            next = NULL;
-        }
+    }
+
+    CSafeAddressInfo::CSafeAddressInfo( const CSafeAddressInfo &oSource ) : CObject()
+    {
+        CopyFrom( oSource );
     }
 
     CSafeAddressInfo::~CSafeAddressInfo( void )
     {
-        if ( next )
-            delete( next );
-        delete addr;
-        addr = NULL;
+            // Unlink the rest of the list and delete it a node at a time, so
+            // a long list does not recurse.
+        CSafeAddressInfo *pNext = next;
+        next = NULL;
+        while ( pNext )
+        {
+            CSafeAddressInfo *pAfter = pNext->next;
+            pNext->next = NULL;
+            delete pNext;
+            pNext = pAfter;
+        }
     }
 
     CSafeAddressInfo &CSafeAddressInfo::operator =( const CSafeAddressInfo &oSource )
     {
         if ( this != &oSource )
         {
-            if ( next )
+            CSafeAddressInfo oCopy( oSource );      // oSource may be in our list
+            CSafeAddressInfo *pNext = next;
+            next = NULL;
+            while ( pNext )
             {
-                delete next;
-                next = NULL;
+                CSafeAddressInfo *pAfter = pNext->next;
+                pNext->next = NULL;
+                delete pNext;
+                pNext = pAfter;
             }
-            delete addr;
-            flags = oSource.flags;
-            family = oSource.family;
-            socktype = oSource.socktype;
-            protocol = oSource.protocol;
-            addrlen = oSource.addrlen;
-            if ( family == AF_INET6 )
-                this->addr = (struct sockaddr *)new struct sockaddr_in6();
-            else
-                this->addr = (struct sockaddr *)new struct sockaddr_in();
-            memcpy( this->addr, oSource.addr, addrlen );
-            canonname = oSource.canonname;
-            if ( oSource.next )
-            {
-                next = new CSafeAddressInfo( *oSource.next );
-            }
-            else
-            {
-                next = NULL;
-            }
+            CopyFrom( oCopy );
         }
         return *this;
     }
@@ -118,33 +147,26 @@ namespace IASLib
     {
         if ( family == AF_INET )
         {
-            struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-            saddr->sin_port = htons( (uint16_t)nPort );
+            ((struct sockaddr_in *)&storage)->sin_port = htons( (uint16_t)nPort );
         }
         else if ( family == AF_INET6 )
         {
-            struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
-            saddr->sin6_port = htons( (uint16_t)nPort );
+            ((struct sockaddr_in6 *)&storage)->sin6_port = htons( (uint16_t)nPort );
         }
     }
 
-    int CSafeAddressInfo::getPort( void )
+    int CSafeAddressInfo::getPort( void ) const
     {
         if ( family == AF_INET )
         {
-            struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
-            return ntohs( saddr->sin_port );
+            return ntohs( ((const struct sockaddr_in *)&storage)->sin_port );
         }
         else if ( family == AF_INET6 )
         {
-            struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
-            return ntohs( saddr->sin6_port );
+            return ntohs( ((const struct sockaddr_in6 *)&storage)->sin6_port );
         }
-        else
-        {
-            return -1;
-        }
+        return -1;
     }
-};
+}
 
 #endif // IASLIB_NETWORKING__

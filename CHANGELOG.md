@@ -67,6 +67,18 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - The `BUFFER_SIZE` macro is now `CBufferedStream::BUFFER_SIZE`.
 - **`CMutex` is recursive on every platform.** The thread that holds it can lock it again, and must unlock it as many times. It was recursive on Windows (a kernel mutex) but not elsewhere, so code that worked on Windows deadlocked on Linux and macOS. On Windows it is now a critical section, which avoids a kernel call when the lock is free.
 
+- **Sockets:**
+  - `NULL_SOCKET` is `INVALID_SOCKET` (-1 outside Windows). It was 0, which is a real descriptor.
+  - Socket errors are thrown by value, as `CSocketException`, and `GetErrorNumber()` is an errno value on every platform (Winsock's WSAE* codes are translated). `CSocket::Read()` and `CServerSocket::Accept()` used to throw pointers, so `catch ( CSocketException & )` missed them.
+  - `CSocket::Read( void )` and `Send()` throw on an error or a closed connection. `Send( unsigned char )` used to return 0.
+  - On a client socket, `GetPort()` and `GetAddress()` are the far end's. They held the near end's; use `GetLocalPort()` and `GetAddressString( false )` for that.
+  - The `CSocketConfigBuilder` setters return a reference, so a chain keeps every setting (the copies they returned lost all but the first). `Build()` returns a `CSocketConfig` by value. `CSocketConfig` has a public constructor; it defaults to blocking with no timeout.
+  - CUDPSocket sends to the target's IPv4 address, and no longer sets `SO_REUSEADDR`, which let a second socket bind the same port.
+  - `CRemoteAddress` is a typedef of `CInternetAddress`. It was an unused copy of it.
+  - `FixedConnectionPool.h` and `ClientSocketSource.h` were never implemented, and are removed.
+- **Stats:** the Stats classes are always built. They were inside `IASLIB_STATS__`, which the CMake build never defined, so the library shipped them empty. Histogram counts are `long long`.
+- **`CCPUUsage`:** the elapsed-time methods take a `const CCPUUsage &`.
+
 ### Added
 
 - **Template collections** (`Templates/TCollections.h`):
@@ -111,6 +123,18 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CSemaphore::TimedWait()`.
   - `CThreadPool::WaitUntilIdle()` and `GetTotalThreads()`.
   - `TestThreading`.
+- **Sockets:**
+  - Host names resolve with `getaddrinfo()`, so clients connect to IPv6 hosts, and `CServerSocket` binds an IPv6 address.
+  - `CSocket::GetLocalPort()`, `IsBlocking()`, `LastError()` and `InitializeNetworking()`.
+  - A `CServerSocket( CSocketConfig, port, address )` constructor (it was declared but never defined), and `CClientSocket( CSocketConfig, host, port )`.
+  - `CInternetAddress::GetPort()` and `GetAddressLength()`.
+  - `CSocketConfigBuilder::setLinger( on, seconds )`.
+  - `TestSocketClasses`.
+- **Stats and status:**
+  - `CHistogram::GetCount()` and `GetCategoryCount()`.
+  - `CCoverageMap::IsUsed()`, `GetRunCount()` and `GetFragmentation()`.
+  - `CCPUUsage::GetTotalMicroseconds()` and the user and system equivalents.
+  - `TestStats`.
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
 ### Fixed
@@ -222,6 +246,51 @@ The base types and collections, reviewed one by one and cleaned up, and template
     - `PeekChar()` seeked with `SEEK_SET`, which isn't one of CFile's modes.
     - Writes looped forever on an error.
   - `CSocket::HasData()` called `select()` with a descriptor count of 1, so outside Windows it only ever looked at descriptor 0.
+- **Sockets:**
+  - `CSocket`:
+    - Clients looked hosts up with `gethostbyname()`, which isn't thread-safe, and copied 8 bytes out of a 4-byte address. `socket()` was never checked.
+    - The configured options were applied wrongly or not at all:
+      - The timeouts were passed as an int, which POSIX systems reject (they take a timeval).
+      - `SO_LINGER` was passed an int rather than a `struct linger`.
+      - Keep-alive was never applied.
+      - The buffer sizes were set after connecting.
+    - On Windows:
+      - `Send()` resent from the start of the buffer and counted a partial send as complete.
+      - `SetNonBlocking()` did nothing.
+      - Errors were taken from errno.
+    - Binding with a configuration bound IPv4 only, whatever the address.
+    - `GetAddressString()` overwrote the stored address, so the next call returned the wrong text.
+    - Address text came from `inet_ntoa()`, which shares one buffer between threads.
+    - Winsock was started behind an unguarded flag in every constructor.
+    - `m_bBlocking` was never initialised.
+    - `getInternetAddress()` returned one static object that every socket shared and could change.
+  - `CServerSocket`:
+    - `listen()` was never checked.
+    - The destructor set an option on a socket it was about to close.
+  - `CUDPSocket`:
+    - The client constructor read its address with a length of 0, so its port was garbage.
+    - `Close()` left the handle set, so the destructor closed it again.
+  - `CInternetAddress`:
+    - A numeric service, or any datagram lookup, dropped the port.
+    - The sockaddr constructors went through text and a `SOCK_RAW` lookup, which Linux refuses with a port.
+    - `SetAddress( hostname )` lost the port and left the validity flag as it was.
+    - `addressToString()` and `lookupHost()` crashed on NULL, and `lookupHost()` could return an uninitialised buffer.
+    - IPv6 addresses with a port are written in brackets.
+  - `CSafeAddressInfo` copied `ai_addrlen` bytes into a fixed-size address and deleted it as the wrong type. It now holds a `sockaddr_storage`.
+  - `CSocketConfig` left every field uninitialised.
+  - `CSocketException`'s unknown-error message is formatted properly, and covers the connection errors.
+  - Mail and the thread monitor caught exceptions by pointer, so those catches never ran.
+- **Stats:**
+  - `CHistogram`:
+    - The CSV header was one column to the left of the data.
+    - Numbered categories without names gave ragged rows.
+    - Bucket numbers above `INT_MAX` printed negative, and counts could overflow.
+    - Names went into the CSV and XML unescaped.
+  - `CCoverageMap` never worked: blocks were compared by pointer, so `Allocate()` never merged, `Release()` never released, the counters stayed 0, and `Dump()` wrote no data (and malformed XML). It is now a merged interval map.
+- **`CCPUUsage`:**
+  - Outside Windows, the total's microseconds were never carried and could reach 1,999,998.
+  - On Windows, exactly 1,000,000 was not carried.
+  - Failed calls left the fields undefined.
 - **Exceptions:** every exception printed `"CException::FileLine - ..."` to stdout when thrown.
 - **Security:** external entities (XXE) are refused, and entity expansion ("billion laughs") is capped.
 - **Exceptions:**

@@ -167,10 +167,11 @@ namespace IASLib
 							// Clear recipient list.
 						m_strRecipients = "";
 					}
-					catch (CSocketException *pExcept )
+					catch ( CSocketException & )
 					{
+							// (Sockets throw by value; this caught a pointer,
+							// so a failure escaped.)
 						bRetVal = false;
-						delete pExcept;
 					}
 				}
 				else

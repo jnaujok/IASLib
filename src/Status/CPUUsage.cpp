@@ -5,10 +5,8 @@
  * CPU on just how much CPU time you've used. Since this is such a 
  * platform-specific task, it seemed a good thing to make it a part
  * of the library.
- *  Note that this is a "snapshot" of the current status when the 
- * object is created. To get elapsed time, use the Elapsed function
- * and pass it the previous or the current snapshot to get the 
- * difference.
+ *  Note that this is a "snapshot" of the current status when the
+ * object is created. See CPUUsage.h.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 2/24/2005
@@ -28,60 +26,49 @@
 
 namespace IASLib
 {
+    IMPLEMENT_OBJECT( CCPUUsage, CObject );
 
     CCPUUsage::CCPUUsage( void )
     {
+        m_llTotal = 0;
+        m_llUser = 0;
+        m_llSys = 0;
 #ifdef IASLIB_WIN32__
         FILETIME        CreateTime;
         FILETIME        ExitTime;
         FILETIME        KernelTime;
         FILETIME        UserTime;
-        ULARGE_INTEGER  nTemp;
 
-        GetProcessTimes( GetCurrentProcess(), &CreateTime, &ExitTime, &KernelTime, &UserTime );
-
-        nTemp.HighPart = KernelTime.dwHighDateTime;
-        nTemp.LowPart = KernelTime.dwLowDateTime;
-
-        m_nSysSeconds = (int)(nTemp.QuadPart / 10000000);
-        m_nSysuSeconds = (int)(( nTemp.QuadPart % 10000000 ) / 10);
-
-        nTemp.HighPart = UserTime.dwHighDateTime;
-        nTemp.LowPart = UserTime.dwLowDateTime;
-
-        m_nUserSeconds = (int)(nTemp.QuadPart / 10000000);
-        m_nUseruSeconds = (int)(( nTemp.QuadPart % 10000000 ) / 10);
-
-        m_nTotalSeconds = m_nSysSeconds + m_nUserSeconds;
-        m_nTotaluSeconds = m_nSysuSeconds + m_nUseruSeconds;
-
-        while ( m_nTotaluSeconds > 1000000 )
+            // (Neither call was checked, which left the fields undefined.)
+        if ( GetProcessTimes( GetCurrentProcess(), &CreateTime, &ExitTime, &KernelTime, &UserTime ) )
         {
-            m_nTotalSeconds++;
-            m_nTotaluSeconds -= 1000000;
+            ULARGE_INTEGER  nTemp;      // 100-nanosecond units
+
+            nTemp.HighPart = KernelTime.dwHighDateTime;
+            nTemp.LowPart = KernelTime.dwLowDateTime;
+            m_llSys = (long long)( nTemp.QuadPart / 10 );
+
+            nTemp.HighPart = UserTime.dwHighDateTime;
+            nTemp.LowPart = UserTime.dwLowDateTime;
+            m_llUser = (long long)( nTemp.QuadPart / 10 );
         }
 #else
         struct rusage stUsageData;
 
-        getrusage( RUSAGE_SELF, &stUsageData );
-
-        m_nTotalSeconds = stUsageData.ru_utime.tv_sec + stUsageData.ru_stime.tv_sec;
-        m_nTotaluSeconds = stUsageData.ru_utime.tv_usec + stUsageData.ru_stime.tv_usec;
-        m_nUserSeconds = stUsageData.ru_utime.tv_sec;
-        m_nUseruSeconds = stUsageData.ru_utime.tv_usec;
-        m_nSysSeconds = stUsageData.ru_stime.tv_sec;
-        m_nSysuSeconds = stUsageData.ru_stime.tv_usec;
+        if ( getrusage( RUSAGE_SELF, &stUsageData ) == 0 )
+        {
+            m_llUser = (long long)stUsageData.ru_utime.tv_sec * 1000000 + stUsageData.ru_utime.tv_usec;
+            m_llSys = (long long)stUsageData.ru_stime.tv_sec * 1000000 + stUsageData.ru_stime.tv_usec;
+        }
 #endif
+        m_llTotal = m_llUser + m_llSys;
     }
 
-    CCPUUsage::CCPUUsage( const CCPUUsage &oSource )
+    CCPUUsage::CCPUUsage( const CCPUUsage &oSource ) : CObject()
     {
-        m_nTotalSeconds = oSource.m_nTotalSeconds;
-        m_nTotaluSeconds = oSource.m_nTotaluSeconds;
-        m_nUserSeconds = oSource.m_nUserSeconds;
-        m_nUseruSeconds = oSource.m_nUseruSeconds;
-        m_nSysSeconds = oSource.m_nSysSeconds;
-        m_nSysuSeconds = oSource.m_nSysuSeconds;
+        m_llTotal = oSource.m_llTotal;
+        m_llUser = oSource.m_llUser;
+        m_llSys = oSource.m_llSys;
     }
 
     CCPUUsage::~CCPUUsage( void )
@@ -90,98 +77,50 @@ namespace IASLib
 
     CCPUUsage &CCPUUsage::operator =( const CCPUUsage &oSource )
     {
-        if ( this != &oSource )
-        {
-            m_nTotalSeconds = oSource.m_nTotalSeconds;
-            m_nTotaluSeconds = oSource.m_nTotaluSeconds;
-            m_nUserSeconds = oSource.m_nUserSeconds;
-            m_nUseruSeconds = oSource.m_nUseruSeconds;
-            m_nSysSeconds = oSource.m_nSysSeconds;
-            m_nSysuSeconds = oSource.m_nSysuSeconds;
-        }
+        m_llTotal = oSource.m_llTotal;
+        m_llUser = oSource.m_llUser;
+        m_llSys = oSource.m_llSys;
         return *this;
     }
 
-    void CCPUUsage::TotalElapsed( CCPUUsage &oPrevious, int &nSeconds, int &nMicroSeconds )
+    void CCPUUsage::Split( long long llMicroseconds, int &nSeconds, int &nMicroSeconds )
     {
-        if ( ( oPrevious.m_nTotalSeconds > m_nTotalSeconds ) ||
-            ( ( oPrevious.m_nTotalSeconds == m_nTotalSeconds ) && ( oPrevious.m_nTotaluSeconds > m_nTotaluSeconds ) ) )
-        {
-            nSeconds = oPrevious.m_nTotalSeconds - m_nTotalSeconds;
-            nMicroSeconds = oPrevious.m_nTotaluSeconds - m_nTotaluSeconds;
-        }
-        else
-        {
-            nSeconds = m_nTotalSeconds - oPrevious.m_nTotalSeconds;
-            nMicroSeconds = m_nTotaluSeconds - oPrevious.m_nTotaluSeconds;
-        }
-
-        while ( nMicroSeconds < 0 )
-        {
-            nSeconds--;
-            nMicroSeconds += 1000000;
-        }
+        nSeconds = (int)( llMicroseconds / 1000000 );
+        nMicroSeconds = (int)( llMicroseconds % 1000000 );
     }
 
-    void CCPUUsage::SysElapsed( CCPUUsage &oPrevious, int &nSeconds, int &nMicroSeconds )
+    void CCPUUsage::Difference( long long llThis, long long llOther, int &nSeconds, int &nMicroSeconds )
     {
-        if ( ( oPrevious.m_nSysSeconds > m_nSysSeconds ) ||
-            ( ( oPrevious.m_nSysSeconds == m_nSysSeconds ) && ( oPrevious.m_nSysuSeconds > m_nSysuSeconds ) ) )
-        {
-            nSeconds = oPrevious.m_nSysSeconds - m_nSysSeconds;
-            nMicroSeconds = oPrevious.m_nSysuSeconds - m_nSysuSeconds;
-        }
-        else
-        {
-            nSeconds = m_nSysSeconds - oPrevious.m_nSysSeconds;
-            nMicroSeconds = m_nSysuSeconds - oPrevious.m_nSysuSeconds;
-        }
-
-        while ( nMicroSeconds < 0 )
-        {
-            nSeconds--;
-            nMicroSeconds += 1000000;
-        }
+        Split( ( llThis >= llOther ) ? llThis - llOther : llOther - llThis, nSeconds, nMicroSeconds );
     }
 
-    void CCPUUsage::UserElapsed( CCPUUsage &oPrevious, int &nSeconds, int &nMicroSeconds )
+    void CCPUUsage::TotalElapsed( const CCPUUsage &oPrevious, int &nSeconds, int &nMicroSeconds ) const
     {
-        if ( ( oPrevious.m_nUserSeconds > m_nUserSeconds ) ||
-            ( ( oPrevious.m_nUserSeconds == m_nUserSeconds ) && ( oPrevious.m_nUseruSeconds > m_nUseruSeconds ) ) )
-        {
-            nSeconds = oPrevious.m_nUserSeconds - m_nUserSeconds;
-            nMicroSeconds = oPrevious.m_nUseruSeconds - m_nUseruSeconds;
-        }
-        else
-        {
-            nSeconds = m_nUserSeconds - oPrevious.m_nUserSeconds;
-            nMicroSeconds = m_nUseruSeconds - oPrevious.m_nUseruSeconds;
-        }
-
-        while ( nMicroSeconds < 0 )
-        {
-            nSeconds--;
-            nMicroSeconds += 1000000;
-        }
+        Difference( m_llTotal, oPrevious.m_llTotal, nSeconds, nMicroSeconds );
     }
 
-    void CCPUUsage::GetTotalTime( int &nSec, int &nMicroSec )
+    void CCPUUsage::SysElapsed( const CCPUUsage &oPrevious, int &nSeconds, int &nMicroSeconds ) const
     {
-        nSec = m_nTotalSeconds;
-        nMicroSec = m_nTotaluSeconds;
+        Difference( m_llSys, oPrevious.m_llSys, nSeconds, nMicroSeconds );
     }
 
-    void CCPUUsage::GetUserTime( int &nSec, int &nMicroSec )
+    void CCPUUsage::UserElapsed( const CCPUUsage &oPrevious, int &nSeconds, int &nMicroSeconds ) const
     {
-        nSec = m_nUserSeconds;
-        nMicroSec = m_nUseruSeconds;
+        Difference( m_llUser, oPrevious.m_llUser, nSeconds, nMicroSeconds );
     }
 
-    void CCPUUsage::GetSystemTime( int &nSec, int &nMicroSec )
+    void CCPUUsage::GetTotalTime( int &nSec, int &nMicroSec ) const
     {
-        nSec = m_nSysSeconds;
-        nMicroSec = m_nSysuSeconds;
+        Split( m_llTotal, nSec, nMicroSec );
     }
 
+    void CCPUUsage::GetUserTime( int &nSec, int &nMicroSec ) const
+    {
+        Split( m_llUser, nSec, nMicroSec );
+    }
+
+    void CCPUUsage::GetSystemTime( int &nSec, int &nMicroSec ) const
+    {
+        Split( m_llSys, nSec, nMicroSec );
+    }
 } // namespace IASLib
-

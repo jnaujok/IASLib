@@ -1,10 +1,9 @@
 /**
  *  Remote Address Class
  *
- *      This class encapsulates a remote IP address, either IPv4 or IPv6,
- * including port if provided. This allows for a C++ style of storage of a
- * remote internet address in a nice, simple, easy-to-use class instead of
- * the 1970's vintage sockaddr structures.
+ *      This was a second copy of CInternetAddress that nothing used (and
+ * that dereferenced NULL in several places). The name is kept for code that
+ * refers to it.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 7/12/2019
@@ -19,79 +18,12 @@
 #define IASLIB_REMOTEADDRESS_H__
 
 #ifdef IASLIB_NETWORKING__
-#ifdef IASLIB_WIN32__
-    #include "../BaseTypes/Platform.h"
-#else
-    #include <sys/types.h>
-    #include <sys/socket.h>
-    #include <netinet/in.h>
-#ifndef IASLIB_DEC__
-    #include <inttypes.h>
-#endif
-    #include <unistd.h>
-    #include <netdb.h>
-    #include <arpa/inet.h>
-#endif
 
-#include <stdint.h>
-#include <stdlib.h>
-#include "../BaseTypes/Object.h"
-#include "../BaseTypes/String_.h"
-#include "SafeAddressInfo.h"
+#include "InternetAddress.h"
 
 namespace IASLib
 {
-    class CRemoteAddress : public CObject
-    {
-        protected:
-            CSafeAddressInfo *m_sockAddressList;
-            CString     m_strHostname;
-            CString     m_strService;
-            bool        m_bIsValid;
-        public:
-                            /// Note that hostname can be an IP or IPv6 address
-                            CRemoteAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
-                            CRemoteAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
-                            CRemoteAddress( const struct sockaddr *address, bool bResolveHost = false );
-                            CRemoteAddress( const struct sockaddr_in *address, bool bResolveHost = false );
-                            CRemoteAddress( const struct sockaddr_in6 *address, bool bResolveHost = false );
-                            CRemoteAddress( const struct addrinfo *addressInfo, bool bResolveHost = false );
-                            CRemoteAddress( void );
-                            CRemoteAddress( const CRemoteAddress &oSource );
-	        virtual        ~CRemoteAddress();
-
-                            DEFINE_OBJECT( CRemoteAddress )
-
-            CRemoteAddress &operator =( const CRemoteAddress &oSource );
-
-            virtual CString         toString( void );
-            virtual CString         toStringWithPort( void );
-
-            virtual bool isValid( void ) { return m_bIsValid; }
-
-            virtual void    SetAddress( const char *hostname );
-            virtual void    SetAddress( const struct sockaddr *sockAddress );
-
-            virtual struct sockaddr *GetAddress( void ) const;
-            virtual struct sockaddr_in *GetIPv4( void ) const;
-            virtual struct sockaddr_in6 *GetIPv6( void ) const;
-
-            virtual CString GetHostname( void );
-            virtual sa_family_t GetFamily( void );
-            virtual CString GetFamilyString( void );
-
-            virtual operator struct sockaddr *( void ) const { return GetAddress(); }
-            virtual operator struct sockaddr_in *(void) const { return GetIPv4(); }
-            virtual operator struct sockaddr_in6 *(void) const { return GetIPv6(); }
-
-            static CString addressToString( const struct sockaddr *address );
-            static CString lookupHost( const struct sockaddr *address );
-            static CSafeAddressInfo *resolveAddress( const char *hostname, const char *service = NULL, int socketType = SOCK_STREAM );
-            static CSafeAddressInfo *resolveAddress( const char *hostname, int port, int socketType = SOCK_STREAM );
-            static int getPort( const struct sockaddr *address );
-
-            virtual bool isValid( void ) const { return m_bIsValid; }
-    };
+    typedef CInternetAddress CRemoteAddress;
 } // namespace IASLib
 
 #endif // IASLIB_NETWORKING__

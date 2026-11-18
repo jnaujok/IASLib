@@ -18,163 +18,120 @@
 
 #include "UDPSocket.h"
 #include "SocketException.h"
-#include <cerrno>
 #include "Socket.h"
 #include "SocketWait.h"
-#ifndef IASLIB_WIN32__
-#include <poll.h>
-#endif
+#include <errno.h>
+#include <string.h>
 
 namespace IASLib
 {
-#ifdef IASLIB_WIN32__
-    bool CUDPSocket::m_bInitialized = false;
-    WSADATA CUDPSocket::m_wsaData;
-#endif
+    IMPLEMENT_OBJECT( CUDPSocket, CObject )
 
-        // Server port constructor
+        // (Neither constructor checked much: the client one asked
+        // getsockname() for an address with a length of 0 and read whatever
+        // was on the stack.) The client is bound to port 0 so its port is
+        // known straight away. SO_REUSEADDR is not set: on a UDP port it lets
+        // a second socket bind the same port and steal datagrams.
+    void CUDPSocket::Open( int nPort )
+    {
+        CSocket::InitializeNetworking();
+        m_hSocket = NULL_SOCKET;
+        m_nPort = 0;
+        m_addrIPAddress = new CInternetAddress();
+
+        if ( nPort < 0 || nPort > 65535 )
+            IASLIB_THROW_SOCKET_EXCEPTION( EINVAL );
+
+        SOCKET hSocket = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+        if ( hSocket == INVALID_SOCKET )
+            IASLIB_THROW_SOCKET_EXCEPTION( CSocket::LastError() );
+        CSocket::PrepareHandle( hSocket );
+
+        struct sockaddr_in listen_addr;
+        memset( &listen_addr, 0, sizeof( listen_addr ) );
+        listen_addr.sin_family = AF_INET;
+        listen_addr.sin_port = htons( (unsigned short)nPort );
+        listen_addr.sin_addr.s_addr = htonl( INADDR_ANY );
+
+        if ( bind( hSocket, (struct sockaddr *)&listen_addr, sizeof( listen_addr ) ) == SOCKET_ERROR )
+        {
+            int nError = CSocket::LastError();
+            CSocket::CloseHandle( hSocket );
+            IASLIB_THROW_SOCKET_EXCEPTION( nError );
+        }
+        m_hSocket = hSocket;
+
+        socklen_t nBoundLen = sizeof( listen_addr );
+        if ( getsockname( m_hSocket, (struct sockaddr *)&listen_addr, &nBoundLen ) != 0 )
+        {
+            listen_addr.sin_port = htons( (unsigned short)nPort );
+        }
+        m_nPort = ntohs( listen_addr.sin_port );
+        m_addrIPAddress->SetAddress( (struct sockaddr *)&listen_addr );
+        m_strAddress = m_addrIPAddress->toStringWithPort();
+    }
+
     CUDPSocket::CUDPSocket( int nPort )
     {
         m_addrIPAddress = NULL;
-        int     nOption = 1;
-
-    #ifdef IASLIB_WIN32__
-        if ( ! m_bInitialized )
+        try
         {
-            WSAStartup( 2, &m_wsaData );
-            m_bInitialized = true;
+            Open( nPort );
         }
-    #endif
-	    struct sockaddr_in	listen_addr;
-        memset( &listen_addr, 0, sizeof(struct sockaddr_in));
-
-        m_hSocket = socket( AF_INET, SOCK_DGRAM, 0 );
-
-        if ( m_hSocket != INVALID_SOCKET )
+        catch ( ... )
         {
-                // We have to set the re-use address so that we can re-start the server without waiting
-                // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
-    #ifndef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
-    #else
-            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (const char *)&nOption , sizeof( nOption )  );
-    #endif
-
-            listen_addr.sin_family = AF_INET;           // Listen for Internet (TCP/IP) connections
-            listen_addr.sin_port = htons( (u_short)nPort );	    // Assign the Port in Network byte order
-            listen_addr.sin_addr.s_addr = INADDR_ANY;	// Allow connection on any valid IP for this machine
-
-            if ( bind( m_hSocket,(struct sockaddr *)&listen_addr, sizeof(struct sockaddr_in) ) < 0 )
-            {
-    #ifdef IASLIB_WIN32__
-                closesocket( m_hSocket );
-    #else
-                close( m_hSocket );
-    #endif
-                m_hSocket = NULL_SOCKET;
-                IASLIB_THROW_SOCKET_EXCEPTION(errno);
-            }
-
-            m_nPort = nPort;
-                // When asked for port 0, find out which port we were given.
-            socklen_t nBoundLen = sizeof( listen_addr );
-            if ( getsockname( m_hSocket, (struct sockaddr *)&listen_addr, &nBoundLen ) == 0 )
-            {
-                m_nPort = ntohs( listen_addr.sin_port );
-            }
-            m_addrIPAddress = new CInternetAddress( &listen_addr );
-                // Now that we've bound the correct socket, we need to un-set the reuse-address option,
-                // because otherwise the accept call creates a socket that matches this one, apparently,
-                // that includes re-using the same address, which is really, really bad. We can get
-                // two requests on the same *bleep*ing socket, which basically makes the socket library
-                // go off on a quest to use all of the CPU. So, we un-do the option here.
-            nOption = 0;
-    #ifdef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (char *)&nOption , sizeof( nOption )  );
-    #else
-            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
-    #endif
-            m_strAddress = m_addrIPAddress->toStringWithPort();
+            delete m_addrIPAddress;
+            throw;
         }
-        else
-        {
-            m_hSocket = NULL_SOCKET;
-            IASLIB_THROW_SOCKET_EXCEPTION(errno);
-        }
-
     }
-    CUDPSocket::CUDPSocket( )
+
+    CUDPSocket::CUDPSocket( void )
     {
-        int     nOption = 1;
-
-    #ifdef IASLIB_WIN32__
-        if ( ! m_bInitialized )
+        m_addrIPAddress = NULL;
+        try
         {
-            WSAStartup( 2, &m_wsaData );
-            m_bInitialized = true;
+            Open( 0 );
         }
-    #endif
-	    struct sockaddr	listen_addr;
-        socklen_t addrLen = 0;
-
-        m_hSocket = socket( AF_INET, SOCK_DGRAM, 0 );
-
-        if ( m_hSocket != INVALID_SOCKET )
+        catch ( ... )
         {
-                // We have to set the re-use address so that we can re-start the server without waiting
-                // for the TIME_WAIT to run out. This is usually about 5 minutes, which is a big deal.
-    #ifndef IASLIB_WIN32__
-            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (void *)&nOption , sizeof( nOption )  );
-    #else
-            setsockopt( m_hSocket, SOL_SOCKET, IASLIB_REUSE_ADDRESS, (const char *)&nOption , sizeof( nOption )  );
-    #endif
-            if ( getsockname( m_hSocket, (sockaddr *)&listen_addr, &addrLen ) != 0)
-            {
-                // We can't get data from the socket -- that's bad.
-    #ifdef IASLIB_WIN32__
-                closesocket( m_hSocket );
-    #else
-                close( m_hSocket );
-    #endif
-                m_hSocket = NULL_SOCKET;
-                IASLIB_THROW_SOCKET_EXCEPTION(errno);
-            }
-            m_nPort = CInternetAddress::getPort( &listen_addr );
-
-            m_addrIPAddress = new CInternetAddress( &listen_addr );
-            m_strAddress = m_addrIPAddress->toStringWithPort();
+            delete m_addrIPAddress;
+            throw;
         }
-        else
-        {
-            m_hSocket = NULL_SOCKET;
-            IASLIB_THROW_SOCKET_EXCEPTION(errno);
-        }
-
     }
+
     CUDPSocket::~CUDPSocket()
     {
-        if ( m_hSocket )
-    #ifdef IASLIB_WIN32__
-            closesocket( m_hSocket );
-    #else
-            close( m_hSocket );
-    #endif
-
-        if ( m_addrIPAddress )
-            delete m_addrIPAddress;
+        Close();
+        delete m_addrIPAddress;
+        m_addrIPAddress = NULL;
     }
-
-    IMPLEMENT_OBJECT( CUDPSocket, CObject )
 
     int CUDPSocket::Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress )
     {
-        struct sockaddr_storage remaddr;
-        socklen_t len = sizeof( remaddr );
-
-        int n = (int)recvfrom( m_hSocket, (char *)pchBuffer, nBufferSize, 0, (struct sockaddr *) &remaddr, &len );
-
-        if ( n < 0 )
+        if ( m_hSocket == NULL_SOCKET || pchBuffer == NULL || nBufferSize <= 0 )
         {
+            return -1;
+        }
+
+        struct sockaddr_storage remaddr;
+        int n;
+        for ( ;; )
+        {
+            socklen_t len = sizeof( remaddr );
+            memset( &remaddr, 0, sizeof( remaddr ) );
+            n = (int)recvfrom( m_hSocket, pchBuffer, nBufferSize, 0, (struct sockaddr *)&remaddr, &len );
+            if ( n >= 0 )
+                break;
+            int nError = CSocket::LastError();
+            if ( nError == EINTR )
+                continue;
+            if ( nError == EMSGSIZE )
+            {
+                    // Windows fills the buffer and reports the rest as an
+                    // error; POSIX systems just cut the datagram short.
+                n = nBufferSize;
+                break;
+            }
             return -1;
         }
 
@@ -188,6 +145,10 @@ namespace IASLib
 
     int CUDPSocket::Read( char *pchBuffer, int nBufferSize, CInternetAddress &incomingAddress, int nTimeoutMs )
     {
+        if ( m_hSocket == NULL_SOCKET )
+        {
+            return -1;
+        }
         int nReady = WaitForReadable( m_hSocket, nTimeoutMs );
         if ( nReady == 0 )
         {
@@ -202,29 +163,34 @@ namespace IASLib
 
     int CUDPSocket::Send( const char *pchBuffer, int nBufferSize, const CInternetAddress &targetAddress )
     {
-        int retVal = -1;
-
-        const struct sockaddr *pTarget = targetAddress.GetAddress();
-
-        if ( ( targetAddress.isValid() ) && ( pTarget ) )
+        if ( m_hSocket == NULL_SOCKET || pchBuffer == NULL || nBufferSize < 0 )
         {
-            socklen_t nAddrLen = ( pTarget->sa_family == AF_INET6 ) ? sizeof( struct sockaddr_in6 ) : sizeof( struct sockaddr_in );
-
-            retVal = (int)sendto( m_hSocket, (const char *)pchBuffer, nBufferSize, 0, pTarget, nAddrLen );
+            return -1;
         }
-        return retVal;
+
+            // The socket is IPv4, so use the target's IPv4 address. (A name
+            // such as "localhost" can resolve to ::1 first, which an IPv4
+            // socket cannot send to.)
+        const struct sockaddr_in *pTarget = targetAddress.GetIPv4();
+        if ( pTarget == NULL )
+        {
+            return -1;
+        }
+
+        for ( ;; )
+        {
+            int nSent = (int)sendto( m_hSocket, pchBuffer, nBufferSize, 0, (const struct sockaddr *)pTarget, sizeof( struct sockaddr_in ) );
+            if ( nSent >= 0 || CSocket::LastError() != EINTR )
+                return ( nSent >= 0 ) ? nSent : -1;
+        }
     }
 
+        // (This closed the handle without forgetting it, so the destructor
+        // closed it again, possibly after the number was reused.)
     void CUDPSocket::Close( void )
     {
-        if ( m_hSocket )
-        {
-#ifdef IASLIB_WIN32__
-            closesocket( m_hSocket );
-#else
-            close( m_hSocket );
-#endif
-        }
+        CSocket::CloseHandle( m_hSocket );
+        m_hSocket = NULL_SOCKET;
     }
 
 } // namespace IASLib

@@ -32,6 +32,8 @@ namespace IASLib
 
                         DEFINE_OBJECT( CSocketException );
             virtual void        Throw( void ) { throw *this; }
+                // The errno value (Winsock's codes are translated to these).
+            int                 GetErrorNumber( void ) const { return m_nErrorNumber; }
 
     };
 } // namespace IASLib

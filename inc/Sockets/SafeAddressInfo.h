@@ -44,6 +44,9 @@
 
 namespace IASLib
 {
+        // One resolved address (a copy of an addrinfo entry), and the ones
+        // after it. The address is held in a sockaddr_storage, so any family
+        // fits.
     class CSafeAddressInfo : public CObject
     {
         private:
@@ -52,61 +55,39 @@ namespace IASLib
             int socktype;
             int protocol;
             socklen_t addrlen;
-            struct sockaddr *addr;
+            struct sockaddr_storage storage;
             CString canonname;
             CSafeAddressInfo *next;
+
+            void            CopyFrom( const CSafeAddressInfo &oSource );
 
         public:
             DEFINE_OBJECT( CSafeAddressInfo );
 
-            CSafeAddressInfo( struct addrinfo *addr );
+                // A copy of the list pAddr starts.
+            CSafeAddressInfo( const struct addrinfo *pAddr );
+                // One address (nLength bytes of it; at most a sockaddr_storage).
+            CSafeAddressInfo( const struct sockaddr *pAddr, socklen_t nLength, int nSocketType = 0 );
             CSafeAddressInfo( const CSafeAddressInfo &oSource );
             ~CSafeAddressInfo( void );
 
             CSafeAddressInfo &operator =( const CSafeAddressInfo &oSource );
 
-            int getFlags()
-            {
-                return flags;
-            }
-
-            int getFamily()
-            {
-                return family;
-            }
-
-            int getSocktype()
-            {
-                return socktype;
-            }
-
-            int getProtocol()
-            {
-                return protocol;
-            }
-
-            socklen_t getAddrLen()
-            {
-                return addrlen;
-            }
+            int getFlags() const { return flags; }
+            int getFamily() const { return family; }
+            int getSocktype() const { return socktype; }
+            int getProtocol() const { return protocol; }
+            socklen_t getAddrLen() const { return addrlen; }
 
             void setPort( int nPort );
-            int getPort( void );
+            int getPort( void ) const;
 
-            struct sockaddr *getAddr()
-            {
-                return addr;
-            }
+            struct sockaddr *getAddr() { return (struct sockaddr *)&storage; }
+            const struct sockaddr *getAddr() const { return (const struct sockaddr *)&storage; }
 
-            CString getCanonname()
-            {
-                return canonname;
-            }
+            CString getCanonname() const { return canonname; }
 
-            CSafeAddressInfo *getNext()
-            {
-                return next;
-            }
+            CSafeAddressInfo *getNext() const { return next; }
     };
 }
 

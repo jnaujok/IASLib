@@ -18,13 +18,21 @@
 #ifndef IASLIB_COVERAGEMAP_H__
 #define IASLIB_COVERAGEMAP_H__
 
-#ifdef IASLIB_STATS__
-
-#include "../Collections/SortedArray.h"
+#include <map>
+#include "../BaseTypes/Object.h"
 #include "../Streams/Stream.h"
 
 namespace IASLib
 {
+        // Which parts of a range are in use: Allocate() and Release() mark
+        // and clear runs [nBase, nBase + nSize), which are kept merged. The
+        // size is the extent of everything ever allocated; the free space is
+        // the gaps inside it. Dump() writes a row per block of the block size
+        // with how much of it is used. Not thread-safe.
+        //
+        // (The previous version compared its blocks by pointer, so nothing
+        // was ever found: Allocate() never merged, Release() never released,
+        // the counters stayed 0, and Dump() wrote no data.)
     class CCoverageMap : public CObject
     {
         public:
@@ -34,46 +42,50 @@ namespace IASLib
                 XML         = 0x0002,
             };
         protected:
-            CSortedArray    m_aCoverageMap;
+            std::map<size_t, size_t> m_mapRuns;     // start -> end (exclusive)
             size_t          m_nMinimum;
             size_t          m_nMaximum;
-            double          m_fFragmentation;
             size_t          m_nUsed;
-            size_t          m_nFree;
             size_t          m_nBlockSize;
         public:
                             CCoverageMap( void );
             virtual        ~CCoverageMap( void );
 
+                            DEFINE_OBJECT( CCoverageMap )
+
+                // Marks a run used. True if none of it was in use already
+                // (false for an empty run, or one that overlaps; the run is
+                // marked either way).
             bool            Allocate( size_t nBase, size_t nSize );
+                // Clears a run; with no size, from nBase to the end of the
+                // used run it is in. True if anything was in use.
             bool            Release( size_t nBase, size_t nSize = IASLib::NOT_FOUND );
+                // Whether every byte of a run is in use.
+            bool            IsUsed( size_t nBase, size_t nSize = 1 ) const;
 
-            size_t          GetSize( void ) { return m_nMaximum - m_nMinimum; }
-            size_t          GetUsed( void ) { return m_nUsed; }
-            size_t          GetFree( void ) { return m_nFree; }
+            size_t          GetSize( void ) const { return ( m_nMaximum > m_nMinimum ) ? m_nMaximum - m_nMinimum : 0; }
+            size_t          GetUsed( void ) const { return m_nUsed; }
+            size_t          GetFree( void ) const { return GetSize() - m_nUsed; }
+                // The number of separate used runs.
+            size_t          GetRunCount( void ) const { return m_mapRuns.size(); }
+                // 0 when the free space is all in one gap, towards 1 as it is
+                // split into many small ones (1 - largest gap / free space).
+            double          GetFragmentation( void ) const;
 
-            void            SetBlockSize( size_t nBlockSize ) { m_nBlockSize = nBlockSize; }
+            void            SetBlockSize( size_t nBlockSize ) { m_nBlockSize = ( nBlockSize ) ? nBlockSize : 1; }
+            size_t          GetBlockSize( void ) const { return m_nBlockSize; }
 
-
+                // Start, used and free bytes of each block, from the first
+                // used block to the last; with bFillInGaps false, blocks with
+                // nothing in use are left out.
             void            Dump( CStream &oStream, OutputFormatSpecifier nFormat, bool bFillInGaps = false );
 
         private:
-            int             m_nLinePosition;
-            size_t          FindCategory( const char *strCategoryName );
+            size_t          UsedIn( size_t nStart, size_t nEnd ) const;
 
-            void            FormatStart( CStream &oStream, OutputFormatSpecifier nFormat );
-
-            void            FormatStartLine( CStream &oStream, OutputFormatSpecifier nFormat );
-
-            void            FormatValue( CStream &oStream, int nValue, OutputFormatSpecifier nFormat );
-            void            FormatValue( CStream &oStream, const char *strValue, OutputFormatSpecifier nFormat );
-
-            void            FormatEndLine( CStream &oStream, OutputFormatSpecifier nFormat );
-
-            void            FormatEnd( CStream &oStream, OutputFormatSpecifier nFormat );
+                            CCoverageMap( const CCoverageMap & );
+            CCoverageMap   &operator =( const CCoverageMap & );
     };
 } // namespace IASLib
-
-#endif // IASLIB_STATS__
 
 #endif // IASLIB_COVERAGEMAP_H__

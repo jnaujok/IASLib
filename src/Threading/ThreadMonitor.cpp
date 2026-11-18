@@ -152,10 +152,9 @@ CThreadMonitor::~CThreadMonitor( void )
                 delete pThread;
             }
         }
-        catch ( CException *pException )
+        catch ( ... )
         {
-            pException = pException;
-//            ErrorLog( "Thread Monitor: Exception thrown on delete. [%s]\n", (const char *)(*pException) );
+                // (Exceptions are thrown by value; this caught pointers only.)
         }
     }
 }
@@ -255,10 +254,8 @@ void *CThreadMonitor::Run( void )
             {
                 delete pThread;
             }
-            catch ( CException *pException )
+            catch ( ... )
             {
-                pException=pException;
-//                ErrorLog( "Thread Monitor: Exception thrown on delete. [%s]\n", (const char *)(*pException) );
             }
             
             nCount++;

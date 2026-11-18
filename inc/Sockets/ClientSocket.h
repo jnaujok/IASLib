@@ -25,7 +25,11 @@ namespace IASLib
     class CClientSocket : public CSocket
     {
         public:
+                            // Connects to strConnectTo:nPort; IsConnected()
+                            // says whether it worked.
 	                    CClientSocket( const char *strConnectTo, int nPort );
+                            // The same, with the configuration's options.
+                        CClientSocket( CSocketConfig config, const char *strConnectTo, int nPort );
 	        virtual    ~CClientSocket();
 
                         DEFINE_OBJECT( CClientSocket )

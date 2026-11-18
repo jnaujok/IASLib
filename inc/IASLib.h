@@ -334,14 +334,15 @@
 #include "Sockets/Socket.h"
 #include "Sockets/InternetAddress.h"
 #include "Sockets/UDPSocket.h"
+#include "Sockets/SocketConfig.h"
+#include "Sockets/RemoteAddress.h"
 
 //*********
 //  STATS
 //*********
 
-#ifdef IASLIB_STATS__
 #include "Stats/Histogram.h"
-#endif
+#include "Stats/CoverageMap.h"
 
 //**********
 //  STATUS

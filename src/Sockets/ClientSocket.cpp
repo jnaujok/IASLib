@@ -36,6 +36,11 @@ namespace IASLib
     {
     }
 
+    CClientSocket::CClientSocket( CSocketConfig config, const char *strConnectTo, int nPort )
+    : CSocket( config, strConnectTo, nPort )
+    {
+    }
+
     /**
      * Client Socket Destructor
      *

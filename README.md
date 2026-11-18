@@ -274,6 +274,8 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 | `TestBaseTypes` | `CObject`, `CString` (sharing, fixed buffers, numbers, searching, escaping, threads), the tokenizer, `CDataBlock`, UUIDs, ISAAC against Jenkins' test vector, and `CVariant` |
 | `TestCollections` | Every template collection against the standard library on random operations, with counted elements to catch leaks, and the classic collections |
 | `TestStreams` | String, file, buffered, socket and null streams: text that reads back, big-endian binary, lines, the end of a stream, and flushing |
+| `TestSocketClasses` | Addresses, the config builder, TCP clients and servers over loopback (both ends' addresses, data, errors, timeouts, non-blocking), UDP, and IPv6 where available |
+| `TestStats` | CHistogram CSV/XML output, CCoverageMap allocation and release, CCPUUsage times |
 | `TestThreading` | Starting and joining threads from any thread, return codes, `ExitThread()`, `Kill()`, exceptions, the monitor, semaphores, the thread pool and the server thread |
 | `TestXMLDocument` | XML reading and writing, entities and CDATA, well-formedness errors with positions, XXE and entity-expansion protection, the element API, a real file, and fuzzing |
 

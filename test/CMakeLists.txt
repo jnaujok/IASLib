@@ -58,3 +58,11 @@ endif()
 add_executable(TestStreams TestStreams/TestStreams.cpp)
 target_link_libraries(TestStreams IASLib)
 add_test(test_streams TestStreams)
+
+add_executable(TestSocketClasses TestSocketClasses/TestSocketClasses.cpp)
+target_link_libraries(TestSocketClasses IASLib)
+add_test(test_socket_classes TestSocketClasses)
+
+add_executable(TestStats TestStats/TestStats.cpp)
+target_link_libraries(TestStats IASLib)
+add_test(test_stats TestStats)

@@ -25,6 +25,11 @@
 
 namespace IASLib
 {
+        // Settings for a new socket. Defaults: backlog 32, 4096-byte
+        // buffers, no keep-alive, no linger, no address reuse, no timeout,
+        // Nagle on, blocking. A timeout (milliseconds, 0 for none) applies to
+        // each read and send; one that runs out makes Read() or Send() throw
+        // a CSocketException (EWOULDBLOCK).
     class CSocketConfig : public CObject
     {
         private:
@@ -33,64 +38,64 @@ namespace IASLib
             int sendBufferSize;
             bool keepAlive;
             bool linger;
+            int lingerSeconds;
             bool reuseSocket;
             int timeoutMillis;
             bool noDelay;
             bool blocking;
-        protected:
-            CSocketConfig( void );
         public:
+            CSocketConfig( void );
+            CSocketConfig( const CSocketConfig &oSource );
+            CSocketConfig &operator =( const CSocketConfig &oSource );
             virtual ~CSocketConfig( void );
             DEFINE_OBJECT( CSocketConfig );
 
-            int getBacklogSize() { return backlogSize; }
-            int getReceiveBufferSize() {return recvBufferSize;}
-            int getSendBufferSize(){return sendBufferSize;}
-            bool isKeepAlive(){ return keepAlive;}
-            bool isLinger(){return linger;}
-            bool isReuseSocket(){return reuseSocket;}
-            int getTimeout(){return timeoutMillis;}
-            bool    isTcpNoDelay(){return noDelay;}
-            bool isBlocking() { return blocking; }
+            int getBacklogSize() const { return backlogSize; }
+            int getReceiveBufferSize() const { return recvBufferSize; }
+            int getSendBufferSize() const { return sendBufferSize; }
+            bool isKeepAlive() const { return keepAlive; }
+            bool isLinger() const { return linger; }
+            int getLingerSeconds() const { return lingerSeconds; }
+            bool isReuseSocket() const { return reuseSocket; }
+            int getTimeout() const { return timeoutMillis; }
+            bool isTcpNoDelay() const { return noDelay; }
+            bool isBlocking() const { return blocking; }
 
             friend class CSocketConfigBuilder;
-            friend class CSocket;
-            friend class CServerSocket;
-            friend class CClientSocket;
     };
 }
 
 namespace IASLib
 {
+        // Builds a CSocketConfig. The setters return the builder, so they
+        // chain: CSocketConfigBuilder().setTimeout( 5000 ).setTCPNoDelay( true ).Build().
+        // (They returned a copy, so every setting after the first in a chain
+        // was lost.)
     class CSocketConfigBuilder : public CObject
     {
         private:
-            int backlogSize;
-            int recvBufferSize;
-            int sendBufferSize;
-            bool keepAlive;
-            bool linger;
-            bool reuseSocket;
-            int timeoutMillis;
-            bool noDelay;
-            bool blocking;
+            CSocketConfig   m_config;
         public:
             DEFINE_OBJECT(CSocketConfigBuilder );
 
-            CSocketConfig *build( void );
+                // A new configuration, which the caller deletes.
+            CSocketConfig *build( void ) const;
+                // The configuration, by value.
+            CSocketConfig  Build( void ) const { return m_config; }
 
-            CSocketConfigBuilder setBacklogSize( int backlogSize );
-            CSocketConfigBuilder setReceiveBufferSize( int bufferSize );
-            CSocketConfigBuilder setSendBufferSize( int bufferSize );
-            CSocketConfigBuilder setKeepalive( bool keepalive );
-            CSocketConfigBuilder setLinger( bool linger );
-            CSocketConfigBuilder setReuseAddress( bool reuse );
-            CSocketConfigBuilder setTimeout( int timeoutMillis );
-            CSocketConfigBuilder setTCPNoDelay( bool noDelay );
-            CSocketConfigBuilder setBlocking( bool blocking );
+            CSocketConfigBuilder &setBacklogSize( int backlogSize );
+            CSocketConfigBuilder &setReceiveBufferSize( int bufferSize );
+            CSocketConfigBuilder &setSendBufferSize( int bufferSize );
+            CSocketConfigBuilder &setKeepalive( bool keepalive );
+                // Whether Close() waits (up to nSeconds) for unsent data.
+            CSocketConfigBuilder &setLinger( bool linger, int nSeconds = 10 );
+            CSocketConfigBuilder &setReuseAddress( bool reuse );
+            CSocketConfigBuilder &setTimeout( int timeoutMillis );
+            CSocketConfigBuilder &setTCPNoDelay( bool noDelay );
+            CSocketConfigBuilder &setBlocking( bool blocking );
 
             CSocketConfigBuilder( void );
-            CSocketConfigBuilder( CSocketConfigBuilder &oSource );
+            CSocketConfigBuilder( const CSocketConfigBuilder &oSource );
     };
 
 } // end of namespace IASLib
