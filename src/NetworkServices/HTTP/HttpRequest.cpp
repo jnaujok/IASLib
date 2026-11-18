@@ -36,9 +36,14 @@ namespace IASLib
 
     CHttpRequest::CHttpRequest( const char *strMethod, const char *uri ) : CGenericRequest(), m_bSecureConnection( false )
     {
-        m_requestType = strMethod;
-        m_uri = uri;
+            // A method or URI that could not be sent as given (a CR LF in the
+            // URI would add header lines) leaves the request invalid, and
+            // CHttpClient will not send it. (Both were taken as they came.)
         m_version = "HTTP/1.1";
+        if ( ! setRequestType( strMethod ) || ! setUri( uri ) )
+        {
+            m_bIsValid = false;
+        }
     }
 
     CHttpRequest::~CHttpRequest( void )
@@ -144,9 +149,13 @@ namespace IASLib
         {
             retVal += m_pHeaders->toString();
         }
-        if ( body.GetLength() > 0 && ! hasHeader( "Content-Length" ) && ! hasHeader( "Transfer-Encoding" ) )
+        if ( ! hasHeader( "Content-Length" ) && ! hasHeader( "Transfer-Encoding" ) )
         {
-            retVal += CString::FormatString( "Content-Length: %lu\r\n", (unsigned long)body.GetLength() );
+                // RFC 9110 8.6: a POST or PUT says when its body is empty too.
+            if ( body.GetLength() > 0 || m_requestType == METHOD_POST || m_requestType == METHOD_PUT )
+            {
+                retVal += CString::FormatString( "Content-Length: %lu\r\n", (unsigned long)body.GetLength() );
+            }
         }
         retVal += "\r\n";
         retVal += body;

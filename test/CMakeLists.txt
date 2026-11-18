@@ -19,6 +19,14 @@ add_executable(TestHttp TestHttp/TestHttp.cpp)
 target_link_libraries(TestHttp IASLib)
 add_test(test_http TestHttp)
 
+add_executable(TestHttpClient TestHttpClient/TestHttpClient.cpp)
+target_link_libraries(TestHttpClient IASLib)
+add_test(test_http_client TestHttpClient)
+
+add_executable(TestMail TestMail/TestMail.cpp)
+target_link_libraries(TestMail IASLib)
+add_test(test_mail TestMail)
+
 add_executable(TestDate TestDate/TestDate.cpp)
 target_link_libraries(TestDate IASLib)
 add_test(test_date TestDate)

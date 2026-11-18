@@ -15,8 +15,11 @@
  * [A division of BlackStar Enterprises, LLC.]
  */
 
+#ifdef IASLIB_NETWORKING__
+
+    // (This file had no guard, unlike its header and its siblings, so a
+    // build without networking failed on the undeclared class.)
 #include "HttpHeader.h"
-#include "StringTokenizer.h"
 
 namespace IASLib
 {
@@ -43,3 +46,5 @@ namespace IASLib
     }
 
 } // Namespace IASLib
+
+#endif // IASLIB_NETWORKING__

@@ -8,7 +8,14 @@
  * message, as a UDP datagram does or as a stream-transport reader produces
  * after framing the message. The body is taken from the bytes following
  * the headers: Content-Length bytes of it when that header is present, or
- * all of the remaining bytes when it is not.
+ * all of the remaining bytes when it is not (for a stream that cannot say
+ * how many remain, everything up to its end).
+ *
+ * A request owns its header list and body, so it cannot be copied.
+ *
+ * The request line is checked when set as well as when parsed: a method
+ * must be a token, and a request URI or version may not hold spaces or
+ * control characters (a CR LF in a URI would start a new header line).
  *
  * Author: Jeffrey R. Naujok
  * Created: September 19, 2019
@@ -25,6 +32,8 @@
 #include "HeaderList.h"
 #include "Entity.h"
 #include "Sockets/InternetAddress.h"
+
+#include <string>
 
 namespace IASLib
 {
@@ -49,6 +58,11 @@ namespace IASLib
 
             virtual ~CGenericRequest( void );
 
+                // (The compiler-made copies shared the header list and body,
+                // so the second destructor deleted them again.)
+            CGenericRequest( const CGenericRequest & ) = delete;
+            CGenericRequest &operator =( const CGenericRequest & ) = delete;
+
                 // Parses one complete message. Returns false, and records the
                 // reason in getParseError(), if the message is malformed. Whatever
                 // could be parsed (request line, headers) is still available.
@@ -58,23 +72,28 @@ namespace IASLib
             virtual bool    isValid( void ) { return m_bIsValid; }
             virtual CString getParseError( void ) { return m_strParseError; }
 
+                // The setters refuse (false, nothing changes) a method that is
+                // not a token, and a URI or version that is empty or holds a
+                // space or a control character.
             virtual CString getRequestType( void ) { return m_requestType; }
-            virtual void    setRequestType( const char *requestType );
+            virtual bool    setRequestType( const char *requestType );
 
             virtual CString getUri( void ) { return m_uri; }
-            virtual void    setUri( const char *uri );
+            virtual bool    setUri( const char *uri );
 
             virtual CString getVersion( void ) { return m_version; }
-            virtual void    setVersion( const char *version );
+            virtual bool    setVersion( const char *version );
 
                 // Returns the first value of the header, or "" if it is absent.
             virtual CString getHeaderValue( const char *headerName );
-                // Replaces all values of the header with this one.
-            virtual void    setHeaderValue( const char *headerName, const char *headerValue );
+                // Replaces all values of the header with this one. False if
+                // the name or value is refused (see CHeaderList::addHeader).
+            virtual bool    setHeaderValue( const char *headerName, const char *headerValue );
 
             virtual CStringArray getHeaderValues( const char *headerName );
-                // Replaces all values of the header with these.
-            virtual void    setHeaderValues( const char *headerName, CStringArray headerValues );
+                // Replaces all values of the header with these (or, if any is
+                // refused, leaves the header as it was and returns false).
+            virtual bool    setHeaderValues( const char *headerName, CStringArray headerValues );
 
             virtual bool    hasHeader( const char *headerName );
             virtual void    removeHeader( const char *headerName );
@@ -105,6 +124,16 @@ namespace IASLib
             void setParseError( const char *reason );
 
             static CString stripLineEnding( const CString &line );
+                // Appends up to nWanted bytes from the stream (NOT_FOUND: to
+                // its end).
+            static void readBody( CStream &stream, std::string &body, size_t nWanted );
+
+        public:
+                // A method is a token; a URI or version is printable text
+                // without spaces (no CR, LF, NUL or other control characters).
+            static bool isValidMethod( const CString &method );
+            static bool isValidUri( const CString &uri );
+            static bool isValidVersion( const CString &version ) { return isValidUri( version ); }
     };
 } // namespace IASLib
 

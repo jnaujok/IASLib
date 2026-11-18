@@ -235,7 +235,9 @@ namespace IASLib
                 continue;   // Timeout, error or empty datagram.
             }
 
-            CString message( buffer.data(), (size_t)nRead );
+                // (The (text, length) string stopped at a zero byte, which
+                // cut a binary body short.)
+            CString message = CString::FromBytes( buffer.data(), (size_t)nRead );
             queueTask( new CSipListener( this, m_pState->udpTransport, source, message ) );
         }
     }
@@ -385,7 +387,7 @@ namespace IASLib
                     break;  // Need more data.
                 }
 
-                CString message( buffer.data() + nLeading, (size_t)nTotal - nLeading );
+                CString message = CString::FromBytes( buffer.data() + nLeading, (size_t)nTotal - nLeading );
                 buffer.erase( 0, (size_t)nTotal );
 
                     // Messages on one connection are handled in order, here.

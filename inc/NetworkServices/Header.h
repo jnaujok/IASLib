@@ -48,16 +48,31 @@ namespace IASLib
 
                 // Returns the first value, or an empty string if there are none.
             virtual CString getValue( void ) const;
-            virtual void setValue( const CString &value );
-            virtual void addValue( const CString &value );
+                // Replace or add a value. A value holding CR, LF or NUL is
+                // refused (false, and nothing changes): written out, it would
+                // end the header line early and let the rest be read as more
+                // headers or a body (header injection).
+            virtual bool setValue( const CString &value );
+            virtual bool addValue( const CString &value );
             virtual CStringArray getValues( void ) const;
             virtual size_t getValueCount( void ) const;
 
                 // Used by parsers to append a folded (continuation) line to the
-                // most recently added value.
+                // most recently added value. Refused like addValue().
             virtual void appendToLastValue( const CString &text );
 
             static CString makeKey( const CString &name );
+
+                // A field name is a token (RFC 9110 5.6.2, RFC 3261 25.1):
+                // letters, digits and !#$%&'*+-.^_`|~, at least one of them.
+            static bool isValidName( const CString &name );
+                // A field value may hold anything but CR, LF and NUL.
+            static bool isValidValue( const CString &value );
+                // Whether the text holds CR, LF or NUL (looking at every byte,
+                // past any NUL).
+            static bool hasLineBreakOrNul( const CString &text );
+                // A token character (see isValidName()).
+            static bool isTokenChar( char ch );
     };
 } // namespace IASLib
 

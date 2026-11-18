@@ -318,6 +318,10 @@ namespace IASLib
 
                             // The text as bytes (for hashing and the like).
             const unsigned char *getBytes( void ) const;
+                            // A string holding exactly nLength bytes, zero
+                            // bytes included (the (text, length) constructor
+                            // stops at the first zero).
+            static CString      FromBytes( const void *pData, size_t nLength );
 
         private:
                             // Makes the stub this string's own (unless it is

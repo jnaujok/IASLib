@@ -66,7 +66,10 @@ namespace IASLib
     void CGenericResponse::setStatus( int nCode, const char *desc )
     {
         m_nStatusCode = nCode;
-        m_strStatusDescription = desc;
+            // (Any text was taken, so a reason with a CR LF in it could add
+            // header lines to the response.)
+        CString strDescription( desc ? desc : "" );
+        m_strStatusDescription = CHeader::isValidValue( strDescription ) ? strDescription : CString( "" );
     }
 
     void CGenericResponse::SetEntity( CEntity *entity )
@@ -78,21 +81,21 @@ namespace IASLib
         m_body = entity;
     }
 
-    void CGenericResponse::addHeader( const char *name, const char *value )
+    bool CGenericResponse::addHeader( const char *name, const char *value )
     {
-        m_headers.addHeader( name, value );
+        return m_headers.addHeader( name, value );
     }
 
-    void CGenericResponse::addHeader( const char *name, size_t nValue )
+    bool CGenericResponse::addHeader( const char *name, size_t nValue )
     {
         CString value;
         value.Format( "%lu", (unsigned long)nValue );
-        m_headers.addHeader( name, value );
+        return m_headers.addHeader( name, value );
     }
 
-    void CGenericResponse::addHeaders( const char *name, CStringArray values )
+    bool CGenericResponse::addHeaders( const char *name, CStringArray values )
     {
-        m_headers.addHeader( name, values );
+        return m_headers.addHeader( name, values );
     }
 
     void CGenericResponse::removeHeader( const char *name )
@@ -127,7 +130,18 @@ namespace IASLib
         {
             m_headers.addHeader( "Content-Type", m_body->getMimeType() );
         }
-        addHeader( "Content-Length", (size_t)body.GetLength() );
+            // A message with Transfer-Encoding is framed by it and must not
+            // also carry Content-Length (RFC 9112 6.1, 6.2). (Content-Length
+            // was always added, so a chunked response had both, which lets a
+            // proxy and a client disagree on where the message ends.)
+        if ( m_headers.hasHeader( "Transfer-Encoding" ) )
+        {
+            m_headers.removeHeader( "Content-Length" );
+        }
+        else
+        {
+            addHeader( "Content-Length", (size_t)body.GetLength() );
+        }
 
         CString retVal = statusLine;
         retVal += m_headers.toString();
