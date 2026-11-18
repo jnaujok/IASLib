@@ -1,4 +1,7 @@
 /**
+ * @file Random.h
+ * @brief TRandom, the ISAAC and ISAAC-64 pseudo-random number generators.
+ *
  * Random Class
  *
  * This class generates pseudo-random numbers with Robert J. Jenkins Jr.'s
@@ -32,14 +35,18 @@
 
 namespace IASLib
 {
+    /// Implementation details of TRandom.
     namespace RandomDetail
     {
-            // What differs between ISAAC and ISAAC-64.
+            /// What differs between ISAAC and ISAAC-64.
         template <class T> struct TIsaacTraits;
 
+            /// ISAAC's constants and mixing steps (32 bits).
         template <> struct TIsaacTraits<uint32_t>
         {
+                /// The seeding constant.
             static uint32_t GoldenRatio( void ) { return 0x9e3779b9UL; }
+                /// One of the four mixing steps (nStep 0-3) of the generator.
             static uint32_t Mix( uint32_t a, int nStep )
             {
                 switch ( nStep )
@@ -50,6 +57,7 @@ namespace IASLib
                     default: return a ^ ( a >> 16 );
                 }
             }
+                /// The seeding scramble of eight words.
             static void Shuffle( uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d, uint32_t &e, uint32_t &f, uint32_t &g, uint32_t &h )
             {
                 a ^= b << 11; d += a; b += c;
@@ -63,9 +71,12 @@ namespace IASLib
             }
         };
 
+            /// ISAAC-64's constants and mixing steps.
         template <> struct TIsaacTraits<uint64_t>
         {
+                /// The seeding constant.
             static uint64_t GoldenRatio( void ) { return 0x9e3779b97f4a7c13ULL; }
+                /// One of the four mixing steps (nStep 0-3) of the generator.
             static uint64_t Mix( uint64_t a, int nStep )
             {
                 switch ( nStep )
@@ -76,6 +87,7 @@ namespace IASLib
                     default: return a ^ ( a >> 33 );
                 }
             }
+                /// The seeding scramble of eight words.
             static void Shuffle( uint64_t &a, uint64_t &b, uint64_t &c, uint64_t &d, uint64_t &e, uint64_t &f, uint64_t &g, uint64_t &h )
             {
                 a -= e; f ^= h >> 9;  h += a;
@@ -90,27 +102,47 @@ namespace IASLib
         };
     }
 
+    /// The word type of the default (32-bit ISAAC) generator.
     typedef uint32_t ISAAC_INT;
 
-        // T is uint32_t (ISAAC) or uint64_t (ISAAC-64). Copies continue
-        // the same sequence independently. Not thread-safe: use one
-        // generator per thread, or lock around it.
+        /// A pseudo-random number generator: Jenkins' ISAAC.
+        ///
+        /// T is uint32_t (ISAAC) or uint64_t (ISAAC-64); ALPHA sets the size
+        /// of the state (2^ALPHA words; 8 is the reference). Copies continue
+        /// the same sequence independently. Not thread-safe: use one
+        /// generator per thread, or lock around it. The class meets the
+        /// standard's UniformRandomBitGenerator requirements, so it works
+        /// with the &lt;random&gt; distributions.
+        ///
+        /// @code
+        /// TRandom<> rng;
+        /// rng.SeedFromSystem();
+        /// uint32_t n = rng.rand();
+        /// std::uniform_int_distribution<int> die( 1, 6 );
+        /// int nRoll = die( rng );
+        /// @endcode
+        ///
+        /// @tparam ALPHA log2 of the number of state words.
+        /// @tparam T uint32_t or uint64_t.
     template <int ALPHA = (8), class T = ISAAC_INT>
     class TRandom
     {
         public:
+                /// The number of state words (and results per round).
             enum { N = ( 1 << ALPHA ) };
 
+                /// The type of the numbers produced.
             typedef T result_type;
 
-                // Seeded with a, b, c and nothing else (the same values
-                // always give the same sequence).
+                /// Seeded with a, b, c and nothing else (the same values
+                /// always give the same sequence).
             explicit TRandom( T a = 0, T b = 0, T c = 0 )
             {
                 srand( a, b, c );
             }
             virtual ~TRandom( void ) {}
 
+                /// The next number, uniform over all values of T.
             T rand( void )
             {
                 if ( m_nCount == 0 )
@@ -121,12 +153,15 @@ namespace IASLib
                 return m_aResults[ --m_nCount ];
             }
 
+                /// The next number; same as rand().
             T operator ()( void ) { return rand(); }
+                /// The smallest number produced: 0.
             static T ( min )( void ) { return 0; }
+                /// The largest number produced: every bit set.
             static T ( max )( void ) { return (T)~(T)0; }
 
-                // Reseeds with a, b, c and the N values of s (zeros if s is
-                // NULL).
+                /// Reseeds with a, b, c and the N values of s (zeros if s is
+                /// NULL).
             void srand( T a = 0, T b = 0, T c = 0, const T *s = NULL )
             {
                 for ( int i = 0; i < N; i++ )
@@ -139,7 +174,8 @@ namespace IASLib
                 randinit( true );
             }
 
-                // Reseeds from the operating system's random source.
+                /// Reseeds from the operating system's random source
+                /// (std::random_device).
             void SeedFromSystem( void )
             {
                 std::random_device device;
@@ -156,6 +192,10 @@ namespace IASLib
             }
 
         protected:
+                /// Initializes the state from the seed in the results array
+                /// and m_a, m_b, m_c (bUseSeed), or from the constants alone
+                /// (which also zeroes m_a, m_b and m_c), then makes the first
+                /// round of results.
             void randinit( bool bUseSeed )
             {
                 typedef RandomDetail::TIsaacTraits<T> Traits;
@@ -195,6 +235,7 @@ namespace IASLib
                 m_nCount = N;       // prepare to use the first set of results
             }
 
+                /// Makes the next N results (one round of ISAAC).
             void isaac( void )
             {
                 typedef RandomDetail::TIsaacTraits<T> Traits;
@@ -215,12 +256,12 @@ namespace IASLib
             }
 
         private:
-            T       m_aResults[ N ];
-            T       m_aMemory[ N ];
-            T       m_a;
-            T       m_b;
-            T       m_c;
-            int     m_nCount;
+            T       m_aResults[ N ];    ///< The current round of results (the seed, while seeding).
+            T       m_aMemory[ N ];     ///< The generator's internal state.
+            T       m_a;                ///< Accumulator.
+            T       m_b;                ///< The last result.
+            T       m_c;                ///< Counter, incremented each round.
+            int     m_nCount;           ///< Results left in m_aResults.
 
             static_assert( sizeof( T ) == 4 || sizeof( T ) == 8, "TRandom works on 32- or 64-bit unsigned integers" );
             static_assert( (T)-1 > 0, "TRandom works on unsigned integers" );

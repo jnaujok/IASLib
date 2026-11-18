@@ -1,4 +1,7 @@
-/*
+/**
+ * @file Bool.h
+ * @brief A bool type for old compilers that lack one (IASLIB_DEFINE_BOOL__).
+ *
  * Boolean
  *
  *	On some old compilers (DEC springs to mind) the new "bool" value
@@ -19,14 +22,14 @@
 
 #ifdef IASLIB_DEFINE_BOOL__
 
+/// bool as an integer, for compilers without the built-in type.
 typedef int bool;
 
-#define true 1
-#define false 0
-#define TRUE 1
-#define FALSE 0
+#define true 1      ///< The true value.
+#define false 0     ///< The false value.
+#define TRUE 1      ///< The true value, upper case.
+#define FALSE 0     ///< The false value, upper case.
 
 #endif
 
 #endif
-

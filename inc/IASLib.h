@@ -1,4 +1,8 @@
-/*
+/**
+ * @file IASLib.h
+ * @brief The umbrella header: includes every part of the library that the
+ * feature macros switch on.
+ *
  * IAS Library
  *
  *	This header file includes all of the various parts of the
@@ -8,6 +12,40 @@
  *  Please note that at a bare minimum you must define the software
  * platform that is being built.
  *
+ * The feature macros (the CMake option that defines each, where there is
+ * one, in brackets). Define the same ones the library was built with: they
+ * change what the headers declare.
+ *
+ * - Platform, exactly one: IASLIB_LINUX__, IASLIB_WIN32__, IASLIB_MAC__
+ *   (set by CMake for the build platform), or IASLIB_SUN__, IASLIB_DEC__,
+ *   IASLIB_AIX__. Without one, this header prints an error message.
+ * - IASLIB_MULTI_THREADED__ [USE_THREADS]: threading, and the locks in the
+ *   thread-safe collections. IASLIB_PTHREAD__ (set with it except on
+ *   Windows) creates threads through pthreads.
+ * - IASLIB_DATABASE__ [USE_DATABASE]: the database classes, with
+ *   IASLIB_DB_SQLITE__ [USE_SQLITE], IASLIB_DB_SYBASE__ [USE_SYBASE],
+ *   IASLIB_DB_MYSQL__ [USE_MYSQL] and IASLIB_DB_ORACLE__ [USE_ORACLE] for
+ *   each database.
+ * - IASLIB_NETWORKING__ [USE_NETWORK]: network services. IASLIB_TLS__ is
+ *   defined as well when OpenSSL is found: secure sockets, HTTPS, SIP over
+ *   TLS.
+ * - IASLIB_JSON_SUPPORT__ [USE_JSON]: the JSON classes.
+ * - IASLIB_RTTI__ [USE_RTTI]: GetType() and IsType() on every CObject (see
+ *   DECLARE_OBJECT()).
+ * - IASLIB_DEBUG__ [USE_DEBUG]: ASSERT() checks its condition.
+ * - IASLIB_MEMORY_MANAGER__ [USE_MEMORY_MANAGER] and
+ *   IASLIB_MEMORY_DEBUGGING__ [USE_MEMORY_DEBUGGING]: library objects are
+ *   allocated through CMemoryManager; with debugging, a CMemoryDebugHeap
+ *   that checks fenceposts around each object.
+ * - IASLIB_HERSCHEL_CORRECTION__ [USE_HERSCHEL_CORRECTION]: CDate starts
+ *   with Herschel's 4000-year rule on.
+ * - IASLIB_TIMEZONE_ICU__ [USE_TIMEZONE_ICU]: CTimeZone may read named
+ *   zones from ICU on systems other than Windows.
+ * - IASLIB_DEFINE_BOOL__: defines bool, true and false for old compilers
+ *   (see Bool.h).
+ * - IASLIB_STD_STREAM_SUPPORT__: CString's operator << and >> for the
+ *   standard streams.
+ *
  *	Author: Jeffrey R. Naujok
  *	Created: 01/01/2005
  *	Log:
@@ -15,6 +53,24 @@
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
+ */
+
+/**
+ * @file IASLibConfig.h
+ * @brief The library's version, written by CMake from IASLibConfig.h.in.
+ *
+ * (Documented here because CMake regenerates IASLibConfig.h on every
+ * configure.)
+ */
+
+/**
+ * @def IASLib_VERSION_MAJOR
+ * The library's major version (from the CMake project version).
+ */
+
+/**
+ * @def IASLib_VERSION_MINOR
+ * The library's minor version (from the CMake project version).
  */
 
 #ifndef IASLIB__
