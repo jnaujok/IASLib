@@ -74,7 +74,7 @@ namespace IASLib
 
     CSjson::CSjson( unsigned nSenderId, bool bStateful, unsigned nCacheWidth )
         : m_nSenderId( nSenderId & 0xFFFF ), m_bStateful( bStateful ), m_bIncludeSenderId( ! bStateful ), m_nCacheWidth( nCacheWidth ),
-          m_bSchemaEncoding( true ), m_bLz4( true ), m_nTextLevel( TEXT_LEVEL ), m_nTextWindowLog( TEXT_WINDOW_LOG ), m_nSequence( 0 ), m_pTextOut( NULL ), m_eError( SJSON_OK )
+          m_bSchemaEncoding( true ), m_bLz4( true ), m_nTextLevel( TEXT_LEVEL ), m_nTextWindowLog( TEXT_WINDOW_LOG ), m_nSequence( 0 ), m_pTextOut( NULL ), m_pFrameOut( NULL ), m_pFrameIn( NULL ), m_eError( SJSON_OK )
     {
         if ( bStateful )
             m_pStream.reset( new CSjsonStreamState( nCacheWidth ) );
@@ -90,6 +90,8 @@ namespace IASLib
             delete it->second;
 #ifdef IASLIB_SJSON_ZSTD__
         ZSTD_freeCCtx( (ZSTD_CCtx *)m_pTextOut );
+        ZSTD_freeCCtx( (ZSTD_CCtx *)m_pFrameOut );
+        ZSTD_freeDCtx( (ZSTD_DCtx *)m_pFrameIn );
         for ( std::map<unsigned, void *>::iterator it = m_mapTextIn.begin(); it != m_mapTextIn.end(); ++it )
             ZSTD_freeDCtx( (ZSTD_DCtx *)it->second );
 #endif
@@ -200,15 +202,20 @@ namespace IASLib
         const std::string &strDict = dictionary.textDictionary();
         if ( ! bStream )
         {
-                // One self-contained frame per packet.
-            ZSTD_CCtx *pContext = ZSTD_createCCtx();
+                // One self-contained frame per packet. The context and the
+                // digested text dictionary are kept between packets, so a
+                // frame does not rebuild the dictionary's level-19 tables.
+            if ( m_pFrameOut == NULL )
+                m_pFrameOut = ZSTD_createCCtx();
+            ZSTD_CCtx *pContext = (ZSTD_CCtx *)m_pFrameOut;
+            ZSTD_CCtx_reset( pContext, ZSTD_reset_session_and_parameters );
             ZSTD_CCtx_setParameter( pContext, ZSTD_c_compressionLevel, m_nTextLevel );
             ZSTD_CCtx_setParameter( pContext, ZSTD_c_checksumFlag, 0 );
             if ( ! strDict.empty() )
-                ZSTD_CCtx_loadDictionary( pContext, strDict.data(), strDict.size() );
+                ZSTD_CCtx_refCDict( pContext, (const ZSTD_CDict *)dictionary.zstdCompressDictionary( m_nTextLevel ) );
             std::string strOut( ZSTD_compressBound( strText.size() ), '\0' );
             size_t nSize = ZSTD_compress2( pContext, &strOut[ 0 ], strOut.size(), strText.data(), strText.size() );
-            ZSTD_freeCCtx( pContext );
+            ZSTD_CCtx_refCDict( pContext, NULL );       // the dictionary may be replaced before the next frame
             if ( ZSTD_isError( nSize ) )
                 throw CSjsonException( SJSON_ERROR_MALFORMED, ZSTD_getErrorName( nSize ) );
             strOut.resize( nSize );
@@ -262,13 +269,13 @@ namespace IASLib
             unsigned long long ullSize = ZSTD_getFrameContentSize( strBlob.data(), strBlob.size() );
             if ( ullSize == ZSTD_CONTENTSIZE_ERROR || ullSize == ZSTD_CONTENTSIZE_UNKNOWN || ullSize > 64ULL * 1024 * 1024 )
                 throw CSjsonException( SJSON_ERROR_MALFORMED, "invalid text block" );
-            ZSTD_DCtx *pContext = ZSTD_createDCtx();
-            const std::string &strDict = dictionary.textDictionary();
-            if ( ! strDict.empty() )
-                ZSTD_DCtx_loadDictionary( pContext, strDict.data(), strDict.size() );
+            if ( m_pFrameIn == NULL )
+                m_pFrameIn = ZSTD_createDCtx();
+            ZSTD_DCtx *pContext = (ZSTD_DCtx *)m_pFrameIn;
             std::string strOut( (size_t)ullSize, '\0' );
-            size_t nSize = ZSTD_decompressDCtx( pContext, ullSize ? &strOut[ 0 ] : NULL, strOut.size(), strBlob.data(), strBlob.size() );
-            ZSTD_freeDCtx( pContext );
+            const ZSTD_DDict *pDictionary = (const ZSTD_DDict *)dictionary.zstdDecompressDictionary();
+            size_t nSize = pDictionary ? ZSTD_decompress_usingDDict( pContext, ullSize ? &strOut[ 0 ] : NULL, strOut.size(), strBlob.data(), strBlob.size(), pDictionary )
+                                       : ZSTD_decompressDCtx( pContext, ullSize ? &strOut[ 0 ] : NULL, strOut.size(), strBlob.data(), strBlob.size() );
             if ( ZSTD_isError( nSize ) )
                 throw CSjsonException( SJSON_ERROR_MALFORMED, ZSTD_getErrorName( nSize ) );
             strOut.resize( nSize );

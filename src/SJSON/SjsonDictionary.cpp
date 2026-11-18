@@ -23,19 +23,64 @@
 #include "ObjectNode.h"
 
 #include <fstream>
+#ifdef IASLIB_SJSON_ZSTD__
+#include <zstd.h>
+#endif
 #include <sstream>
 
 namespace IASLib
 {
     CSjsonDictionary::CSjsonDictionary( bool bWithValues )
         : m_nLastIndex( 0 ), m_nBaseSize( 0 ), m_pValues( bWithValues ? new CSjsonDictionary( false ) : NULL ),
-          m_bFingerprint( false ), m_nFingerprint( 0 ), m_pStream( NULL ), m_pText( NULL )
+          m_bFingerprint( false ), m_nFingerprint( 0 ), m_pStream( NULL ), m_pText( NULL ),
+          m_pCDict( NULL ), m_nCDictLevel( 0 ), m_pDDict( NULL )
     {
     }
 
     CSjsonDictionary::~CSjsonDictionary( void )
     {
+        releaseZstd();
         delete m_pValues;
+    }
+
+    void CSjsonDictionary::releaseZstd( void )
+    {
+#ifdef IASLIB_SJSON_ZSTD__
+        ZSTD_freeCDict( (ZSTD_CDict *)m_pCDict );
+        ZSTD_freeDDict( (ZSTD_DDict *)m_pDDict );
+#endif
+        m_pCDict = m_pDDict = NULL;
+    }
+
+    const void *CSjsonDictionary::zstdCompressDictionary( int nLevel ) const
+    {
+#ifdef IASLIB_SJSON_ZSTD__
+        if ( m_strTextDictionary.empty() )
+            return NULL;
+        if ( m_pCDict == NULL || m_nCDictLevel != nLevel )
+        {
+            ZSTD_freeCDict( (ZSTD_CDict *)m_pCDict );
+            m_pCDict = ZSTD_createCDict( m_strTextDictionary.data(), m_strTextDictionary.size(), nLevel );
+            m_nCDictLevel = nLevel;
+        }
+        return m_pCDict;
+#else
+        (void)nLevel;
+        return NULL;
+#endif
+    }
+
+    const void *CSjsonDictionary::zstdDecompressDictionary( void ) const
+    {
+#ifdef IASLIB_SJSON_ZSTD__
+        if ( m_strTextDictionary.empty() )
+            return NULL;
+        if ( m_pDDict == NULL )
+            m_pDDict = ZSTD_createDDict( m_strTextDictionary.data(), m_strTextDictionary.size() );
+        return m_pDDict;
+#else
+        return NULL;
+#endif
     }
 
     CSjsonDictionary *CSjsonDictionary::fromNames( const std::vector<std::string> &aNames, const std::vector<std::string> &aValues,

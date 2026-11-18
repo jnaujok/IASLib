@@ -141,7 +141,13 @@ namespace IASLib
 
                 /// A zstd dictionary for the text channel (empty if none).
             const std::string      &textDictionary( void ) const { return m_strTextDictionary; }
-            void                    setTextDictionary( const std::string &strData ) { m_strTextDictionary = strData; }
+            void                    setTextDictionary( const std::string &strData ) { m_strTextDictionary = strData; releaseZstd(); }
+                /// The text dictionary digested for zstd (a ZSTD_CDict for
+                /// nLevel, or a ZSTD_DDict), built on first use and kept, so
+                /// that per-packet frames do not rebuild its tables. NULL if
+                /// there is no text dictionary or no zstd.
+            const void             *zstdCompressDictionary( int nLevel ) const;
+            const void             *zstdDecompressDictionary( void ) const;
 
                 /// A new dictionary holding only the pre-loaded entries (and the
                 /// same schema, fingerprint and text dictionary).
@@ -168,6 +174,10 @@ namespace IASLib
             CSjsonTextChannel      *m_pText;            ///< Text channel while coding (not owned).
             std::shared_ptr<const CSjsonSchemaModel> m_pSchema; ///< The schema, shared by copies.
             std::string             m_strTextDictionary; ///< zstd dictionary bytes.
+            mutable void           *m_pCDict;           ///< Digested for compression (ZSTD_CDict), or NULL.
+            mutable int             m_nCDictLevel;      ///< The level m_pCDict was built for.
+            mutable void           *m_pDDict;           ///< Digested for decompression (ZSTD_DDict), or NULL.
+            void                    releaseZstd( void );
     };
 } // namespace IASLib
 

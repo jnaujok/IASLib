@@ -221,6 +221,8 @@ namespace IASLib
             std::map<unsigned, ReceiveStream> m_mapStreams;            ///< Receiving stream state per sender.
             std::map<const CSjsonDictionary *, CSjsonSchemaCodec *> m_mapCodecs;  ///< Schema codecs (owned).
             void                   *m_pTextOut;     ///< zstd compression stream (ZSTD_CCtx).
+            void                   *m_pFrameOut;    ///< Reused for stateless text frames (ZSTD_CCtx).
+            void                   *m_pFrameIn;     ///< Reused for stateless text frames (ZSTD_DCtx).
             std::map<unsigned, void *> m_mapTextIn; ///< zstd decompression streams (ZSTD_DCtx) per sender.
             std::map<unsigned, std::pair<std::pair<unsigned, std::string>, std::string> > m_mapTextRetry;  ///< Last text per sender.
             SjsonError              m_eError;       ///< The last error.
