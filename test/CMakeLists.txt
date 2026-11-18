@@ -54,3 +54,7 @@ if(USE_THREADS)
     target_link_libraries(TestThreading IASLib)
     add_test(test_threading TestThreading)
 endif()
+
+add_executable(TestStreams TestStreams/TestStreams.cpp)
+target_link_libraries(TestStreams IASLib)
+add_test(test_streams TestStreams)

@@ -1,234 +1,138 @@
 /*
- * Socket Stream Implementor Class
+ * Socket Stream Class
  *
- *      This class extends the basic stream interface to support streaming
- * data to and from network sockets. This provides several layers of 
- * functionality that make network programming much simpler.
+ *      A stream over a connected socket. See SocketStream.h.
  *
- *	Author: Jeffrey R. Naujok
- *	Created: 08/19/1997
- *	Log:
- *	  $LOG$
- *
- * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
 #include "SocketStream.h"
+#include "StreamException.h"
 
 #ifdef IASLIB_NETWORKING__
 
 namespace IASLib
 {
-   IMPLEMENT_OBJECT( CSocketStream, CStream );
+    IMPLEMENT_OBJECT( CSocketStream, CStream );
 
-   CSocketStream::CSocketStream( void )
-   {
-       m_bNoDelete = false;
-       m_pSocket = NULL;
-       m_bIsPeeked = false;
-       m_chPeeked = '\0';
-   }
+    CSocketStream::CSocketStream( void )
+    {
+        m_pSocket = NULL;
+        m_bNoDelete = false;
+        m_bIsPeeked = false;
+        m_chPeeked = '\0';
+        m_bClosed = true;
+        m_bIsOpen = false;
+    }
 
-   CSocketStream::CSocketStream( CSocket *pSocket )
-   {
-       m_bNoDelete = false;
-       m_pSocket = pSocket;
-       m_bIsPeeked = false;
-       m_chPeeked = '\0';
-   }
+    CSocketStream::CSocketStream( CSocket *pSocket )
+    {
+        m_pSocket = pSocket;
+        m_bNoDelete = false;
+        m_bIsPeeked = false;
+        m_chPeeked = '\0';
+        m_bClosed = ( pSocket == NULL );
+        m_bIsOpen = ( pSocket != NULL );
+    }
 
-   CSocketStream::~CSocketStream( void )
-   {
-       if ( ( m_pSocket ) && ( ! m_bNoDelete ) )
-       {
-           delete m_pSocket;
-       }
-       m_pSocket = NULL;
-       m_bIsOpen = false;
-       m_bIsPeeked = false;
-       m_chPeeked = '\0';
-   }
+    CSocketStream::~CSocketStream( void )
+    {
+        Close();
+    }
 
-   void CSocketStream::Close( void )
-   {
-       if ( ( m_pSocket ) && ( ! m_bNoDelete ) )
-       {
-           delete m_pSocket;
-       }
-       m_pSocket = NULL;
-       m_bIsOpen = false;
-       m_bIsPeeked = false;
-       m_chPeeked = '\0';
-   }
+    void CSocketStream::Close( void )
+    {
+        if ( m_pSocket != NULL && ! m_bNoDelete )
+            delete m_pSocket;
+        m_pSocket = NULL;
+        m_bIsOpen = false;
+        m_bIsPeeked = false;
+        m_bClosed = true;
+    }
 
-   /***********************************************************************
-   **  GetLine 
-   **
-   **  Description:
-   **      This method reads a single line from the socket stream. Please 
-   ** note that this method can block and should only be called from a 
-   ** sub-thread that can block safely.
-   **
-   ***********************************************************************/
+    int CSocketStream::GetBuffer( char *achBuffer, int nLength )
+    {
+        if ( achBuffer == NULL || nLength <= 0 )
+            return 0;
 
-   CString CSocketStream::GetLine( void )
-   {
-       CString strRetVal;
-       bool bDone = false;
-       char chWork;
+        int nReceived = 0;
+        if ( m_bIsPeeked )
+        {
+            achBuffer[ nReceived++ ] = m_chPeeked;
+            m_bIsPeeked = false;
+        }
+        while ( nReceived < nLength && ! m_bClosed && m_pSocket != NULL )
+        {
+            int nRead = 0;
+            try
+            {
+                nRead = m_pSocket->Read( achBuffer + nReceived, nLength - nReceived );
+            }
+            catch ( ... )
+            {
+                nRead = -1;     // an error ends the stream, as a close does
+            }
+            if ( nRead <= 0 )
+            {
+                    // (It used to ask again for ever, and add -1 on errors.)
+                m_bClosed = true;
+                break;
+            }
+            nReceived += nRead;
+        }
+        return nReceived;
+    }
 
-       if ( m_pSocket )
-       {
-           while ( ! bDone )
-           {
-               chWork = GetChar();
+    int CSocketStream::PutBuffer( const char *achBuffer, int nLength )
+    {
+        if ( m_pSocket == NULL || achBuffer == NULL || nLength <= 0 )
+            return 0;
 
-               if ( ( chWork != '\r' ) && ( chWork != '\0' ) && ( chWork != '\n' ) )
-               {
-                   strRetVal += chWork;
-               }
-               else
-               {
-                   if ( chWork != '\r' )
-                   {
-                       bDone = true;
-                   }
-               }
-           }
-       }
+        int nSent = 0;
+        while ( nSent < nLength )
+        {
+            int nWritten = 0;
+            try
+            {
+                nWritten = m_pSocket->Send( achBuffer + nSent, nLength - nSent );
+            }
+            catch ( ... )
+            {
+                nWritten = -1;
+            }
+            if ( nWritten <= 0 )
+                break;
+            nSent += nWritten;
+        }
+        return nSent;
+    }
 
-       return strRetVal;
-   }
+    bool CSocketStream::IsEOS( void )
+    {
+        if ( m_bIsPeeked )
+            return false;
+        if ( m_bClosed || m_pSocket == NULL || ! m_pSocket->IsConnected() )
+            return true;
 
-   /***********************************************************************
-   **  GetChar 
-   **
-   **  Description:
-   **      This method reads a single character from the socket stream. Please
-   ** note that this method can block, and should only be called from a 
-   ** separate thread that can block safely.
-   **
-   ***********************************************************************/
-   char CSocketStream::GetChar( void )
-   {
-       if ( m_bIsPeeked ) {
-           m_bIsPeeked = false;
-           return m_chPeeked;
-       }
+            // Only reading tells whether the other side has closed: read a
+            // byte (waiting for it) and keep it for the next read. (This
+            // used to answer "true" exactly when data was waiting.)
+        char chRead;
+        if ( GetBuffer( &chRead, 1 ) != 1 )
+            return true;
+        m_chPeeked = chRead;
+        m_bIsPeeked = true;
+        return false;
+    }
 
-       if ( m_pSocket )
-       {
-           char chRetVal;
-
-           chRetVal = (char)m_pSocket->Read( );
-
-           return chRetVal;
-       }
-       return '\0';
-   }
-
-   unsigned char CSocketStream::GetUChar( void )
-   {
-       if ( m_bIsPeeked ) {
-           m_bIsPeeked = false;
-           return m_chPeeked;
-       }
-
-       if ( m_pSocket )
-       {
-           unsigned char chRetVal;
-
-           chRetVal = m_pSocket->Read( );
-
-           return chRetVal;
-       }
-       return '\0';
-   }
-
-   void CSocketStream::PutChar( const char chPut )
-   {
-       if ( m_pSocket )
-       {
-           char chWork = chPut;
-           m_pSocket->Send( &chWork, sizeof( char ) );
-       }
-   }
-
-   void CSocketStream::PutChar( const unsigned char chPut )
-   {
-       if ( m_pSocket )
-       {
-           unsigned char chWork = chPut;
-           m_pSocket->Send( chWork );
-       }
-   }
-
-   void CSocketStream::PutLine( const CString &strOutput )
-   {
-       if ( m_pSocket )
-       {
-           size_t      lLength = strOutput.GetLength();
-           const char *pszOutput = (const char *)strOutput;
-
-           m_pSocket->Send( pszOutput, (int)( lLength * sizeof(char) ) );
-           unsigned char chRet = '\n';
-           m_pSocket->Send( chRet );
-       }
-   }
-
-   char CSocketStream::PeekChar() {
-       if ( m_bIsPeeked ) {
-           m_bIsPeeked = false;
-           return m_chPeeked;
-       }
-
-       if ( m_pSocket )
-       {
-           m_chPeeked = m_pSocket->Read();
-           m_bIsPeeked = true;
-           return m_chPeeked;
-       }
-
-       return '\0';
-   }
-
-   int CSocketStream::PutBuffer( const char *achBuffer, int nLength )
-   {
-       int nSent = 0;
-
-       while ( nSent < nLength )
-       {
-           nSent += m_pSocket->Send( &(achBuffer[nSent]), nLength - nSent );
-       }
-
-       return nSent;
-   }
-
-   int CSocketStream::GetBuffer( char *achBuffer, int nLength )
-   {
-       int nReceived = 0;
-
-       if ( m_bIsPeeked && nLength > 0 ) {
-           achBuffer[nReceived] = m_chPeeked;
-           m_bIsPeeked = false;
-           nReceived++;
-       }
-
-       while ( nReceived < nLength )
-       {
-           nReceived += m_pSocket->Read( &(achBuffer[nReceived]), nLength - nReceived );
-       }
-
-       return nReceived;
-   }
-
-   bool CSocketStream::IsEOS( void )
-   {
-       if ( m_bIsPeeked )
-           return false;
-       return ( m_pSocket->HasData() );
-   }
+    char CSocketStream::PeekChar( void )
+    {
+            // A second peek returns the same byte (it used to take it).
+        if ( IsEOS() )
+            IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+        return m_chPeeked;
+    }
 } // Namespace IASLib
 
 #endif // IASLIB_NETWORKING__

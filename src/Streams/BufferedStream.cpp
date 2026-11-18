@@ -1,213 +1,153 @@
 /*
  * Buffered Stream Class
  *
- *      This class allows you to take any other stream type
- * and buffer both the input and output so that the stream
- * is reading and writing in 4K blocks.
+ *      Reads and writes another stream in blocks. See BufferedStream.h.
  *
- *	Author: Jeffrey R. Naujok
- *	Created: 06/12/2007
- *	Log:
- *	  $LOG$
- *
- * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
 #include "BufferedStream.h"
 #include "StreamException.h"
 
-#define MIN(x,y) ((x < y) ? x:y)
-
 namespace IASLib
 {
+    IMPLEMENT_OBJECT( CBufferedStream, CStream );
+
     CBufferedStream::CBufferedStream( CStream &oStream )
-        : m_oStream( oStream )
+        : m_oStream( oStream ), m_nReadPos( 0 ), m_nReadEnd( 0 ), m_nWriteLength( 0 )
     {
-        memset( m_chReadBuffer, 0, BUFFER_SIZE );
-        memset( m_chWriteBuffer, 0, BUFFER_SIZE );
-        m_nReadPointer = 0;
-        m_nWritePointer = 0;
-        m_nBufferRead = 0;
-        m_nBufferWritten = 0;
     }
 
     CBufferedStream::~CBufferedStream( void )
     {
-        Close();
-    }
-
-	IMPLEMENT_OBJECT( CBufferedStream, CStream );
-
-    CString CBufferedStream::GetLine( void )
-    {
-        CString strRetVal;
-        char inChar;
-
-        while ( (!IsEOS() ) && (inChar = GetChar() ) != '\n' )
+            // Flushed, but the stream underneath is not ours to close.
+        try
         {
-            strRetVal += inChar;
+            Flush();
         }
-
-        return strRetVal;
-    }
-
-    char CBufferedStream::GetChar( void )
-    {
-        return (char)GetNextChar( );
-    }
-
-    void CBufferedStream::PutChar( const char chPut )
-    {
-        PutNextChar( (unsigned char)chPut );
-    }
-
-    void CBufferedStream::PutLine( const CString &strOutput )
-    {
-        PutBuffer( (const char *)strOutput, (int)strOutput.GetCount() );
-        PutNextChar( '\n' );
-    }
-
-    unsigned char CBufferedStream::GetUChar( void )
-    {
-        return GetNextChar();
-    }
-
-    void CBufferedStream::PutChar( const unsigned char chPut )
-    {
-        PutNextChar( chPut );
-    }
-
-    char CBufferedStream::PeekChar( void )
-    {
-        if (  ( m_nReadPointer == m_nBufferRead ) && ( ! IsEOS() ) )
+        catch ( ... )
         {
-            m_nReadPointer = 0;
-            m_nBufferRead = m_oStream.GetBuffer( m_chReadBuffer, BUFFER_SIZE );
         }
-
-        if ( m_nReadPointer < m_nBufferRead )
-        {
-            unsigned char chRetVal = m_chReadBuffer[ m_nReadPointer ];
-            return chRetVal;
-        }
-
-        IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
-        return '\0';
     }
 
-
-    int CBufferedStream::PutBuffer( const char *achBuffer, int nLength )
+        // Reads the next block, if the buffer is empty.
+    bool CBufferedStream::Fill( void )
     {
-        int nOffset = 0, nSize = 0;
-
-        while ( nOffset < nLength )
-        {
-            nSize = MIN( nLength - nOffset, BUFFER_SIZE - m_nWritePointer );
-
-            memcpy( m_chWriteBuffer + m_nWritePointer, achBuffer + nOffset, nSize );
-            m_nWritePointer += nSize;
-            m_nBufferWritten += nSize;
-            nOffset += nSize;
-
-            if ( m_nWritePointer == BUFFER_SIZE )
-            {
-                m_oStream.PutBuffer( m_chWriteBuffer, m_nBufferWritten );
-                m_nWritePointer = 0;
-                m_nBufferWritten = 0;
-            }
-        }
-        return nLength;
-    }
-
-    int CBufferedStream::GetBuffer( char *achBuffer, int nLength )
-    {
-        int retBytes = 0;
-        // Test for cases
-        if ( (m_nBufferRead - m_nReadPointer) >= nLength )
-        {
-            // We already have the data in memory
-            memcpy( achBuffer, m_chReadBuffer + m_nReadPointer, nLength );
-            m_nReadPointer += nLength;
-            retBytes = nLength;
-        }
-        else
-        {
-            int nOffset = 0;
-            while ( ( ( m_nBufferRead - m_nReadPointer ) < ( nLength - nOffset ) ) && ( ! IsEOS() ) )
-            {
-                memcpy( achBuffer + nOffset, m_chReadBuffer + m_nReadPointer, m_nBufferRead - m_nReadPointer );
-                nOffset += m_nBufferRead - m_nReadPointer;
-                m_nReadPointer = 0;
-                m_nBufferRead = m_oStream.GetBuffer( m_chReadBuffer, BUFFER_SIZE );
-            }
-
-            if ( ( nOffset < nLength ) && ( ! IsEOS() ) )
-            {
-                int nSize = MIN( m_nBufferRead - m_nReadPointer, nLength - nOffset );
-                memcpy( achBuffer + nOffset, m_chReadBuffer + m_nReadPointer, nSize );
-                nOffset += nSize;
-                m_nReadPointer = nSize;
-            }
-            retBytes = nOffset;
-        }
-
-        return retBytes;
-    }
-
-    unsigned char CBufferedStream::GetNextChar( void )
-    {
-        if (  ( m_nReadPointer == m_nBufferRead ) && ( ! IsEOS() ) )
-        {
-            m_nReadPointer = 0;
-            m_nBufferRead = m_oStream.GetBuffer( m_chReadBuffer, BUFFER_SIZE );
-        }
-
-        if ( m_nReadPointer < m_nBufferRead )
-        {
-            unsigned char chRetVal = m_chReadBuffer[ m_nReadPointer ];
-            m_nReadPointer++;
-            return chRetVal;
-        }
-
-        IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
-        return '\0';
-    }
-
-    bool CBufferedStream::PutNextChar( const unsigned char chNext )
-    {
-        m_chWriteBuffer[m_nWritePointer] = chNext;
-        m_nWritePointer++;
-
-        if ( m_nWritePointer == BUFFER_SIZE )
-        {
-            m_oStream.PutBuffer( m_chWriteBuffer, m_nWritePointer );
-            m_nWritePointer = 0;
-            memset(m_chWriteBuffer, 0, BUFFER_SIZE );
-        }
-
-        return true;
+        if ( m_nReadPos < m_nReadEnd )
+            return true;
+        m_nReadPos = 0;
+        m_nReadEnd = 0;
+        if ( m_oStream.IsEOS() )
+            return false;
+        int nRead = m_oStream.GetBuffer( m_chReadBuffer, BUFFER_SIZE );
+        m_nReadEnd = ( nRead > 0 ) ? nRead : 0;
+        return m_nReadEnd > 0;
     }
 
     bool CBufferedStream::IsEOS( void )
     {
-        if ( ( m_nReadPointer == m_nBufferRead ) && ( m_oStream.IsEOS() ) )
+        return m_nReadPos >= m_nReadEnd && m_oStream.IsEOS();
+    }
+
+    char CBufferedStream::PeekChar( void )
+    {
+        if ( ! Fill() )
+            IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+        return m_chReadBuffer[ m_nReadPos ];
+    }
+
+    char CBufferedStream::GetChar( void )
+    {
+        if ( ! Fill() )
+            IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+        return m_chReadBuffer[ m_nReadPos++ ];
+    }
+
+    int CBufferedStream::GetBuffer( char *achBuffer, int nLength )
+    {
+        if ( achBuffer == NULL || nLength <= 0 )
+            return 0;
+
+        int nCopied = 0;
+        while ( nCopied < nLength )
         {
-            return true;
+            if ( m_nReadPos >= m_nReadEnd )
+            {
+                    // Large reads go straight through.
+                if ( nLength - nCopied >= BUFFER_SIZE )
+                {
+                    if ( m_oStream.IsEOS() )
+                        break;
+                    int nRead = m_oStream.GetBuffer( achBuffer + nCopied, nLength - nCopied );
+                    if ( nRead <= 0 )
+                        break;
+                    nCopied += nRead;
+                    continue;
+                }
+                if ( ! Fill() )
+                    break;
+            }
+            int nTake = m_nReadEnd - m_nReadPos;
+            if ( nTake > nLength - nCopied )
+                nTake = nLength - nCopied;
+            memcpy( achBuffer + nCopied, m_chReadBuffer + m_nReadPos, (size_t)nTake );
+            m_nReadPos += nTake;
+            nCopied += nTake;
         }
-        return false;
+        return nCopied;
+    }
+
+    void CBufferedStream::PutChar( const char chPut )
+    {
+        if ( m_nWriteLength == BUFFER_SIZE )
+            Flush();
+        m_chWriteBuffer[ m_nWriteLength++ ] = chPut;
+    }
+
+    int CBufferedStream::PutBuffer( const char *achBuffer, int nLength )
+    {
+        if ( achBuffer == NULL || nLength <= 0 )
+            return 0;
+
+        if ( nLength >= BUFFER_SIZE )
+        {
+                // Large writes go straight through, after what is held.
+            Flush();
+            return m_oStream.PutBuffer( achBuffer, nLength );
+        }
+
+        int nOffset = 0;
+        while ( nOffset < nLength )
+        {
+            if ( m_nWriteLength == BUFFER_SIZE )
+                Flush();
+            int nTake = BUFFER_SIZE - m_nWriteLength;
+            if ( nTake > nLength - nOffset )
+                nTake = nLength - nOffset;
+            memcpy( m_chWriteBuffer + m_nWriteLength, achBuffer + nOffset, (size_t)nTake );
+            m_nWriteLength += nTake;
+            nOffset += nTake;
+        }
+        return nLength;
+    }
+
+    void CBufferedStream::Flush( void )
+    {
+        if ( m_nWriteLength > 0 )
+        {
+            int nLength = m_nWriteLength;
+            m_nWriteLength = 0;
+            m_oStream.PutBuffer( m_chWriteBuffer, nLength );
+        }
+        m_oStream.Flush();
     }
 
     void CBufferedStream::Close( void )
     {
-        if ( ( m_oStream.IsOpen() ) && IsOpen() )
+        if ( IsOpen() )
         {
-            if ( m_nBufferWritten > 0 )
-            {
-                m_oStream.PutBuffer( m_chWriteBuffer, m_nBufferWritten );
-                m_nWritePointer = 0;
-                m_nBufferWritten = 0;
-            }
+            Flush();
             m_oStream.Close();
             m_bIsOpen = false;
         }
@@ -215,7 +155,9 @@ namespace IASLib
 
     size_t CBufferedStream::bytesRemaining( void )
     {
-        return m_oStream.bytesRemaining() + (size_t)( m_nBufferRead - m_nReadPointer );
+        size_t nBelow = m_oStream.bytesRemaining();
+        if ( nBelow == NOT_FOUND )
+            return NOT_FOUND;
+        return nBelow + (size_t)( m_nReadEnd - m_nReadPos );
     }
 } // namespace IASLib
-

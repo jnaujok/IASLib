@@ -1,14 +1,13 @@
 /*
  * File Stream Class
  *
- *      This class provides the basis for streaming data to a file. This
- * allows a file and other data source/sinks to be treated as a stream
- * without differentiating what we're actually writing to.
+ *      A stream over a CFile, which the stream owns (it deletes the file
+ * when it is closed or destroyed). Files opened in text mode may read
+ * back fewer bytes than their size on Windows (CRLF becomes LF); open in
+ * binary mode for exact bytes.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 08/18/1997
- *	Log:
- *	  $LOG$
+ *	Created: 08/17/1997 (reworked 11/18/2026)
  *
  * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
@@ -26,6 +25,7 @@ namespace IASLib
 	{
 		protected:
 			CFile              *m_pFile;
+
 		public:
 								CFileStream( void );
 								CFileStream( CFile *pFile );
@@ -34,21 +34,19 @@ namespace IASLib
 
 								DEFINE_OBJECT( CFileStream );
 
-			virtual CString     GetLine( void );
-			virtual char        GetChar( void );
-			virtual void        PutChar( const char chPut );
-			virtual void        PutLine( const CString &strOutput );
-			virtual unsigned char        GetUChar( void );
-			virtual void        PutChar( const unsigned char chPut );
-            virtual char        PeekChar( void );
-            virtual int         PutBuffer( const char *achBuffer, int nLength );
 			virtual int         GetBuffer( char *achBuffer, int nLength );
+            virtual int         PutBuffer( const char *achBuffer, int nLength );
+            virtual bool        IsEOS( void ) { return m_pFile == NULL || m_pFile->IsEOF(); }
+            virtual char        PeekChar( void );
 			virtual size_t		bytesRemaining( void );
-
-            virtual bool        IsEOS( void ) { return m_pFile->IsEOF(); }
-
 			virtual void 		Close( void );
+
+            CFile              *GetFile( void ) { return m_pFile; }
+
+		private:
+								CFileStream( const CFileStream & );
+			CFileStream        &operator =( const CFileStream & );
 	};
 } // namespace IASLib
 
-#endif // __FILESTREAM_H__
+#endif // IASLIB_FILESTREAM_H__

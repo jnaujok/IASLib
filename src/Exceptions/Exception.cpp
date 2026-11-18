@@ -224,7 +224,6 @@ namespace IASLib
 
     void CException::FileLine( const char *strFile, int nLine )
     {
-      std::cout << "CException::FileLine - " << strFile << ", " << nLine << std::endl; std::cout.flush();
        m_pCallStack->SetFile( strFile );
        m_pCallStack->SetLine( nLine );
     }

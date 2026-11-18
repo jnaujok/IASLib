@@ -56,6 +56,15 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - The public `m_mutexStartSuspended` is gone.
   - `CThreadPool` keeps its threads in `TArray`s and takes `CThreadTask`s only.
   - `CServerThread` checks for shutdown every 250 ms.
+- **Streams:**
+  - `>>` reads numbers and strings as text, the way `<<` writes them. It used to read big-endian binary, so nothing written could be read back. Binary reads and writes are now explicit, as `PutUInt16()`, `GetUInt32()` and the rest.
+  - `PutLine()` ends the line on every stream.
+  - `GetLine()` leaves off `"\r"`.
+  - Reading past the end throws a CStreamException on every stream (file and null streams used to return `'\0'`).
+  - CStringStream holds bytes (`GetOutput()`), NULs included.
+  - Destroying a CBufferedStream flushes it but no longer closes the stream underneath.
+  - `bytesRemaining()` is `NOT_FOUND` where a stream cannot tell.
+  - The `BUFFER_SIZE` macro is now `CBufferedStream::BUFFER_SIZE`.
 - **`CMutex` is recursive on every platform.** The thread that holds it can lock it again, and must unlock it as many times. It was recursive on Windows (a kernel mutex) but not elsewhere, so code that worked on Windows deadlocked on Linux and macOS. On Windows it is now a critical section, which avoids a kernel call when the lock is free.
 
 ### Added
@@ -88,6 +97,13 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CXMLDocument::Parse()` and `GetRoot()`.
   - `CXMLElement`: `SetProperty()`, `HasProperty()`, `GetText()`, `GetChildText()`, `Clone()`, non-const `GetSubElement()`, the chunk accessors, and `IsDeclaration()`.
   - `CXMLIndex::Clear()`, `TakeFrom()` and `AddChunk()`.
+- **Streams:**
+  - Defaults for everything but `GetBuffer()`, `PutBuffer()`, `IsEOS()`, `PeekChar()` and `Close()`.
+  - `Flush()` and `GetExact()`.
+  - `<<` and `>>` for every integer type and `double`.
+  - CStringStream constructors from bytes.
+  - `CFileStream::GetFile()`.
+  - `TestStreams`.
 - **`CException::GetMessage()`.**
 - **`CMutex::TryLock()`.**
 - **Threads:**
@@ -191,6 +207,22 @@ The base types and collections, reviewed one by one and cleaned up, and template
     - Destroying the pool left threads running on freed memory and leaked them.
   - **CServerThread** waited in `Accept()` forever, so it couldn't be stopped, and caught exceptions by pointer, which never matched.
   - `CFileStream::GetBuffer()` looped forever on Windows text files.
+- **Streams:**
+  - `<< unsigned short` wrote `"%ud"` (`5` became `"5d"`).
+  - `>> CString` trusted a length read from the stream and freed with the wrong `delete`.
+  - `<< (const char *)NULL` crashed.
+  - CBufferedStream:
+    - Characters written with `PutChar()` were lost on close.
+    - `GetBuffer()` dropped the last buffered bytes once the stream underneath ended.
+  - CSocketStream:
+    - `IsEOS()` was inverted (true when data was waiting).
+    - Reads looped forever when the peer closed, and counted errors as -1 bytes.
+    - A second `PeekChar()` took the character.
+  - CFileStream:
+    - `PeekChar()` seeked with `SEEK_SET`, which isn't one of CFile's modes.
+    - Writes looped forever on an error.
+  - `CSocket::HasData()` called `select()` with a descriptor count of 1, so outside Windows it only ever looked at descriptor 0.
+- **Exceptions:** every exception printed `"CException::FileLine - ..."` to stdout when thrown.
 - **Security:** external entities (XXE) are refused, and entity expansion ("billion laughs") is capped.
 - **Exceptions:**
   - The `IASLIB_THROW_*` macros threw a shared `static` exception, which two threads could change at once.

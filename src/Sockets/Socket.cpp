@@ -810,25 +810,11 @@ namespace IASLib
      */
     bool CSocket::HasData( void )
     {
-        fd_set  readSet;
-        timeval tvTimeout;
-        int     nRet;
-
-        memset( &readSet, 0, sizeof( fd_set ) );
-#ifdef IASLIB_LINT__
-#pragma warning(disable:4127)
-#endif
-        FD_SET( m_hSocket, &readSet );
-#ifdef IASLIB_LINT__
-#pragma warning(default:4127)
-#endif
-
-        tvTimeout.tv_sec = 0;
-        tvTimeout.tv_usec = 100;
-
-        nRet = select( 1, &readSet, NULL, NULL, &tvTimeout );
-
-        return ( nRet == 1 );
+            // (It used to call select() with a descriptor count of 1, which
+            // only ever looked at descriptor 0 outside Windows.)
+        if ( m_hSocket == NULL_SOCKET )
+            return false;
+        return WaitForReadable( m_hSocket, 0 ) > 0;
     }
 
     /**

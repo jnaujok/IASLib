@@ -21,28 +21,23 @@
 
 namespace IASLib
 {
+        // A stream that throws away what is written and has nothing to read
+        // (reading from it, like reading past the end of any stream, throws).
 	class CNullStream : public CStream
 	{
 		public:
-								CNullStream( void );
-			virtual            ~CNullStream( void );
+								CNullStream( void ) {}
+			virtual            ~CNullStream( void ) {}
 
 								DEFINE_OBJECT( CNullStream );
 
-			virtual CString     GetLine( void );
-			virtual char        GetChar( void );
-			virtual void        PutChar( const char chPut );
-			virtual void        PutLine( const CString &strOutput );
-			virtual unsigned char        GetUChar( void );
-			virtual void        PutChar( const unsigned char chPut );
-            virtual char        PeekChar( void );
-            virtual int         PutBuffer( const char *achBuffer, int nLength );
-			virtual int         GetBuffer( char *achBuffer, int nLength );
-			virtual size_t		bytesRemaining( void ) { return 0; }
-
+			virtual int         GetBuffer( char *, int ) { return 0; }
+            virtual int         PutBuffer( const char *, int nLength ) { return ( nLength > 0 ) ? nLength : 0; }
             virtual bool        IsEOS( void ) { return true; }
-
-			virtual void 		Close() { m_bIsOpen = false; }
+            virtual char        PeekChar( void );
+            virtual CString     GetLine( void ) { return CString(); }
+			virtual size_t		bytesRemaining( void ) { return 0; }
+			virtual void 		Close( void ) { m_bIsOpen = false; }
 	};
 } // namespace IASLib
 

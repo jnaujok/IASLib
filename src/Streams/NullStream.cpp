@@ -24,59 +24,15 @@
     #include <memory.h>
 #endif
 
+#include "StreamException.h"
+
 namespace IASLib
 {
     IMPLEMENT_OBJECT( CNullStream, CStream );
 
-    CNullStream::CNullStream( void )
+    char CNullStream::PeekChar( void )
     {
-    }
-
-    CNullStream::~CNullStream( void )
-    {
-    }
-
-    CString CNullStream::GetLine( void )
-    {
-        CString strRetVal = "";
-        return strRetVal;
-    }
-
-    char CNullStream::GetChar( void )
-    {
+        IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
         return '\0';
-    }
-
-    unsigned char CNullStream::GetUChar( void )
-    {
-        return '\0';
-    }
-
-    void CNullStream::PutChar( const char )
-    {
-    }
-
-    void CNullStream::PutChar( const unsigned char  )
-    {
-    }
-
-    void CNullStream::PutLine( const CString & )
-    {
-    }
-
-    char CNullStream::PeekChar()
-    {
-        return '\0';
-    }
-
-    int CNullStream::PutBuffer( const char *, int nLength )
-    {
-        return nLength;
-    }
-
-    int CNullStream::GetBuffer( char *achBuffer, int nLength )
-    {
-        memset( achBuffer, 0, nLength );
-        return 0;
     }
 } // namespace IASLib

@@ -202,6 +202,8 @@
 #include "Exceptions/FileException.h"
 #include "Exceptions/SocketException.h"
 #include "Exceptions/StringException.h"
+#include "Exceptions/StreamException.h"
+#include "Exceptions/ThreadException.h"
 #include "Exceptions/XMLException.h"
 
 #ifdef IASLIB_WIN32__

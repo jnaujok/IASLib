@@ -1,21 +1,14 @@
 /*
- * File Stream Implementor Class
+ * File Stream Class
  *
- *      This class extends the basic stream interface to support streaming
- * data to and from a file data source/sink. This allows us to treat a file
- * like any other stream without the implementing code caring about the 
- * final destination.
+ *      A stream over a CFile. See FileStream.h.
  *
- *	Author: Jeffrey R. Naujok
- *	Created: 08/17/1997
- *	Log:
- *	  $LOG$
- *
- * Copyright (C) 2007, The Irene Adler Software Group, all rights reserved.
+ * Copyright (C) 2006, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
 
 #include "FileStream.h"
+#include "StreamException.h"
 
 namespace IASLib
 {
@@ -24,189 +17,88 @@ namespace IASLib
     CFileStream::CFileStream( void )
     {
         m_pFile = NULL;
+        m_bIsOpen = false;
     }
 
     CFileStream::CFileStream( CFile *pFile )
     {
         m_pFile = pFile;
+        m_bIsOpen = ( pFile != NULL );
     }
 
     CFileStream::CFileStream( const char *strFileName, bool bRead, bool bWrite )
     {
-        if ( ( bRead ) && ( ! bWrite ) )
-        {
-            m_pFile = new CFile( strFileName, CFile::READ );
-        }
-        else
-        {
-            if ( bRead && bWrite )
-            {
-                m_pFile = new CFile( strFileName, CFile::READ | CFile::WRITE );
-            }
-            else
-            {
-                m_pFile = new CFile( strFileName, CFile::WRITE );
-            }
-        }
+        int nMode = ( bRead && bWrite ) ? ( CFile::READ | CFile::WRITE ) : bRead ? CFile::READ : CFile::WRITE;
+        m_pFile = new CFile( strFileName, nMode );
     }
 
     CFileStream::~CFileStream( void )
     {
-        if ( m_pFile )
-        {
-            delete m_pFile;
-        }
+        delete m_pFile;
+        m_pFile = NULL;
     }
 
     void CFileStream::Close( void )
     {
-        if ( m_pFile )
-        {
-            delete m_pFile;
-            m_pFile = NULL;
-        }
-
+        delete m_pFile;
+        m_pFile = NULL;
         m_bIsOpen = false;
-    }
-
-    CString CFileStream::GetLine( void )
-    {
-        CString strRetVal = "";
-        char chWork;
-
-        if ( m_pFile )
-        {
-            while ( ( ! m_pFile->IsEOF() ) && ( ( chWork = GetChar() ) != '\n' ) )
-            {
-                if ( ( chWork != '\r' ) && ( chWork != '\0' ) )
-                {
-                    strRetVal += chWork;
-                }
-            }
-        }
-
-        return strRetVal;
-    }
-
-    char CFileStream::GetChar( void )
-    {
-        if ( m_pFile )
-        {
-            if ( ! m_pFile->IsEOF() )
-            {
-                char chRetVal;
-
-                m_pFile->Read( &chRetVal, sizeof( char ) );
-
-                return chRetVal;
-            }
-        }
-        return '\0';
-    }
-
-    char CFileStream::PeekChar( void )
-    {
-        if ( m_pFile )
-        {
-            if ( ! m_pFile->IsEOF() )
-            {
-                char chRetVal;
-
-                long pos = m_pFile->GetPos();
-                m_pFile->Read( &chRetVal, sizeof( char ) );
-                m_pFile->Seek(pos, SEEK_SET );
-
-                return chRetVal;
-            }
-        }
-        return '\0';
-    }
-
-    unsigned char CFileStream::GetUChar( void )
-    {
-        if ( m_pFile )
-        {
-            if ( ! m_pFile->IsEOF() )
-            {
-                unsigned char chRetVal;
-
-                m_pFile->Read( (char *)&chRetVal, sizeof( unsigned char ) );
-
-                return chRetVal;
-            }
-        }
-        return '\0';
-    }
-
-    void CFileStream::PutChar( const char chPut )
-    {
-        if ( m_pFile )
-        {
-            char chWork = chPut;
-            m_pFile->Write( &chWork, sizeof( char ) );
-        }
-    }
-
-    void CFileStream::PutChar( const unsigned char chPut )
-    {
-        if ( m_pFile )
-        {
-            unsigned char chWork = chPut;
-            m_pFile->Write( (char *)&chWork, sizeof( unsigned char ) );
-        }
-    }
-
-    void CFileStream::PutLine( const CString &strOutput )
-    {
-        if ( m_pFile )
-        {
-            size_t      nLength = strOutput.GetLength();
-            const char *pszOutput = (const char *)strOutput;
-
-            m_pFile->Write( pszOutput, (int)(nLength * sizeof(char)) );
-            char chRet = '\n';
-            m_pFile->Write( &chRet, sizeof( char ) );
-        }
-    }
-
-    int CFileStream::PutBuffer( const char *achBuffer, int nLength )
-    {
-        int nSent = 0;
-
-        while ( nSent < nLength )
-        {
-            nSent += m_pFile->Write( &(achBuffer[nSent]), nLength - nSent );
-        }
-
-        return nSent;
     }
 
     int CFileStream::GetBuffer( char *achBuffer, int nLength )
     {
-        int nReceived = 0;
-        int nRemaining = (int)(m_pFile->GetSize() - m_pFile->GetPos());
-        if ( nRemaining < nLength )
-        {
-            nLength = nRemaining;
-        }
+        if ( m_pFile == NULL || achBuffer == NULL || nLength <= 0 )
+            return 0;
 
+        int nReceived = 0;
         while ( nReceived < nLength )
         {
                 // In text mode (on Windows) line breaks shrink as they are
-                // read, so fewer bytes come than the size suggests: stop when
-                // the file has none left, instead of asking forever.
+                // read, so the file's size cannot say how many bytes will
+                // come: read until the file has none left.
             int nRead = m_pFile->Read( achBuffer + nReceived, nLength - nReceived );
             if ( nRead <= 0 )
                 break;
             nReceived += nRead;
         }
-
         return nReceived;
+    }
+
+    int CFileStream::PutBuffer( const char *achBuffer, int nLength )
+    {
+        if ( m_pFile == NULL || achBuffer == NULL || nLength <= 0 )
+            return 0;
+
+        int nSent = 0;
+        while ( nSent < nLength )
+        {
+            int nWritten = m_pFile->Write( achBuffer + nSent, nLength - nSent );
+            if ( nWritten <= 0 )
+                break;          // (it used to try again for ever)
+            nSent += nWritten;
+        }
+        return nSent;
+    }
+
+    char CFileStream::PeekChar( void )
+    {
+        if ( IsEOS() )
+            IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+        long lPos = m_pFile->GetPos();
+        char chPeek = '\0';
+        if ( m_pFile->Read( &chPeek, 1 ) != 1 )
+            IASLIB_THROW_STREAM_EXCEPTION( "Attempt to read past the end of the stream." );
+            // (It used to seek with SEEK_SET, which is not one of CFile's
+            // seek modes.)
+        m_pFile->Seek( lPos, CFile::BEGIN );
+        return chPeek;
     }
 
     size_t CFileStream::bytesRemaining( void )
     {
-        return (m_pFile->GetSize() - m_pFile->GetPos());
+        if ( m_pFile == NULL )
+            return 0;
+        long lRemaining = m_pFile->GetSize() - m_pFile->GetPos();
+        return ( lRemaining > 0 ) ? (size_t)lRemaining : 0;
     }
-
 } // namespace IASLib
