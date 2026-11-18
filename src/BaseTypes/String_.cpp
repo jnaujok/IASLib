@@ -411,6 +411,14 @@ namespace IASLib
         return m_pStubData->m_strData;
     }
 
+    CString CString::FromBytes( const void *pData, size_t nLength )
+    {
+        CString strResult;
+        if ( pData != NULL && nLength > 0 )
+            strResult.Assign( (const IASLibChar__ *)pData, nLength / sizeof( IASLibChar__ ) );
+        return strResult;
+    }
+
     void CString::Assign( const IASLibChar__ *pData, size_t nLength )
     {
         if ( m_pStubData != NULL && m_pStubData->m_bFixedStub )

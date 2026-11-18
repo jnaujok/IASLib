@@ -94,6 +94,12 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - The `CRWFile` index is written in binary mode, so its records are 16 bytes on Windows too.
 - **Files:** `CFile::GetPos()`, `GetSize()` and `Seek()` return -1 when the value does not fit in a `long` (past 2 GB where it is 32 bits, as on Windows). They used to return a wrong value. A failed `Seek()` returns -1 rather than the old position, and seeking past the end no longer changes the size `GetSize()` reports.
 - **Resources:** `CResource::Load()` and `Save()` take the `CResourceFile` to use (they were declared without one and never defined). The compression constants are in `ResourceIndex.h`.
+- **Database:**
+  - The SQLite driver uses SQLite directly (it went through `CDynamicLibrary`) with prepared statements. `Execute()` and `Cursor()` take bound parameters; a cursor takes one statement that returns rows.
+  - Transactions are real `BEGIN`/`COMMIT`/`ROLLBACK` (they were emulated by buffering the SQL text). A failed commit rolls back.
+  - `CSQLiteDatabase::Connection()` returns NULL when the database cannot be opened, with the error on the database. `SetTimeout()` returns true.
+  - `CBaseResult::Next()` stops at the last row (it kept counting), and column names match without regard to case.
+  - Windows: `CThread::Kill()` ends the thread at its next sleep or semaphore wait (an APC) instead of `TerminateThread()`, which could stop it holding the heap lock and hang the process. It returns -1 if the thread has not reached one within two seconds.
 - **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
 
 ### Added
@@ -200,6 +206,13 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CCoverageMap::IsUsed()`, `GetRunCount()` and `GetFragmentation()`.
   - `CCPUUsage::GetTotalMicroseconds()` and the user and system equivalents.
   - `TestStats`.
+- **Database:**
+  - SQL NULLs (`CBaseResult::IsNull()`), blobs with zero bytes, and the column names of an empty result.
+  - The updatable SQLite cursor: `InsertRow()`, `UpdateRow()` and `DeleteRow()` (unimplemented), with values bound and names quoted. `CCursor::IsChanged()`, `GetNewValue()`, `ClearChanges()` and `IsUpdatable()`.
+  - `CSQLiteConnection::Changes()`, `LastInsertId()` and `GetHandle()`.
+  - `CConnectionArray::Find()` and `Remove()`.
+  - `CString::FromBytes()`: a string of exactly the bytes given, zeros included.
+  - `TestDatabase`, on an in-memory SQLite database.
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
 ### Fixed

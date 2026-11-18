@@ -54,9 +54,34 @@ namespace IASLib
         return true;
     }
 
+    int CConnectionArray::Find( CConnection *pConnection ) const
+    {
+        for ( size_t n = 0; n < m_aElements.Length(); n++ )
+        {
+            if ( m_aElements.Get( n, NULL ) == pConnection )
+                return (int)n;
+        }
+        return -1;
+    }
+
+    bool CConnectionArray::Remove( CConnection *pConnection )
+    {
+        int nAt = Find( pConnection );
+        return ( nAt >= 0 ) ? Delete( nAt ) : false;
+    }
+
+        // (Deleting in place, while each connection's destructor removed it
+        // from this array, skipped every other one: those leaked, holding a
+        // pointer to the database being destroyed.)
     void CConnectionArray::DeleteAll( void )
     {
-        m_aElements.DeleteAll();
+        while ( m_aElements.Length() > 0 )
+        {
+            size_t nLast = m_aElements.Length() - 1;
+            CConnection *pConnection = m_aElements.Get( nLast, NULL );
+            m_aElements.Remove( nLast );
+            delete pConnection;
+        }
         m_aElements.Compact();
     }
 } // namespace IASLib

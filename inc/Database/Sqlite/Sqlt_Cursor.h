@@ -1,10 +1,12 @@
 /*
  *  SQL Lite Cursor
  *
- *      Cursor class for connecting to SQL Lite. The Cursor class stores
- * the data retrieved from a query against the database. It is a some-
- * what simple class, since the SQL Lite database has a rather simple
- * way of handling queries. 
+ *      The rows of a query against SQLite, held in memory, with SQL NULLs
+ * recorded (IsNull()). An updatable cursor (Cursor( query, true )) can
+ * change the table its rows came from: UpdateRow() and DeleteRow() find
+ * the row by all of its original values (NULL-safe, one row only), and
+ * InsertRow() adds a row of the staged values. Values are bound, never
+ * pasted into the SQL.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 05/13/2003
@@ -23,14 +25,10 @@
 
 #include "../Cursor.h"
 #include "sqlite3.h"
-#include "Sqlt_Connection.h"
 
 namespace IASLib
 {
-    extern "C"
-    {
-        int CursorCallback( void *pCursor, int nColumns, char **astrValues, char **astrHeaders );
-    };
+    class CSQLiteConnection;
 
     class CSQLiteCursor : public CCursor
     {
@@ -43,22 +41,28 @@ namespace IASLib
                                 CSQLiteCursor( CSQLiteConnection *pConnection, bool bUpdatable );
             virtual            ~CSQLiteCursor( void );
 
+                // Frees the rows.
             virtual int         Close( void );
 
+                // IASLIB_DB_OK, IASLIB_DB_CURSOR_READ_ONLY,
+                // IASLIB_DB_CURSOR_INVALID_ROW, IASLIB_DB_ERROR_BAD_QUERY (no
+                // row matched, or the SQL failed: see the connection's error).
             virtual int         DeleteRow( const char *strTable );
             virtual int         InsertRow( const char *strTable );
             virtual int         UpdateRow( const char *strTable );
 
-            virtual bool        Next( void );
-            virtual bool        Prev( void );
-        
-            void                SetValid( void ) { m_bValid = true; }
+                // Reads every row of a prepared statement (for the connection).
+            bool                Load( sqlite3_stmt *pStatement );
 
-            friend int CursorCallback( void *, int, char **, char **);
+                // A name as an SQL identifier: in double quotes, quotes doubled.
+            static CString      QuoteIdentifier( const char *strName );
+
+        private:
+            int                 ApplyRow( const char *strTable, int nAction );
     };
 } // namespace IASLib
 
 #endif // IASLIB_DB_SQLITE__
 #endif // IASLIB_DATABASE__
-#endif // IASLIB_SQLLITECURSOR_H__
 
+#endif // IASLIB_SQLITECURSOR_H__

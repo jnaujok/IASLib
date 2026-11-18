@@ -42,6 +42,11 @@ namespace IASLib
                 // Takes the connection out of the array, without deleting it.
             virtual bool        Delete( int nCount );
             virtual int         Length( void ) const { return (int)m_aElements.Length(); }
+                // Takes a connection out of the array (false if not there).
+            bool                Remove( CConnection *pConnection );
+            int                 Find( CConnection *pConnection ) const;
+                // Deletes every connection. Each is taken out before it is
+                // deleted, so a destructor that removes itself is safe.
             virtual void        DeleteAll( void );
 
         private:

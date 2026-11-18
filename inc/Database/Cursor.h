@@ -24,11 +24,27 @@
 
 namespace IASLib
 {
+        // A result whose rows can be changed: SetColumn() stages new values
+        // for the current row (by number or by name, any case), and
+        // UpdateRow(), InsertRow() and DeleteRow() apply them to a table.
+        // Moving to another row does not clear what was staged:
+        // ClearChanges() does, and the drivers do after applying them.
     class CCursor : public CBaseResult
     {
         protected:
             CStringArray        m_astrNewValues;
+            std::vector<bool>   m_abChanged;
             bool                m_bUpdatable;
+
+                // (The staged values were never sized, so every SetColumn()
+                // went to one scratch slot.)
+            void                EnsureNewValues( void )
+                                {
+                                    while ( m_astrNewValues.Length() < m_nColumns )
+                                        m_astrNewValues.Push( CString( "" ) );
+                                    if ( m_abChanged.size() < m_nColumns )
+                                        m_abChanged.resize( m_nColumns, false );
+                                }
 
         public:
                                 CCursor( void ) { m_bUpdatable = false; }
@@ -40,11 +56,19 @@ namespace IASLib
             virtual int         InsertRow( const char *strTable ) = 0;
             virtual int         UpdateRow( const char *strTable ) = 0;
 
+            bool                IsUpdatable( void ) const { return m_bUpdatable; }
+                // Whether a column has a staged value, and that value.
+            bool                IsChanged( size_t nColumn ) const { return nColumn < m_abChanged.size() && m_abChanged[ nColumn ]; }
+            CString             GetNewValue( size_t nColumn ) const { return ( nColumn < m_astrNewValues.Length() ) ? m_astrNewValues.Get( nColumn ) : CString( "" ); }
+            void                ClearChanges( void ) { m_abChanged.assign( m_abChanged.size(), false ); }
+
             virtual int         SetColumn( size_t nColumn, const char *strValue )
                                 {
                                     if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
                                     {
-                                        m_astrNewValues[ nColumn ] = strValue;
+                                        EnsureNewValues();
+                                        m_astrNewValues[ nColumn ] = ( strValue ) ? strValue : "";
+                                        m_abChanged[ nColumn ] = true;
                                         return 1;
                                     }
                                     return 0;
@@ -52,44 +76,28 @@ namespace IASLib
 
             virtual int         SetColumn( size_t nColumn, size_t nValue )
                                 {
-                                    if ( ( m_bValid != 0 ) && ( nColumn < m_nColumns ) )
-                                    {
-                                        m_astrNewValues[ nColumn ] = nValue;
-                                        return 1;
-                                    }
-                                    return 0;
+                                    CString strValue;
+                                    strValue.Format( "%llu", (unsigned long long)nValue );
+                                    return SetColumn( nColumn, (const char *)strValue );
                                 }
 
+                // (The by-name forms compared names with case, though the
+                // drivers report them in their own case.)
             virtual size_t      SetColumn( const char *pszColumn, const char *strValue )
                                 {
-                                    CString strColumn = pszColumn;
-                                    for ( size_t nCount = 0; nCount < m_nColumns; nCount ++ )
-                                    {
-                                        if ( m_astrHeaders[ nCount ] == strColumn )
-                                        {
-                                            m_astrNewValues[ nCount ] = strValue;
-                                            return 1;
-                                        }
-                                    }
-                                    return 0;
+                                    size_t nColumn = FindColumn( pszColumn );
+                                    return ( nColumn == NOT_FOUND ) ? 0 : (size_t)SetColumn( nColumn, strValue );
                                 }
 
             virtual size_t      SetColumn( const char *pszColumn, int nValue )
                                 {
-                                    CString strColumn = pszColumn;
-                                    for ( size_t nCount = 0; nCount < m_nColumns; nCount ++ )
-                                    {
-                                        if ( m_astrHeaders[ nCount ] == strColumn )
-                                        {
-                                            m_astrNewValues[ nCount ].Format( "%d", nValue );
-                                            return 1;
-                                        }
-                                    }
-                                    return 0;
+                                    CString strValue;
+                                    strValue.Format( "%d", nValue );
+                                    return SetColumn( pszColumn, (const char *)strValue );
                                 }
-
     };
 } // namespace IASLib
+
 #endif // IASLIB_DATABASE__
 #endif // IASLIB_CURSOR_H__
 

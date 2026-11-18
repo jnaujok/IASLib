@@ -33,16 +33,63 @@ namespace IASLib
         m_aastrData = NULL;
         m_nCurrentRow = 0;
         m_bValid = false;
+        m_nAllocatedRows = 0;
     }
 
     CBaseResult::~CBaseResult( void )
     {
-        // Nothing to do here.
+            // Drivers that keep their rows here with AddRow() are freed here;
+            // the older drivers free their own (and leave this empty).
+        if ( m_nAllocatedRows )
+            ClearRows();
+    }
+
+    void CBaseResult::AddRow( CStringArray *pRow, const std::vector<unsigned char> *pNulls )
+    {
+        if ( m_nRows == m_nAllocatedRows )
+        {
+                // Room for half again (at least 16).
+            size_t nNew = m_nAllocatedRows + ( ( m_nAllocatedRows / 2 > 16 ) ? m_nAllocatedRows / 2 : 16 );
+            CStringArray **aaNew = new CStringArray *[ nNew ];
+            for ( size_t n = 0; n < m_nRows; n++ )
+                aaNew[n] = m_aastrData[n];
+            delete [] m_aastrData;
+            m_aastrData = aaNew;
+            m_nAllocatedRows = nNew;
+        }
+        m_aastrData[ m_nRows ] = pRow;
+        m_aabNull.push_back( ( pNulls ) ? *pNulls : std::vector<unsigned char>() );
+        m_nRows++;
+    }
+
+    void CBaseResult::ClearRows( void )
+    {
+        for ( size_t n = 0; n < m_nRows; n++ )
+            delete m_aastrData[n];
+        delete [] m_aastrData;
+        m_aastrData = NULL;
+        m_nRows = 0;
+        m_nAllocatedRows = 0;
+        m_nCurrentRow = 0;
+        m_aabNull.clear();
+    }
+
+    size_t CBaseResult::FindColumn( const char *pszColumn ) const
+    {
+        if ( pszColumn == NULL )
+            return NOT_FOUND;
+        CString strColumn( pszColumn );
+        for ( size_t nCount = 0; nCount < m_nColumns && nCount < m_astrHeaders.Length(); nCount++ )
+        {
+            if ( m_astrHeaders.Get( nCount ).Compare( strColumn, false ) == 0 )
+                return nCount;
+        }
+        return NOT_FOUND;
     }
 
     const char *CBaseResult::ColumnName( size_t nColumn )
     {
-        if ( ( m_bValid ) && ( nColumn < m_nColumns )  )
+        if ( nColumn < m_nColumns && nColumn < m_astrHeaders.Length() )
             return (const char *)m_astrHeaders[ nColumn ];
 
         return "";
@@ -50,16 +97,17 @@ namespace IASLib
 
     bool CBaseResult::Next( void )
     {
-        m_nCurrentRow++;
-        if ( m_nCurrentRow < m_nRows )
+        if ( m_nCurrentRow + 1 < m_nRows )
+        {
+            m_nCurrentRow++;
             return true;
-
+        }
         return false;
     }
 
     bool CBaseResult::Prev( void )
     {
-        if ( m_nCurrentRow > 0 )
+        if ( m_nCurrentRow > 0 && m_nRows > 0 )
         {
             m_nCurrentRow--;
             if ( m_nCurrentRow >= m_nRows )
@@ -69,26 +117,12 @@ namespace IASLib
         return false;
     }
 
+        // (It had no row or NULL check, so after the last row it read past
+        // the data.)
     CString CBaseResult::GetColumn( const char *pszColumn )
     {
-        CString strCompare;
-        CString strColumn = pszColumn;
-
-        strColumn.ToUpperCase();
-
-        for ( size_t nCount = 0; nCount < m_nColumns; nCount ++ )
-        {
-            strCompare = m_astrHeaders[ nCount ];
-            strCompare.ToUpperCase();
-
-            if ( strCompare == strColumn )
-            {
-                CStringArray *pArray = m_aastrData[m_nCurrentRow];
-                return pArray->Get( nCount );
-            }
-        }
-
-        return CString( "" );
+        size_t nColumn = FindColumn( pszColumn );
+        return ( nColumn == NOT_FOUND ) ? CString( "" ) : GetColumn( nColumn );
     }
 
     CString CBaseResult::GetColumn( size_t nColumn )
@@ -96,8 +130,8 @@ namespace IASLib
         if ( ( m_bValid )  && ( nColumn < m_nColumns ) && ( m_aastrData != NULL ) && ( m_nCurrentRow < m_nRows ) )
         {
             CStringArray *pArray = m_aastrData[m_nCurrentRow];
-
-            return pArray->Get( nColumn );
+            if ( pArray && nColumn < pArray->Length() )
+                return pArray->Get( nColumn );
         }
 
         return CString( "" );
@@ -110,21 +144,7 @@ namespace IASLib
 
     bool CBaseResult::IsColumn( const char *pszColumn )
     {
-        CString strCompare;
-        CString strColumn = pszColumn;
-
-        strColumn.ToUpperCase();
-
-        for ( size_t nCount = 0; nCount < m_nColumns; nCount ++ )
-        {
-            strCompare = m_astrHeaders[ nCount ];
-            strCompare.ToUpperCase();
-
-            if ( strCompare == strColumn )
-                return true;
-        }
-
-        return false;
+        return FindColumn( pszColumn ) != NOT_FOUND;
     }
 
     bool CBaseResult::SetRow( size_t nRow )
@@ -135,6 +155,20 @@ namespace IASLib
         }
         m_nCurrentRow = nRow;
         return true;
+    }
+
+    bool CBaseResult::IsNull( size_t nColumn )
+    {
+        if ( m_nCurrentRow >= m_aabNull.size() )
+            return false;
+        const std::vector<unsigned char> &abNull = m_aabNull[ m_nCurrentRow ];
+        return nColumn < abNull.size() && abNull[ nColumn ] != 0;
+    }
+
+    bool CBaseResult::IsNull( const char *pszColumn )
+    {
+        size_t nColumn = FindColumn( pszColumn );
+        return nColumn != NOT_FOUND && IsNull( nColumn );
     }
 } // namespace IASLib
 

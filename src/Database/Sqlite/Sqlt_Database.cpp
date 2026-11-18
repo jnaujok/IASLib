@@ -1,11 +1,7 @@
 /*
  *  SQL Lite Database
  *
- *      Database class for connecting to SQLite. Please note that the
- * SQL Lite database requires a unique connection for each thread, which 
- * means that this database type really doesn't do much other then store
- * the information making the connection to SQL Lite. Each connection
- * will then be it's own connection/database.
+ *      See Sqlt_Database.h.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 05/13/2003
@@ -25,163 +21,111 @@
 
 namespace IASLib
 {
-    CDynamicLibrary *CSQLiteDatabase::m_pSqliteLibrary = NULL;
-
     IMPLEMENT_OBJECT( CSQLiteDatabase, CDatabase );
 
-
-    void CSQLiteDatabase::initLibrary( void )
+    CSQLiteDatabase::CSQLiteDatabase( void ) : CDatabase( "SQLite" )
     {
-        if ( ! m_pSqliteLibrary )
-        {
-            m_pSqliteLibrary = new CDynamicLibrary( "sqlite3" );
-        }
+        m_nLastErrorCode = IASLIB_DB_OK;
+        m_nExtendedErrorCode = 0;
+        m_nTimeoutMs = 10000;
     }
 
-    CSQLiteDatabase::CSQLiteDatabase( void ) : CDatabase( "SQL Lite" )
-    {
-    }
-    
-    CSQLiteDatabase::~CSQLiteDatabase( void ) 
+    CSQLiteDatabase::~CSQLiteDatabase( void )
     {
         Disconnect();
-        m_bConnected = 0;
-    }
-
-    void *CSQLiteDatabase::GetFunction( const char *strName )
-    {
-        initLibrary();
-        return m_pSqliteLibrary->GetFunction( strName );
+        m_bConnected = false;
     }
 
     bool CSQLiteDatabase::Connect( void )
     {
-        CDatabase::Connect( "SQL Lite" );
         m_bConnected = true;
 	    return m_bConnected;
     }
 
-    CConnection *CSQLiteDatabase::Connection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication, const char *strName )
+        // (A connection that failed to open was returned anyway, not in the
+        // list, and the caller had to know to delete it.)
+    CConnection *CSQLiteDatabase::Connection( const char *strDBName, const char *, const char *, const char *, const char *strName )
     {
-#ifndef IASLIB_NO_LINT__
-        strApplication = strApplication;
-        strPassword = strPassword;
-        strUserName = strUserName;
-#endif
-        CConnection *pNewCon = NULL;
+        m_strDBFile = ( strDBName ) ? strDBName : "";
 
-        m_strDBFile = strDBName;
-
-        pNewCon = new CSQLiteConnection( strDBName, strName, this );
-
-        if ( pNewCon->Connected() )
+        CSQLiteConnection *pNewCon = new CSQLiteConnection( strDBName, strName, this );
+        if ( ! pNewCon->Connected() )
         {
-            m_aConnections.Push( pNewCon );
-            m_nConnections++;
+            m_nLastErrorCode = pNewCon->MajorErrorCode();
+            m_nExtendedErrorCode = pNewCon->MinorErrorCode();
+            m_strLastError = pNewCon->MajorErrorMessage();
+            pNewCon->Detach();
+            delete pNewCon;
+            return NULL;
         }
 
+        m_nLastErrorCode = IASLIB_DB_OK;
+        m_nExtendedErrorCode = 0;
+        m_strLastError = "";
+        pNewCon->SetTimeout( m_nTimeoutMs );
+        m_aConnections.Push( pNewCon );
+        m_nConnections = m_aConnections.Length();
+        m_bConnected = true;
 	    return pNewCon;
     }
 
-    CBulkCopyConnection *CSQLiteDatabase::BulkCopyConnection( const char *strDBName, const char *strUserName, const char *strPassword, const char *strApplication, const char *strName )
+    CBulkCopyConnection *CSQLiteDatabase::BulkCopyConnection( const char *, const char *, const char *, const char *, const char * )
     {
-#ifndef IASLIB_NO_LINT__
-        strName = strName;
-        strApplication = strApplication;
-        strPassword = strPassword;
-        strUserName = strUserName;
-        strDBName = strDBName;
-#endif
+        m_nLastErrorCode = IASLIB_DB_ERROR_UNSUPPORTED;
+        m_strLastError = "SQLite does not have bulk copy.";
 	    return NULL;
     }
 
+        // (Deleting the connections in place, while each one removed itself
+        // from the list, skipped every other one.)
     int CSQLiteDatabase::Disconnect( void )
     {
+        for ( int n = 0; n < m_aConnections.Length(); n++ )
+            static_cast<CSQLiteConnection *>( m_aConnections.Get( n ) )->Detach();
         m_aConnections.DeleteAll();
         m_nConnections = 0;
 	    return IASLIB_DB_ERROR_OK;
     }
 
+        // (They reported whatever the last connection in the list had.)
     int CSQLiteDatabase::MajorErrorCode( void )
     {
-        int     nCount = 0;
-        
-        m_nLastErrorCode = 0;
-       
-        while ( nCount < m_aConnections.Length() )
-        {
-            int nTemp = m_aConnections.Get( nCount )->MajorErrorCode();
-            if ( nTemp != m_nLastErrorCode )
-            {
-                m_nLastErrorCode = nTemp;
-            }
-            nCount++;
-        }
-
         return m_nLastErrorCode;
     }
 
     int CSQLiteDatabase::MinorErrorCode( void )
     {
-        return m_nLastErrorCode;
+        return m_nExtendedErrorCode;
     }
 
     const char *CSQLiteDatabase::MajorErrorMessage( void )
     {
-        int     nCount = 0;
-        
-        m_strLastError = "";
-       
-        while ( nCount < m_aConnections.Length() )
-        {
-            CString strTemp = m_aConnections.Get( nCount )->MajorErrorMessage();
-            if ( strTemp != m_strLastError )
-            {
-                m_strLastError = strTemp;
-            }
-            nCount++;
-        }
-
         return m_strLastError;
     }
 
     const char *CSQLiteDatabase::MinorErrorMessage( void )
     {
-        return "";
+        return m_strLastError;
     }
 
     int CSQLiteDatabase::ReleaseConnection( CConnection *pCon )
     {
-        int     nCount = 0;
-        int     nFound = -1;
-
-        while ( nCount < m_aConnections.Length() )
-        {
-            CConnection *pTemp = m_aConnections.Get( nCount );
-            if ( pTemp == pCon )
-            {
-                m_aConnections.Delete( nCount );
-                nFound = nCount;
-                break;
-            }
-            nCount++;
-        }
-
+        int nFound = m_aConnections.Find( pCon );
+        if ( nFound >= 0 )
+            m_aConnections.Delete( nFound );
+        m_nConnections = m_aConnections.Length();       // (never went down)
         return nFound;
     }
 
+        // (It applied the timeout but always reported failure.)
     bool CSQLiteDatabase::SetTimeout( int nTimeout )
     {
-        int     nCount = 0;
-
-        while ( nCount < m_aConnections.Length() )
-        {
-            CSQLiteConnection *pTemp = (CSQLiteConnection *)m_aConnections.Get( nCount );
-            pTemp->SetTimeout( nTimeout * 1000 ); 
-            nCount++;
-        }
-
-        return false;
+        if ( nTimeout < 0 )
+            return false;
+        m_nTimeoutMs = nTimeout * 1000;
+        for ( int n = 0; n < m_aConnections.Length(); n++ )
+            static_cast<CSQLiteConnection *>( m_aConnections.Get( n ) )->SetTimeout( m_nTimeoutMs );
+        return true;
     }
 } // namespace IASLib
 
