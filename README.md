@@ -261,7 +261,7 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 
 ## Testing
 
-`ctest` runs nine suites:
+`ctest` runs ten suites:
 
 | Suite | Covers |
 |---|---|
@@ -273,6 +273,7 @@ std::unique_ptr<CBlockchain> loaded = CBlockchain::FromJsonText( saved, &reason 
 | `TestBlockchain` | SHA-256 and RFC 6962 test vectors, inclusion proofs, tamper detection, saving, and threads |
 | `TestBaseTypes` | `CObject`, `CString` (sharing, fixed buffers, numbers, searching, escaping, threads), the tokenizer, `CDataBlock`, UUIDs, ISAAC against Jenkins' test vector, and `CVariant` |
 | `TestCollections` | Every template collection against the standard library on random operations, with counted elements to catch leaks, and the classic collections |
+| `TestThreading` | Starting and joining threads from any thread, return codes, `ExitThread()`, `Kill()`, exceptions, the monitor, semaphores, the thread pool and the server thread |
 | `TestXMLDocument` | XML reading and writing, entities and CDATA, well-formedness errors with positions, XXE and entity-expansion protection, the element API, a real file, and fuzzing |
 
 The suites are run under AddressSanitizer/UndefinedBehaviorSanitizer, ThreadSanitizer and Valgrind during development:

@@ -50,6 +50,12 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CXMLElement( CString & )`, which parsed the start of a string, is removed.
   - CXMLDocument and CXMLIndex can't be copied.
 - **`CMutex` can't be copied.** Copying one copied the operating system's mutex.
+- **Threads:**
+  - The thread monitor deletes only detached threads when they finish (joinable threads belong to whoever made them; it used to delete them too, 30 seconds after they ended).
+  - `Sleep()` and `Millisleep()` are static.
+  - The public `m_mutexStartSuspended` is gone.
+  - `CThreadPool` keeps its threads in `TArray`s and takes `CThreadTask`s only.
+  - `CServerThread` checks for shutdown every 250 ms.
 - **`CMutex` is recursive on every platform.** The thread that holds it can lock it again, and must unlock it as many times. It was recursive on Windows (a kernel mutex) but not elsewhere, so code that worked on Windows deadlocked on Linux and macOS. On Windows it is now a critical section, which avoids a kernel call when the lock is free.
 
 ### Added
@@ -84,6 +90,11 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CXMLIndex::Clear()`, `TakeFrom()` and `AddChunk()`.
 - **`CException::GetMessage()`.**
 - **`CMutex::TryLock()`.**
+- **Threads:**
+  - `CThread::Start()`, `IsStarted()` and `SetReturnCode()`.
+  - `CSemaphore::TimedWait()`.
+  - `CThreadPool::WaitUntilIdle()` and `GetTotalThreads()`.
+  - `TestThreading`.
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
 ### Fixed
@@ -166,6 +177,20 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CXMLIndex( file )` used a second, string-searching parser that misread nested elements of the same name.
   - Pretty printing put an element on the same line as a self-closing one before it.
   - `TestXMLDocument` checked with `ASSERT`, which only prints, so it could never fail.
+- **Threads:**
+  - Starting a suspended thread was a mutex locked by one thread and unlocked by another, which mutexes don't allow. Resuming from another thread failed with the recursive mutex. It's now a condition variable.
+  - `Join()` skipped threads that had already finished, so they were never joined and leaked. `CGenericServer` had worked around this.
+  - On Windows, `Self()` and `Equals()` compared `GetCurrentThread()`, which is the same pseudo handle in every thread. `ExitThread()` called itself forever.
+  - `ExitThread()` and `Kill()` aborted the program on Linux, because the `catch ( ... )` around `Run()` swallowed the stack unwinding they use.
+  - A thread destroyed before it started could still run.
+  - The monitor's singleton could be created twice, and its shutdown list deleted threads twice.
+  - **CThreadPool:**
+    - Its workers waited on a mutex unlocked by another thread. With the recursive mutex they spun instead, and on Windows they had never worked.
+    - A task that threw a library exception killed its worker for good.
+    - `TaskStatus()` always said UNKNOWN.
+    - Destroying the pool left threads running on freed memory and leaked them.
+  - **CServerThread** waited in `Accept()` forever, so it couldn't be stopped, and caught exceptions by pointer, which never matched.
+  - `CFileStream::GetBuffer()` looped forever on Windows text files.
 - **Security:** external entities (XXE) are refused, and entity expansion ("billion laughs") is capped.
 - **Exceptions:**
   - The `IASLIB_THROW_*` macros threw a shared `static` exception, which two threads could change at once.

@@ -76,11 +76,7 @@ namespace IASLib
         if ( ! m_bJoined )
         {
             m_bJoined = true;
-#ifdef IASLIB_PTHREAD__
-            pthread_join( m_ptThreadID, NULL );
-#else
             Join();
-#endif
         }
     }
 } // namespace IASLib

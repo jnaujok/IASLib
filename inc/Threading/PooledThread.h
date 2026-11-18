@@ -17,6 +17,7 @@
 
     #include "Thread.h"
     #include "ThreadTask.h"
+    #include <atomic>
 
 
     namespace IASLib
@@ -30,14 +31,16 @@
             protected:
                 CRunThread     *m_ptThread;
                 CString         m_strThreadName;
-                CThreadTask    *m_assignedTask;
+                std::atomic<CThreadTask *> m_assignedTask;
                 CObject        *m_pResult;
-                bool            m_bThreadInShutdown;
+                std::atomic<bool> m_bThreadInShutdown;
                 int             m_nTimeoutSeconds;
                 CThreadPool    *m_pParent;
 
             public:
                                         CPooledThread( CThreadPool *parent, const char *strThreadName = "Pooled_Thread_", int nNumber = 0 );
+                    // Stops the thread (after its task, if it has one) and
+                    // waits for it.
                 virtual                ~CPooledThread( void );
 
                                         DEFINE_OBJECT(CPooledThread);
@@ -45,15 +48,9 @@
                 CObject *               GetResult( void ) { return m_pResult; }
                 bool                    IsRunning( void ) { return m_assignedTask != NULL; }
                 bool                    IsIdle( void ) { return m_assignedTask == NULL; }
-
                 const char             *GetName( void ) { return (const char *)m_strThreadName; }
-
                 void                    SetTimeout( int nSeconds );
-
                 CThread                *GetThread( void );
-
-            protected:
-                void                    ExitThread( int nExitCode );
 
             private:
                 friend class CThreadPool;
@@ -64,8 +61,10 @@
                 void                    SetResult( CObject *pResult );
                 CThreadTask *           GetTask( void ) { return m_assignedTask; }
                 void                    ResetThread( void ) { m_assignedTask = NULL; m_pResult = NULL; }
-        };
 
+                                        CPooledThread( const CPooledThread & );
+                CPooledThread          &operator =( const CPooledThread & );
+        };
     } // Namespace IASLib
 #endif // IASLIB_MULTI_THREADED__
 #endif // IASLIB_POOLEDTHREAD_H__

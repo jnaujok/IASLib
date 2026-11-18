@@ -526,11 +526,18 @@ static void testBasicServer( void )
         // Over the connection limit (2): the third connection gets 503.
     int a = connectTo( port );
     int b = connectTo( port );
-    std::this_thread::sleep_for( std::chrono::milliseconds( 400 ) );
-    int c = connectTo( port );
-    data = readResponses( c, 1, 2000, bClosed );
-    CHECK( statusOf( data ) == 503 );
-    closeSocket( c );
+        // Until the server has taken both (on a busy machine, that can take
+        // longer than a fixed pause).
+    int nStatus = 0;
+    for ( int nTry = 0; nTry < 10 && nStatus != 503; nTry++ )
+    {
+        std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
+        int c = connectTo( port );
+        data = readResponses( c, 1, 2000, bClosed );
+        nStatus = statusOf( data );
+        closeSocket( c );
+    }
+    CHECK( nStatus == 503 );
 
         // Stopping with idle connections open returns promptly.
     auto start = std::chrono::steady_clock::now();

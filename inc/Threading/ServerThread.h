@@ -34,6 +34,14 @@ namespace IASLib
             CServerSocket  *m_pServerSocket;
 
         public:
+                // How often (milliseconds) the accepting loop checks for a
+                // shutdown request.
+            static const int ACCEPT_POLL_MS = 250;
+
+                // Listens on nPortNumber when started (it starts suspended:
+                // call Resume()), handing each connection to
+                // HandleConnection(), which then owns the socket. Return code
+                // -1 if the port cannot be opened.
                             CServerThread( const char *strThreadName, int nPortNumber, int nMaxBacklog = 16 );
             virtual        ~CServerThread( void );
 

@@ -15,6 +15,9 @@
 #include "ThreadMonitor.h"
 #include "Date.h"
 #include "Exception.h"
+#include "../Templates/TArray.h"
+
+#include <mutex>
 
 #ifdef IASLIB_MULTI_THREADED__
 namespace IASLib
@@ -123,7 +126,7 @@ CThreadMonitor::CThreadMonitor( void ) :
 CThreadMonitor::~CThreadMonitor( void )
 {
     size_t          nCount;
-    CArray          aDeleteList;
+    TArray<CThread *> aDeleteList;      // not owning: deleted by hand
     CThreadStorage *pStorage;
     CThread        *pThread;
 
@@ -140,7 +143,7 @@ CThreadMonitor::~CThreadMonitor( void )
 
     for ( nCount = 0; nCount < aDeleteList.Length(); nCount++ )
     {
-        pThread = (CThread *)aDeleteList.Get( nCount );
+        pThread = aDeleteList[ nCount ];
         try
         {
             // Thread monitor is already being deleted... deleting it again is bad.
@@ -167,13 +170,14 @@ CThreadMonitor::~CThreadMonitor( void )
 ***********************************************************************/
 CThreadMonitor *CThreadMonitor::GetThreadMonitor( void )
 {
-    if ( ! m_bInitialized )
-    {
+        // Created once, by whichever thread asks first. The monitor's own
+        // thread is a CThread, whose constructor would ask again: it skips
+        // that for the monitor (by name), so this does not recurse.
+    static std::once_flag s_onceCreate;
+    std::call_once( s_onceCreate, []() {
         m_bInitialized = true;
-            // The assignment isn't necessary, but it looks really weird without it.
-        m_pThreadMonitor = new CThreadMonitor();
-    }
-
+        new CThreadMonitor();       // sets m_pThreadMonitor
+    } );
     return m_pThreadMonitor;
 }
 
@@ -191,7 +195,7 @@ void *CThreadMonitor::Run( void )
     CThread        *pThread;
     CDate           dttNow;
     int             nElapsed;
-    CArray          aDeleteList;
+    TArray<CThread *> aDeleteList;      // not owning: deleted by hand
 
     while ( ! IsShutdown() )
     {
@@ -207,43 +211,33 @@ void *CThreadMonitor::Run( void )
 
                 // Threads can mark themselves to not be deleted by the thread
                 // monitor. Here we check for this situation
-            if ( ! pThread->IsNoDelete() )
+                // Only detached threads are the monitor's to delete: nobody
+                // can join them, so nobody else owns them. Joinable threads
+                // belong to whoever created them.
+            if ( pThread != NULL && pThread != this && ! pThread->IsNoDelete() )
             {
-                    // We check if the thread has finished (and if it is a thread we created,
-                    // as we can't delete a thread we didn't create.
                 if ( ( ! pThread->IsRunning() ) && ( pThread->IsContained() ) )
                 {
+                    if ( pStorage->m_nElapsed == -1 )
+                    {
+                        pStorage->SetEndTime();
+                    }
                     if ( pThread->IsDetached() )
                     {
                         aDeleteList.Push( pThread );
                     }
-                    else
-                    {
-                        if ( pStorage->m_nElapsed == -1 )
-                        {
-                            pStorage->SetEndTime();
-                        }
-                        dttNow.SetToCurrent();
-
-                            // Threads that are dead must be joined within 30 seconds, or
-                            // we're gonna kill 'em anyway.
-                        if ( dttNow.Elapsed( pStorage->m_dttEndTime ) > 30000 )
-                        {
-                            aDeleteList.Push( pThread );
-                        }
-                    }
                 }
-                else
+                else if ( pStorage->m_nTimeout > 0 && pThread->IsRunning() )
                 {
-                    if ( pStorage->m_nTimeout > 0 )
+                    dttNow.SetToCurrent();
+                    nElapsed = dttNow.Elapsed( pStorage->m_dttStartTime );
+                    if ( nElapsed > pStorage->m_nTimeout )
                     {
-                        dttNow.SetToCurrent();
-
-                        nElapsed = dttNow.Elapsed( pStorage->m_dttStartTime );
-                        if ( nElapsed > pStorage->m_nTimeout )
+                        fprintf( stderr, "Thread Monitor: Timeout on thread [%s] Elapsed time: %d.%03d\n", (const char *)pStorage->m_strIdentifier, (nElapsed / 1000), (nElapsed % 1000) );
+                        pStorage->m_nTimeout = 0;       // once
+                        pThread->Kill();
+                        if ( pThread->IsDetached() )
                         {
-                            printf( "Thread Monitor: Timeout on thread [%s] Elapsed time: %d.%03d", (const char *)pStorage->m_strIdentifier, (nElapsed / 1000), (nElapsed % 1000) );
-                            pThread->Kill();
                             aDeleteList.Push( pThread );
                         }
                     }
@@ -256,7 +250,7 @@ void *CThreadMonitor::Run( void )
         nCount = 0;
         while ( nCount < aDeleteList.Length() )
         {
-            pThread = (CThread *)aDeleteList.Get( nCount );
+            pThread = aDeleteList[ nCount ];
             try
             {
                 delete pThread;
@@ -270,7 +264,7 @@ void *CThreadMonitor::Run( void )
             nCount++;
         }
 
-        aDeleteList.EmptyAll();
+        aDeleteList.Clear();
 
         Sleep( 1 );
     }

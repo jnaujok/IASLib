@@ -23,6 +23,7 @@
 #include "../BaseTypes/IASLib_String.h"
 #include "Thread.h"
 #include "Mutex.h"
+#include <atomic>
 
 #ifdef IASLIB_MULTI_THREADED__
 
@@ -44,7 +45,7 @@ namespace IASLib
             };
         protected:
             CString                 m_strIdentifier;
-            TASK_STATUS             m_currentStatus;
+            std::atomic<int>        m_currentStatus;    // a TASK_STATUS, set by the pool's threads
 
         public:
                                     CThreadTask( const char *strIdentifier )
@@ -64,8 +65,10 @@ namespace IASLib
 
                                     DECLARE_OBJECT(CThreadTask, CObject );
 
+                // The work; the result (which may be NULL) goes to the pool.
+                // An exception marks the task EXCEPTION.
             virtual CObject        *Run( void ) = 0;
-            virtual TASK_STATUS     GetStatus( void ) { return m_currentStatus; }
+            virtual TASK_STATUS     GetStatus( void ) { return (TASK_STATUS)m_currentStatus.load(); }
 
             virtual CString         GetIdentifier( void ) { return m_strIdentifier; }
 

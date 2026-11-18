@@ -18,15 +18,16 @@
 
 #include "Thread.h"
 #include "ThreadMonitor.h"
-#include "Mutex.h"
-#include "Object.h"
 
-#ifndef IASLIB_WIN32__
-    #include <unistd.h>
-    #include <time.h>
+#include <chrono>
+#include <thread>
+
+#if defined( __GLIBC__ )
+    #include <cxxabi.h>
 #endif
 
 #ifdef IASLIB_MULTI_THREADED__
+
 IASLib::CMutex IASLib::CThread::m_mutexCriticalSection;
 
 extern "C"
@@ -34,513 +35,359 @@ extern "C"
 #ifdef IASLIB_WIN32__
     static DWORD WINAPI ThreadStartRoutine( LPVOID pThreadObject )
     {
-            // This is a simple lock-out mechanism to make sure the constructor finishes
-            // before we begin the process of running the thread.
-        IASLib::CThread::EnterCriticalSection();
-        IASLib::CThread::LeaveCriticalSection();
-
         IASLib::CThread *pThread = (IASLib::CThread *)pThreadObject;
-        DWORD   *pRetVal = NULL;
-
-        pThread->SetRunning( true );
-        pRetVal = (DWORD *)pThread->Run();
-        pThread->SetRunning( false );
-        if ( pRetVal )
-            return *pRetVal;
+        pThread->ThreadMain();
+            // pThread may be gone now (a detached thread is deleted by the
+            // monitor once it has finished).
         return 0;
     }
 #else
     static void *ThreadStartRoutine( void *pThreadObject )
     {
-            // This is a simple lock-out mechanism to make sure the constructor finishes
-            // before we begin the process of running the thread.
-        IASLib::CThread::EnterCriticalSection();
-        IASLib::CThread::LeaveCriticalSection();
-
         IASLib::CThread *pThread = (IASLib::CThread *)pThreadObject;
-        void    *pRetVal = NULL;
-
-        pThread->SetRunning( true );
-
-#ifdef IASLIB_PTHREAD__
-			// Here we play a trick on PThreads to start suspended
-		pThread->m_mutexStartSuspended.Lock();
-        sleep(0);
-		pThread->m_mutexStartSuspended.Unlock();
-#endif
-
-        try
-        {
-            pRetVal = pThread->Run();
-        }
-        catch ( ... )
-        {
-            //CObject::ErrorLog( "%x: Exception caught in Thread->Run", (long)pThreadObject );
-        }
-
-        pThread->SetRunning( false );
-        return pRetVal;
+        pThread->ThreadMain();
+        return NULL;
     }
 #endif
 };
 
-#else
-#ifdef IASLIB_WIN32__
-#pragma warning(disable:4100)
-#endif
-#endif // IASLIB_MULTI_THREADED__
-
-#ifdef IASLIB_MULTI_THREADED__
-
 namespace IASLib
 {
-
-CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetached, bool bNoDelete, bool bDaemon ) : m_strThreadName( strThreadName )
-{
-    m_ptThreadID = 0;
-    m_bIsRunning = false;
-    m_nReturnCode = -1;
-    m_bDetached = false;
-    m_bShutdown = false;
-    m_bContained = false;
-    m_bNoDelete = false;
-    m_bDaemon = false;
-    
-#ifdef IASLIB_PTHREAD__
-    memset( &m_stAttributes, 0, sizeof( m_stAttributes ) );
-#endif
-
-#ifdef IASLIB_MULTI_THREADED__
-    CThreadMonitor *pMonitor = NULL;
-    int nRetCode = 0;
-
-#ifdef IASLIB_PTHREAD__
-	if ( bStartSuspended )
-	{
-		m_mutexStartSuspended.Lock();
-	}
-#endif
-
-    m_strThreadName = strThreadName;
-    m_bShutdown = false;
-    m_bNoDelete = bNoDelete;
-    m_bDaemon = bDaemon;
-
-    m_bIsRunning = false;
-    m_nReturnCode = 0;
-    m_bDetached = bDetached;
-        // This is a simple lock-out mechanism to make sure the constructor finishes
-        // before we begin the process of running the thread.
-    if ( ! bStartSuspended )
+    namespace
     {
-        CThread::EnterCriticalSection();
+            // Marks the thread finished however Run() ends, including
+            // pthread_exit() and cancellation, which unwind the stack.
+        struct CRunningGuard
+        {
+            std::atomic<bool> &m_bRunning;
+            explicit CRunningGuard( std::atomic<bool> &bRunning ) : m_bRunning( bRunning ) {}
+            ~CRunningGuard( void ) { m_bRunning = false; }
+        };
     }
 
-#ifdef IASLIB_SUN__
-    long lFlags = 0; // THR_BOUND;
-
-    if ( bStartSuspended )
+    CThread::CThread( const char *strThreadName, bool bStartSuspended, bool bDetached, bool bNoDelete, bool bDaemon )
+        : m_ptThreadID(), m_bIsRunning( false ), m_nReturnCode( 0 ), m_bDetached( bDetached ), m_bShutdown( false ),
+          m_bContained( false ), m_bNoDelete( bNoDelete ), m_bDaemon( bDaemon ), m_strThreadName( strThreadName ),
+          m_bReleased( false ), m_bAbandoned( false ), m_bLeftGate( false ), m_bReaped( false )
     {
-        lFlags |= THR_SUSPENDED;
-    }
+    #ifdef IASLIB_WIN32__
+        m_dwThreadID = 0;
+    #endif
 
-    if ( m_bDetached )
-    {
-        lFlags |= THR_DETACHED;
-    }
+            // Running from now: a short thread can finish (and clear the
+            // flag) before the call that creates it even returns.
+        m_bIsRunning = true;
 
-    if ( m_bDaemon )
-    {
-        lFlags |=  THR_DAEMON;
-    }
+    #ifdef IASLIB_PTHREAD__
+        memset( &m_stAttributes, 0, sizeof( m_stAttributes ) );
+        if ( pthread_attr_init( &m_stAttributes ) != 0 ||
+             pthread_create( &m_ptThreadID, &m_stAttributes, ThreadStartRoutine, this ) != 0 )
+        {
+            m_bIsRunning = false;
+            m_bReaped = true;
+            return;
+        }
+        if ( m_bDetached )
+        {
+            pthread_detach( m_ptThreadID );
+        }
+    #endif
 
-        // We should use our stack frames here, but they seem to need to be ungodly huge.
-    if ( nRetCode = thr_create( NULL, NULL, ThreadStartRoutine, this, lFlags, &m_ptThreadID ) )
-    {
-        ErrorLog( "Could not instantiate thread! (Error Code: %d)\n", nRetCode );
+    #ifdef IASLIB_WIN32__
+        m_ptThreadID = CreateThread( NULL, 0, ThreadStartRoutine, this, 0, &m_dwThreadID );
+        if ( m_ptThreadID == NULL )
+        {
+            m_bIsRunning = false;
+            m_bReaped = true;
+            return;
+        }
+    #endif
+
+        m_bContained = true;
+
+            // The monitor adds itself (it is created by this call).
+        if ( m_strThreadName != "Thread Monitor" )
+        {
+            CThreadMonitor::GetThreadMonitor()->AddThread( this, m_strThreadName );
+        }
+
         if ( ! bStartSuspended )
         {
-            CThread::LeaveCriticalSection();
+            Release();
         }
-        return;
     }
 
-#endif
-
-#ifdef IASLIB_PTHREAD__
-    if ( pthread_attr_init( &m_stAttributes ) )
+    CThread::CThread( THREAD_T ptThreadID, const char *strThreadName )
+        : m_ptThreadID( ptThreadID ), m_bIsRunning( true ), m_nReturnCode( 0 ), m_bDetached( false ), m_bShutdown( false ),
+          m_bContained( false ), m_bNoDelete( true ), m_bDaemon( false ), m_strThreadName( strThreadName ),
+          m_bReleased( true ), m_bAbandoned( false ), m_bLeftGate( true ), m_bReaped( true )
     {
-        if ( ! bStartSuspended )
+    #ifdef IASLIB_PTHREAD__
+        memset( &m_stAttributes, 0, sizeof( m_stAttributes ) );
+        if ( ptThreadID == (THREAD_T)0 )
         {
-            CThread::LeaveCriticalSection();
+            m_ptThreadID = pthread_self();
         }
-        return;
-    }
+    #endif
 
-    if ( pthread_attr_setscope( &m_stAttributes, PTHREAD_SCOPE_SYSTEM ) )
-    {
-        if ( ! bStartSuspended )
+    #ifdef IASLIB_WIN32__
+        if ( ptThreadID == (THREAD_T)NULL )
         {
-            CThread::LeaveCriticalSection();
+            m_ptThreadID = GetCurrentThread();
+            m_dwThreadID = GetCurrentThreadId();
         }
-        return;
-    }
-
-        // Mark the thread as running before it exists: a short thread can
-        // finish (and clear the flag) before pthread_create even returns.
-    m_bIsRunning = true;
-    if ( ( nRetCode = pthread_create( &m_ptThreadID, &m_stAttributes, ThreadStartRoutine, this ) ) != 0 )
-    {
-        m_bIsRunning = false;
-        if ( ! bStartSuspended )
+        else
         {
-            CThread::LeaveCriticalSection();
+            m_dwThreadID = GetThreadId( ptThreadID );
         }
-        return;
+    #endif
+
+        CThreadMonitor::GetThreadMonitor()->AddThread( this, m_strThreadName );
     }
 
-    if ( m_bDetached )
+    CThread::~CThread( void )
     {
-        pthread_detach( m_ptThreadID );
-    }
-#endif
-
-#ifdef IASLIB_WIN32__
-    DWORD dwCreateFlags = 0;
-    DWORD dwThreadIdentifier;
-    if ( bStartSuspended )
-        dwCreateFlags = CREATE_SUSPENDED;
-
-    m_ptThreadID = CreateThread( NULL, 0, ThreadStartRoutine, this, dwCreateFlags, &dwThreadIdentifier );
-
-    if ( m_ptThreadID == NULL )
-    {
-        if ( ! bStartSuspended )
+        if ( m_bContained )
         {
-            CThread::LeaveCriticalSection();
+            if ( ! IsStarted() )
+            {
+                    // Never started: let it go without Run(), and wait until it
+                    // no longer needs this object.
+                std::unique_lock<std::mutex> oLock( m_mutexGate );
+                m_bAbandoned = true;
+                m_bShutdown = true;
+                m_bReleased = true;
+                m_cvGate.notify_all();
+                m_cvGate.wait( oLock, [this]() { return m_bLeftGate; } );
+            }
+            else if ( m_bIsRunning )
+            {
+                Kill();
+            }
+
+            if ( ! m_bDetached )
+            {
+                Join();
+            }
+
+    #ifdef IASLIB_PTHREAD__
+            pthread_attr_destroy( &m_stAttributes );
+    #endif
+
+    #ifdef IASLIB_WIN32__
+            CloseHandle( m_ptThreadID );
+    #endif
         }
-        return;
+
+        CThreadMonitor::GetThreadMonitor()->RemoveThread( this );
     }
 
-    nRetCode = 0;
-#endif
-
-    m_bContained = true;
-#ifndef IASLIB_PTHREAD__
-    m_bIsRunning = true;
-#endif
-
-        // This prevents recursion in the Thread Monitor. It adds itself to the thread monitor array.
-    if ( m_strThreadName != "Thread Monitor" )
+    void CThread::Release( void )
     {
-        pMonitor = CThreadMonitor::GetThreadMonitor();
-        pMonitor->AddThread( this, m_strThreadName );
+            // Notified with the lock held: once the thread is free it may
+            // finish and (if detached) be deleted at once, so nothing here
+            // may touch the object after the lock is let go.
+        std::lock_guard<std::mutex> oLock( m_mutexGate );
+        m_bReleased = true;
+        m_cvGate.notify_all();
     }
 
-    if ( ! bStartSuspended )
+    bool CThread::IsStarted( void )
     {
-        CThread::LeaveCriticalSection();
-    }
-#endif // IASLIB_MULTI_THREADED__
-}
-
-CThread::CThread( THREAD_T ptThreadID, const char *strThreadName )
-{
-#ifdef IASLIB_MULTI_THREADED__
-    CThreadMonitor *pMonitor;
-
-    if ( ptThreadID == (THREAD_T)NULL )
-    {
-#ifdef IASLIB_SUN__
-        ptThreadID = thr_self();
-#endif
-
-#ifdef IASLIB_PTHREAD__
-        ptThreadID = pthread_self();
-#endif
-
-#ifdef IASLIB_WIN32__
-        ptThreadID = GetCurrentThread();
-#endif
+        std::lock_guard<std::mutex> oLock( m_mutexGate );
+        return m_bReleased;
     }
 
-    m_ptThreadID = ptThreadID;
-    m_strThreadName = strThreadName;
-    m_bShutdown = false;
-
-    m_bIsRunning = true;
-    m_nReturnCode = 0;
-    m_bDetached = false;
-    m_bContained = false;
-
-    pMonitor = CThreadMonitor::GetThreadMonitor();
-    pMonitor->AddThread( this, m_strThreadName );
-#endif // IASLIB_MULTI_THREADED
-}
-
-CThread::~CThread( void )
-{
-#ifdef IASLIB_MULTI_THREADED__
-    if ( m_bContained )
+    void CThread::ThreadMain( void )
     {
-        if ( m_bIsRunning )
+        bool bAbandoned;
         {
-            Kill();
+            std::unique_lock<std::mutex> oLock( m_mutexGate );
+            m_cvGate.wait( oLock, [this]() { return m_bReleased; } );
+            bAbandoned = m_bAbandoned;
+            if ( bAbandoned )
+            {
+                    // Destroyed before it was started: the destructor waits
+                    // for this, and the object may be gone straight after.
+                m_bLeftGate = true;
+                m_cvGate.notify_all();
+                return;
+            }
         }
 
-        if ( ! m_bDetached )
+        CRunningGuard oGuard( m_bIsRunning );
+        try
         {
-            Join();
+            Run();
         }
-
-#ifdef IASLIB_PTHREAD__
-        pthread_attr_destroy( &m_stAttributes );
-#endif
-
-#ifdef IASLIB_WIN32__
-        CloseHandle( m_ptThreadID );
-#endif
+        catch ( ... )
+        {
+    #if defined( __GLIBC__ )
+                // pthread_exit() and cancellation unwind with a "foreign"
+                // exception (no C++ type), which must go on unwinding.
+            if ( abi::__cxa_current_exception_type() == NULL )
+                throw;
+    #endif
+                // Any other exception that escapes Run() ends the thread,
+                // not the program.
+        }
     }
 
-    CThreadMonitor *pMonitor = CThreadMonitor::GetThreadMonitor();
-    pMonitor->RemoveThread( this );
-#endif // IASLIB_MULTI_THREADED
-}
-
-void *CThread::Run( void )
-{
-//    ErrorLog( "Thread Run method was not overridden on object %s.\n", m_strObjectType );
-    return NULL;
-}
-
-int CThread::Kill( void )
-{
-#ifdef IASLIB_MULTI_THREADED__
-    if ( m_bIsRunning )
+    void *CThread::Run( void )
     {
-#ifdef IASLIB_SUN__
-        return -1;
-#endif
+        return NULL;
+    }
 
-#ifdef IASLIB_PTHREAD__
-        return pthread_cancel( m_ptThreadID );
-#endif
-
-#ifdef IASLIB_WIN32__
-        if ( TerminateThread( m_ptThreadID, (DWORD)-1 ) )
+    int CThread::Kill( void )
+    {
+        if ( ! m_bContained || ! m_bIsRunning )
             return 0;
+    #ifdef IASLIB_PTHREAD__
+        return pthread_cancel( m_ptThreadID );
+    #endif
+    #ifdef IASLIB_WIN32__
+        if ( TerminateThread( m_ptThreadID, (DWORD)-1 ) )
+        {
+            m_bIsRunning = false;
+            return 0;
+        }
         return -1;
-#endif
+    #endif
     }
-#endif // IASLIB_MULTI_THREADED__
-    return 0;
-}
 
-int CThread::Join( void )
-{
-#ifdef IASLIB_MULTI_THREADED__
-    if ( m_bIsRunning )
+    int CThread::Join( void )
     {
-        void *pRetVal = NULL;
-#ifdef IASLIB_SUN__
-        if ( thr_join( m_ptThreadID, NULL, &pRetVal ) == 0 )
-#endif
+        if ( ! m_bContained || m_bDetached )
+            return 0;
 
-#ifdef IASLIB_PTHREAD__
-        if ( pthread_join( m_ptThreadID, &pRetVal ) == 0 )
-#endif
-
-#ifdef IASLIB_WIN32__
-        WaitForSingleObject( m_ptThreadID, INFINITE );
-
-        DWORD dwResult;
-        pRetVal = &dwResult;
-        if ( GetExitCodeThread( m_ptThreadID, &dwResult ) )
-#endif
+        std::lock_guard<std::mutex> oLock( m_mutexJoin );
+        if ( ! m_bReaped )
         {
-            if ( pRetVal )
-            {
-                return *((int *)pRetVal);
-            }
-            else
-            {
-                return 0;
-            }
+                // A suspended thread would never end: start it.
+            Release();
+    #ifdef IASLIB_PTHREAD__
+            pthread_join( m_ptThreadID, NULL );
+    #endif
+    #ifdef IASLIB_WIN32__
+            WaitForSingleObject( m_ptThreadID, INFINITE );
+    #endif
+            m_bReaped = true;
+            m_bIsRunning = false;
         }
+        return m_nReturnCode;
     }
-#endif // IASLIB_MULTI_THREADED__
-    return 0;
-}
 
-void CThread::ExitThread( int nExitCode )
-{
-#ifdef IASLIB_MULTI_THREADED__
-#ifdef IASLIB_SUN__
-    if ( m_ptThreadID == thr_self() )
+    void CThread::ExitThread( int nExitCode )
     {
-        m_nReturnCode = nExitCode;
-        if ( m_bIsRunning )
+    #ifdef IASLIB_PTHREAD__
+        if ( pthread_equal( pthread_self(), m_ptThreadID ) )
         {
-            thr_exit( &m_nReturnCode );
+            m_nReturnCode = nExitCode;
+        #if ! defined( __GLIBC__ )
+                // Elsewhere pthread_exit() does not unwind the stack, so the
+                // guard in ThreadMain() never runs.
+            m_bIsRunning = false;
+        #endif
+            pthread_exit( NULL );
         }
-    }
-#endif
-
-#ifdef IASLIB_PTHREAD__
-    if ( pthread_equal( pthread_self(), m_ptThreadID ) )
-    {
-        m_nReturnCode = nExitCode;
-        if ( m_bIsRunning )
+    #endif
+    #ifdef IASLIB_WIN32__
+        if ( GetCurrentThreadId() == m_dwThreadID )
         {
-            pthread_exit( &m_nReturnCode );
+            m_nReturnCode = nExitCode;
+            m_bIsRunning = false;
+                // The Windows function (this member's name hid it, so the old
+                // code called itself forever).
+            ::ExitThread( (DWORD)nExitCode );
         }
+    #endif
     }
-#endif
 
-#ifdef IASLIB_WIN32__
-    if ( m_ptThreadID == GetCurrentThread() )
+    void CThread::Sleep( int nSeconds )
     {
-        m_nReturnCode = nExitCode;
-        if ( m_bIsRunning )
+        if ( nSeconds > 0 )
+            std::this_thread::sleep_for( std::chrono::seconds( nSeconds ) );
+    }
+
+    void CThread::Millisleep( int milliseconds )
+    {
+        if ( milliseconds > 0 )
+            std::this_thread::sleep_for( std::chrono::milliseconds( milliseconds ) );
+    }
+
+    void CThread::Suspend( void )
+    {
+    #ifdef IASLIB_WIN32__
+        if ( m_bContained && IsStarted() )
+            SuspendThread( m_ptThreadID );
+    #endif
+    }
+
+    void CThread::Resume( void )
+    {
+        if ( ! m_bContained )
+            return;
+        if ( ! IsStarted() )
         {
-            ExitThread( (DWORD)m_nReturnCode );
+            Release();
+            return;
         }
+    #ifdef IASLIB_WIN32__
+        ResumeThread( m_ptThreadID );
+    #endif
     }
-#endif
-#endif
-}
 
-void CThread::Sleep( int nSeconds )
-{
-#ifdef IASLIB_WIN32__
-    ::Sleep( (DWORD)( nSeconds * 1000 ) );
-#else
-    sleep( nSeconds );
-#endif
-}
-
-void CThread::Millisleep( int milliseconds )
-{
-#ifdef IASLIB_WIN32__
-    ::Sleep( (DWORD)milliseconds);
-#elif _POSIX_C_SOURCE >= 199309L
-    struct timespec ts;
-    ts.tv_sec = milliseconds / 1000;
-    ts.tv_nsec = (milliseconds % 1000) * 1000000;
-    nanosleep(&ts, NULL);
-#else
-    usleep(milliseconds * 1000);
-#endif
-}
-
-void CThread::Suspend( void )
-{
-#ifdef IASLIB_MULTI_THREADED__
-#ifdef IASLIB_SUN__
-    thr_suspend( m_ptThreadID );
-#endif
-
-#ifdef IASLIB_WIN32__
-    SuspendThread( m_ptThreadID );
-#endif
-#endif // IASLIB_MULTI_THREADED__
-}
-
-void CThread::Resume( void )
-{
-#ifdef IASLIB_MULTI_THREADED__
-
-#ifdef IASLIB_SUN__
-    thr_continue( m_ptThreadID );
-#endif
-
-#ifdef IASLIB_PTHREAD__
-		// On DEC we can only start a thread suspended with a mutex trick, so this
-		// whole thing is a big kluge to prevent race conditions.
-	m_mutexStartSuspended.Unlock();
-#endif
-
-#ifdef IASLIB_WIN32__
-    ResumeThread( m_ptThreadID );
-#endif
-
-#endif // IASLIB_MULTI_THREADED__
-}
-
-bool CThread::Detach( void )
-{
-#ifdef IASLIB_MULTI_THREADED__
-#ifdef IASLIB_PTHREAD__
-    if ( ! m_bDetached )
+    bool CThread::Detach( void )
     {
+        if ( ! m_bContained || m_bDetached )
+            return false;
+        std::lock_guard<std::mutex> oLock( m_mutexJoin );
+        if ( m_bReaped )
+            return false;
+    #ifdef IASLIB_PTHREAD__
         pthread_detach( m_ptThreadID );
+    #endif
         m_bDetached = true;
         return true;
     }
-#endif
-#endif // IASLIB_MULTI_THREADED__
-    return false;
-}
 
-void CThread::SetTimeout( int nSeconds )
-{
-#ifdef IASLIB_MULTI_THREADED__
-    CThreadMonitor *pMonitor = CThreadMonitor::GetThreadMonitor();
-    pMonitor->SetThreadTimeout( this, nSeconds );
-#endif // IASLIB_MULTI_THREADED__
-}
-
-CThread *CThread::Self( void )
-{
-#ifdef IASLIB_MULTI_THREADED__
-    THREAD_T        ptThreadID;
-    CThreadMonitor *pMonitor;
-
-#ifdef IASLIB_SUN__
-    ptThreadID = thr_self();
-#endif
-
-#ifdef IASLIB_PTHREAD__
-    ptThreadID = pthread_self();
-#endif
-
-#ifdef IASLIB_WIN32__
-    ptThreadID = GetCurrentThread();
-#endif
-
-    pMonitor = CThreadMonitor::GetThreadMonitor();
-
-    return pMonitor->FindThread( ptThreadID );
-#else
-    return NULL;
-#endif // IASLIB_MULTI_THREADED__
-}
-
-bool CThread::Equals( THREAD_T ptThread1, THREAD_T ptThread2 )
-{
-#ifdef IASLIB_MULTI_THREADED__
-#ifdef IASLIB_SUN__
-    if ( ptThread1 == ptThread2 )
+    unsigned long CThread::GetCapabilities( void )
     {
-        return true;
+        unsigned long nFlags = THREADS | RESUME | KILL | JOIN | DETACH | SLEEP | YIELD | NAMED | STATE;
+    #ifdef IASLIB_WIN32__
+        nFlags |= SUSPEND;
+    #endif
+        return nFlags;
     }
-#endif
 
-#ifdef IASLIB_PTHREAD__
-    if ( pthread_equal( ptThread1, ptThread2 ) )
+    void CThread::SetTimeout( int nSeconds )
     {
-        return true;
+        CThreadMonitor::GetThreadMonitor()->SetThreadTimeout( this, nSeconds );
     }
-#endif
 
-#ifdef IASLIB_WIN32__
-    if ( ptThread1 == ptThread2 )
+    CThread *CThread::Self( void )
     {
-        return true;
+    #ifdef IASLIB_PTHREAD__
+        return CThreadMonitor::GetThreadMonitor()->FindThread( pthread_self() );
+    #endif
+    #ifdef IASLIB_WIN32__
+        return CThreadMonitor::GetThreadMonitor()->FindThread( GetCurrentThread() );
+    #endif
     }
-#endif
-#endif
-    return false;
-}
+
+    bool CThread::Equals( THREAD_T ptThread1, THREAD_T ptThread2 )
+    {
+    #ifdef IASLIB_PTHREAD__
+        return pthread_equal( ptThread1, ptThread2 ) != 0;
+    #endif
+    #ifdef IASLIB_WIN32__
+            // Handles differ (GetCurrentThread() is the same for every thread);
+            // thread IDs do not.
+        if ( ptThread1 == NULL || ptThread2 == NULL )
+            return ptThread1 == ptThread2;
+        return GetThreadId( ptThread1 ) == GetThreadId( ptThread2 );
+    #endif
+    }
 } // namespace IASLib
+
 #endif // IASLIB_MULTI_THREADED__

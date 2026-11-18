@@ -1,47 +1,14 @@
 /*
  * Thread Pool Class
  *
- *  This class provides a pool of threads that can be allocated, run a
- * task, and then be returned to the pool to wait in standby until needed
- * again.
- *  This allows us to limit the overhead involved in the creation and the
- * subsequent deletion of threads and their contexts. If a task is assigned
- * to a thread pool, when threads are not available to process it, then the
- * task will be queued until such time as a thread becomes available to
- * process that task. If the queue is exhausted, then an exception will
- * be thrown.
- * Tasks can be added with a maximum timeout value. If a timeout is set,
- * a task which takes longer than that amount of time will be interrupted
- * and the thread returned to the pool. Note that this may require a large
- * amount of overhead and could cause performace impacts. Timeouts should
- * not be used as a standard means of terminating tasks.
- *
- * Using a task identifier allows retrieval of task status and task
- * results from the pool, but care must be taken as every task with an
- * identifier will require storage for the result after completion and
- * will not be cleared until retrieved. In other words, if you use an
- * identifier you -MUST- retrieve the results.
- *
- * Note: If the task identifier is passed as NULL, the results of the task
- * will not be stored, but status and results cannot be retrieved.
- *
- * ======================================================================
- * Since this module is based on threads, it is extremely dependent on
- * the underlying threads provided by the system. Although all possible
- * care has been taken to assure that operations are equivalent on all
- * different systems, this dependence may cause differences on different
- * systems.
- * ======================================================================
+ *  A pool of threads that run tasks. See ThreadPool.h.
  *
  *	Author: Jeffrey R. Naujok
- *	Created: 4/30/2019
- *	Log:
- *	  $LOG$
+ *	Created: 12/2019
  *
  * Copyright (C) 2019, The Irene Adler Software Group, all rights reserved.
  * [A division of BlackStar Enterprises, LLC.]
  */
-
 
 #ifdef IASLIB_MULTI_THREADED__
 
@@ -50,237 +17,205 @@
 #include "Semaphore.h"
 #include "ThreadException.h"
 
+#include <chrono>
+
 namespace IASLib
 {
+        // Hands queued tasks to free threads whenever something changes (a
+        // task is added, or one finishes).
     class CQueueingThread : public CThread
     {
         private:
-            CSemaphore  m_semQueueAvailable;
-            CQueue     *m_pQueue;
-            CThreadPool * m_pParent;
+            CSemaphore      m_semChanged;
+            CThreadPool    *m_pParent;
 
         public:
-            CQueueingThread( CQueue *pQueue, CThreadPool *parent ) : CThread( "ThreadPoolQueueingThread", true, false, true ),
-                m_semQueueAvailable( 0 )
+            CQueueingThread( CThreadPool *parent )
+                : CThread( "ThreadPoolQueueingThread", true, false, true ), m_semChanged( 0 ), m_pParent( parent )
             {
-                m_pQueue = pQueue;
-                m_bShutdown = false;
-                m_pParent = parent;
             }
 
             virtual void *Run( void )
             {
-                while ( ! m_bShutdown )
+                for ( ;; )
                 {
-                    m_semQueueAvailable.Wait();
-                    if ( ! m_bShutdown )
-                    {
-                        if ( m_pParent->GetIdleThreads() )
-                        {
-                            CThreadTask *task = (CThreadTask *)m_pQueue->Pop();
-                            if ( ! m_pParent->startTask( task ) )
-                            {
-                                // Failed to allocate a thread -- push the task back
-                                // onto the queue and re-signal the semaphore.
-                                m_pQueue->Push(task);
-                                m_semQueueAvailable.Post();
-                            }
-                        }
-                        else
-                        {
-                            // There's no idle threads available. Wait 50 milliseconds and try again.
-                            Millisleep(50);
-                            m_semQueueAvailable.Post();
-                        }
-                    }
+                    m_semChanged.Wait();
+                    if ( m_bShutdown )
+                        break;
+                    m_pParent->dispatch();
                 }
-
                 return NULL;
             }
 
-            virtual unsigned long   GetCapabilities( void )
+            virtual void RequestShutdown( void )
             {
-                return CThread::CapabilityFlags::SLEEP;
+                CThread::RequestShutdown();
+                m_semChanged.Post();
+            }
+
+            virtual unsigned long GetCapabilities( void )
+            {
+                return CThread::SLEEP;
             }
 
             void signalQueue( void )
             {
-                m_semQueueAvailable.Post();
+                m_semChanged.Post();
             }
     };
 
-    CThreadPool::CThreadPool( size_t maximumThreads, bool storeResults, bool retainTasks ) : m_aAvailableThreads(), m_aBusyThreads(), m_qTaskQueue(), m_hashResults( CHash::NORMAL ), m_hashTaskIds(CHash::NORMAL)
+    IMPLEMENT_OBJECT( CThreadPool, CObject );
+
+    CThreadPool::CThreadPool( size_t maximumThreads, bool storeResults, bool retainTasks )
+        : m_nTotalThreads( ( maximumThreads > 0 ) ? maximumThreads : 1 ), m_nCurrentThreads( 0 ), m_nPeakThreads( 0 ),
+          m_hashResults( CHash::NORMAL ), m_pQueueingThread( NULL ), m_bStoreResults( storeResults ),
+          m_bRetainTasks( retainTasks ), m_bInShutdown( false )
     {
-        m_bInShutdown = false;
-        m_bRetainTasks = retainTasks;
-        m_bStoreResults = storeResults;
-        m_mutexArray.Lock();
-        m_pQueueingThread = new CQueueingThread( &m_qTaskQueue, this );
-
-        for ( size_t nX = 0; nX < maximumThreads; nX++ )
+        for ( size_t nX = 0; nX < m_nTotalThreads; nX++ )
         {
-            m_aAvailableThreads.Append( new CPooledThread( this, "Pooled_Thread_", nX ) );
+            m_aAvailableThreads.Push( new CPooledThread( this, "Pooled_Thread_", (int)nX ) );
         }
-        m_nTotalThreads = maximumThreads;
-        m_nCurrentThreads = 0;
-        m_nPeakThreads = 0;
-
-        m_mutexArray.Unlock();
-
-        // Release the queueing thread to start running.
+        m_pQueueingThread = new CQueueingThread( this );
         m_pQueueingThread->Resume();
     }
 
-    CThreadPool::~CThreadPool(void)
+    CThreadPool::~CThreadPool( void )
     {
         m_bInShutdown = true;
-        CQueueingThread *pQ = m_pQueueingThread;
 
+            // No more dispatching.
+        m_pQueueingThread->RequestShutdown();
+        m_pQueueingThread->Join();
+        delete m_pQueueingThread;
         m_pQueueingThread = NULL;
 
-        pQ->RequestShutdown();
-        pQ->signalQueue();
-        pQ->Join();
-
-        delete pQ;
-
-        TArray<CObject *> aTempThreads;
-        for ( size_t nX = 0; nX < m_aBusyThreads.Length(); nX++ )
-            aTempThreads.Push( m_aBusyThreads.Get( nX ) );
-        m_aBusyThreads.EmptyAll();
-        for ( size_t nX = 0; nX < aTempThreads.Length(); nX++ )
+            // Let running tasks finish, then stop every thread. (Outside the
+            // lock: a finishing task takes it.)
+        TArray<CPooledThread *> aThreads;
         {
-            CPooledThread *work = (CPooledThread *)aTempThreads[ nX ];
-            work->ShutdownThread();
+            CMutexLock oLock( m_mutexArray );
+            for ( size_t nX = 0; nX < m_aBusyThreads.Length(); nX++ )
+                aThreads.Push( m_aBusyThreads[nX] );
+            for ( size_t nX = 0; nX < m_aAvailableThreads.Length(); nX++ )
+                aThreads.Push( m_aAvailableThreads[nX] );
+            m_aBusyThreads.Clear();
+            m_aAvailableThreads.Clear();
         }
-        
-        m_mutexArray.Lock();
-        for ( size_t nX = 0; nX < m_aAvailableThreads.Length(); nX ++ )
-        {
-            CPooledThread *work = (CPooledThread *)m_aAvailableThreads.Get( nX );
-            work->ShutdownThread();
-            work->Join();
-        }
-        m_aAvailableThreads.EmptyAll();
-        m_mutexArray.Unlock();
+        for ( size_t nX = 0; nX < aThreads.Length(); nX++ )
+            aThreads[nX]->ShutdownThread();
+        for ( size_t nX = 0; nX < aThreads.Length(); nX++ )
+            delete aThreads[nX];        // joins it
+
+            // Tasks that never ran.
         m_qTaskQueue.DeleteAll();
     }
 
-    IMPLEMENT_OBJECT(CThreadPool, CObject);
+    void CThreadPool::setStatus( CThreadTask *pTask, CThreadTask::TASK_STATUS eStatus )
+    {
+            // (The lock is held.)
+        m_hashStatus.Put( pTask->GetIdentifier(), (int)eStatus );
+    }
 
     bool CThreadPool::AddTask( CThreadTask *task )
     {
-        bool retVal = false;
+        if ( task == NULL || m_bInShutdown )
+            return false;
 
-        if ( ! m_bInShutdown )
+        bool bFree;
         {
-            m_mutexArray.Lock();
+            CMutexLock oLock( m_mutexArray );
+            task->addToQueue();
+            setStatus( task, CThreadTask::QUEUED );
             m_qTaskQueue.Push( task );
-            if ( m_aAvailableThreads.GetLength() )
-                retVal = true;
-            m_mutexArray.Unlock();
-            m_pQueueingThread->signalQueue();
+            bFree = ! m_aAvailableThreads.IsEmpty();
         }
-        return retVal;
+        m_pQueueingThread->signalQueue();
+        return bFree;
     }
 
-    CThreadTask::TASK_STATUS CThreadPool::TaskStatus(const char *strIdentifier)
+    void CThreadPool::dispatch( void )
     {
-        if ( m_hashTaskIds.HasKey(strIdentifier) )
+        CMutexLock oLock( m_mutexArray );
+        while ( ! m_bInShutdown && ! m_aAvailableThreads.IsEmpty() && m_qTaskQueue.GetLength() > 0 )
         {
-            CThreadTask *task = (CThreadTask *)m_hashTaskIds.Get( strIdentifier );
-            return task->GetStatus();
+            CThreadTask *pTask = (CThreadTask *)m_qTaskQueue.Pop();
+            if ( pTask == NULL )
+                break;
+            CPooledThread *pThread = m_aAvailableThreads.Pop();
+            m_aBusyThreads.Push( pThread );
+            size_t nBusy = ++m_nCurrentThreads;
+            if ( nBusy > m_nPeakThreads )
+                m_nPeakThreads = nBusy;
+            setStatus( pTask, CThreadTask::RUNNING );
+            pThread->SetTask( pTask );
         }
-
-        return CThreadTask::TASK_STATUS::UNKNOWN;
     }
 
-    CObject *CThreadPool::GetResults(const char *strIdentifier)
-    {
-        if ( m_hashResults.HasKey( strIdentifier ) )
-        {
-            return m_hashResults.Remove( strIdentifier );
-        }
-
-        return NULL;
-    }
-
-    bool CThreadPool::startTask( CThreadTask *task )
-    {
-        bool retVal = false;
-
-        if ( ! m_bInShutdown )
-        {
-            m_mutexArray.Lock();
-
-            if ( m_aAvailableThreads.GetCount() )
-            {
-                CPooledThread *workThread = (CPooledThread *)m_aAvailableThreads.Remove(0);
-                m_aBusyThreads.Push( workThread ); 
-                m_nCurrentThreads++;
-                if ( m_nCurrentThreads > this->m_nPeakThreads )
-                {
-                    m_nPeakThreads = m_nCurrentThreads;
-                }
-
-                workThread->SetTask( task );
-                retVal = true;
-            }
-            m_mutexArray.Unlock();
-        }
-
-        return retVal;
-    }
-
+        // On a pooled thread, when its task has finished.
     void CThreadPool::taskComplete( CPooledThread *thread )
     {
-        m_mutexArray.Lock();
-
-        CThreadTask *pTask = thread->GetTask();
-        CObject *result = thread->GetResult();
-
-        if ( m_bStoreResults )
         {
-            this->m_hashResults.Push( pTask->GetIdentifier(), result );
-        }
-        else
-        {
-            delete result;
-        }
-        
-        if ( ! m_bRetainTasks )
-        {
-            delete pTask;
-        }
-        
-        thread->ResetThread();
-
-        if ( ! m_bInShutdown )
-        {
-            if ( m_nCurrentThreads > 0 )
+            CMutexLock oLock( m_mutexArray );
+            CThreadTask *pTask = thread->GetTask();
+            CObject *pResult = thread->GetResult();
+            if ( pTask != NULL )
             {
-                for ( size_t nX = 0; nX < m_aBusyThreads.Length(); nX++ )
-                {
-                    if ( m_aBusyThreads[nX] == thread )
-                    {
-                        m_aBusyThreads.Remove( nX );
-                        m_nCurrentThreads--;
-                        break;
-                    }
-                }
-
-                m_aAvailableThreads.Push( thread );
+                setStatus( pTask, pTask->GetStatus() );
+                if ( m_bStoreResults && pResult != NULL )
+                    m_hashResults.Push( pTask->GetIdentifier(), pResult, true );
+                else
+                    delete pResult;
+                if ( ! m_bRetainTasks )
+                    delete pTask;
             }
             else
             {
-                m_mutexArray.Unlock();
-                IASLIB_THROW_THREAD_EXCEPTION( "An attempt was made to release an unknown thread to the thread pool.");
+                delete pResult;
+            }
+            thread->ResetThread();
+
+            if ( ! m_bInShutdown )
+            {
+                size_t nAt = m_aBusyThreads.Find( thread );
+                if ( nAt == NOT_FOUND )
+                    IASLIB_THROW_THREAD_EXCEPTION( "An attempt was made to release an unknown thread to the thread pool." );
+                m_aBusyThreads.Remove( nAt );
+                m_aAvailableThreads.Push( thread );
+                m_nCurrentThreads--;
             }
         }
-
-        m_mutexArray.Unlock();
+        if ( ! m_bInShutdown && m_pQueueingThread != NULL )
+            m_pQueueingThread->signalQueue();
     }
 
+    CThreadTask::TASK_STATUS CThreadPool::TaskStatus( const char *strIdentifier )
+    {
+        CMutexLock oLock( m_mutexArray );
+        const int *pStatus = m_hashStatus.Find( CString( strIdentifier ) );
+        return ( pStatus != NULL ) ? (CThreadTask::TASK_STATUS)*pStatus : CThreadTask::UNKNOWN;
+    }
+
+    CObject *CThreadPool::GetResults( const char *strIdentifier )
+    {
+        CMutexLock oLock( m_mutexArray );
+        return m_hashResults.Remove( strIdentifier );
+    }
+
+    bool CThreadPool::WaitUntilIdle( int nTimeoutMs )
+    {
+        std::chrono::steady_clock::time_point tpEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds( ( nTimeoutMs > 0 ) ? nTimeoutMs : 0 );
+        for ( ;; )
+        {
+            {
+                CMutexLock oLock( m_mutexArray );
+                if ( m_aBusyThreads.IsEmpty() && m_qTaskQueue.GetLength() == 0 )
+                    return true;
+            }
+            if ( nTimeoutMs >= 0 && std::chrono::steady_clock::now() >= tpEnd )
+                return false;
+            CThread::Millisleep( 2 );
+        }
+    }
 } // end of namespace IASLib
 
 #endif // IASLIB_MULTI_THREADED__

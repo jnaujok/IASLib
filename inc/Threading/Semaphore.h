@@ -45,9 +45,18 @@ namespace IASLib
                                 CSemaphore( unsigned int nValue );
             virtual            ~CSemaphore( void );
 
+                // Waits until the count is above zero, then takes one.
             void                Wait( void );
+                // The same, giving up (false) after nTimeoutMs.
+            bool                TimedWait( int nTimeoutMs );
+                // Adds one (waking a waiter).
             void                Post( void );
+                // Takes one if there is one, without waiting.
             bool                TryWait( void );
+
+        private:
+                                CSemaphore( const CSemaphore & );
+            CSemaphore         &operator =( const CSemaphore & );
     };
 } // Namespace IASLib
 #endif // IASLIB_MULTI_THREADED__

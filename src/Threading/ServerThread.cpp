@@ -38,57 +38,53 @@ namespace IASLib
 
     void *CServerThread::Run( void )
     {
-        CSocket *pNewSocket = NULL;
-
-        m_pServerSocket = new CServerSocket( m_nPortNumber, m_nMaxBacklog );
-        if ( m_pServerSocket->IsConnected() )
+        try
         {
-            m_pServerSocket->SetNonBlocking( false );
-
-            while ( ! IsShutdown( ) )
-            {
-                try
-                {
-                    pNewSocket = m_pServerSocket->Accept();
-                }
-                catch ( CSocketException *pExcept )
-                {
-                    delete pExcept;
-                    pNewSocket = NULL;
-                }
-                catch ( ... )
-                {
-                    pNewSocket = NULL;
-                }
-
-                try
-                {
-                    if ( ( pNewSocket ) && ( pNewSocket->IsConnected() ) )
-                    {
-                        HandleConnection( pNewSocket );
-                    }
-                    else
-                    {
-                        if ( pNewSocket )
-                        {
-                            delete pNewSocket;
-                        }
-                    }
-                }
-                catch ( ... )
-                {
-//                    ErrorLog( "%s: Unknown exception thrown.\n", (const char *)m_strThreadName );
-                }
-            }
-            m_nReturnCode = 0;
+            m_pServerSocket = new CServerSocket( m_nPortNumber, m_nMaxBacklog );
         }
-        else
+        catch ( ... )
+        {
+            m_pServerSocket = NULL;
+        }
+
+        if ( m_pServerSocket == NULL || ! m_pServerSocket->IsConnected() )
         {
             m_nReturnCode = -1;
             delete m_pServerSocket;
             m_pServerSocket = NULL;
+            return NULL;
         }
 
+        m_pServerSocket->SetNonBlocking( false );
+        while ( ! IsShutdown() )
+        {
+            CSocket *pNewSocket = NULL;
+            try
+            {
+                    // A short wait, so a shutdown request is seen promptly
+                    // (Accept() without a timeout waits for ever).
+                pNewSocket = m_pServerSocket->Accept( ACCEPT_POLL_MS );
+            }
+            catch ( ... )
+            {
+                pNewSocket = NULL;
+            }
+
+            if ( pNewSocket == NULL )
+                continue;
+
+            try
+            {
+                if ( pNewSocket->IsConnected() )
+                    HandleConnection( pNewSocket );     // the handler owns the socket
+                else
+                    delete pNewSocket;
+            }
+            catch ( ... )
+            {
+            }
+        }
+        m_nReturnCode = 0;
         return NULL;
     }
 }; // namespace IASLib

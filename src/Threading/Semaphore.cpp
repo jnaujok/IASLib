@@ -13,6 +13,10 @@
 #include "Semaphore.h"
 #include <exception>
 #include <stdexcept>
+#ifdef IASLIB_PTHREAD__
+#include <errno.h>
+#include <time.h>
+#endif
 
 #ifdef IASLIB_MULTI_THREADED__
 
@@ -31,7 +35,7 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_WIN32__
-        m_threadSemaphore = CreateSemaphore( NULL, nValue, 65535, NULL );
+        m_threadSemaphore = CreateSemaphore( NULL, (LONG)nValue, 0x7FFFFFFF, NULL );
     #endif
     }
 
@@ -86,6 +90,40 @@ namespace IASLib
     #endif
     }
 
+    bool CSemaphore::TimedWait( int nTimeoutMs )
+    {
+        if ( nTimeoutMs < 0 )
+            nTimeoutMs = 0;
+    #ifdef IASLIB_PTHREAD__
+        bool bTaken = false;
+        struct timespec tsDeadline;
+        clock_gettime( CLOCK_REALTIME, &tsDeadline );
+        tsDeadline.tv_sec += nTimeoutMs / 1000;
+        tsDeadline.tv_nsec += (long)( nTimeoutMs % 1000 ) * 1000000L;
+        if ( tsDeadline.tv_nsec >= 1000000000L )
+        {
+            tsDeadline.tv_sec++;
+            tsDeadline.tv_nsec -= 1000000000L;
+        }
+        pthread_mutex_lock( &m_threadSemaphore.mutex );
+        while ( m_threadSemaphore.nCount == 0 )
+        {
+            if ( pthread_cond_timedwait( &m_threadSemaphore.condition, &m_threadSemaphore.mutex, &tsDeadline ) == ETIMEDOUT )
+                break;
+        }
+        if ( m_threadSemaphore.nCount > 0 )
+        {
+            m_threadSemaphore.nCount--;
+            bTaken = true;
+        }
+        pthread_mutex_unlock( &m_threadSemaphore.mutex );
+        return bTaken;
+    #endif
+    #ifdef IASLIB_WIN32__
+        return WaitForSingleObject( m_threadSemaphore, (DWORD)nTimeoutMs ) == WAIT_OBJECT_0;
+    #endif
+    }
+
     bool CSemaphore::TryWait( void )
     {
     #ifdef IASLIB_SUN__
@@ -109,7 +147,7 @@ namespace IASLib
     #endif
 
     #ifdef IASLIB_WIN32__
-        if ( WaitForSingleObject( m_threadSemaphore, 0 ) != WAIT_TIMEOUT )
+        if ( WaitForSingleObject( m_threadSemaphore, 0 ) == WAIT_OBJECT_0 )
             return true;
     #endif
 
