@@ -3,7 +3,7 @@
  *
  *  A JSON array: an ordered list of nodes, which it owns. add(), insert()
  * and set() take ownership of the nodes they are given, which must not belong
- * to any other tree.
+ * to any other tree. NULL, or a missing node, is stored as a JSON null.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 4/15/2019
@@ -34,7 +34,7 @@ namespace IASLib
                                     CArrayNode( void );
             virtual                ~CArrayNode( void );
 
-            virtual JsonNodeType    getNodeType( void ) const { return ARRAY; }
+            virtual JsonNodeType    getNodeType( void ) const { return JSON_ARRAY; }
             virtual int             size( void ) const { return (int)m_aElements.size(); }
 
                 // Appends an element, taking ownership (NULL means a JSON null).
@@ -75,7 +75,7 @@ namespace IASLib
 
         protected:
             virtual CJsonNode      *element( int nIndex );
-            virtual bool            collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const;
+            virtual void            detachChildren( std::vector<CJsonNode *> &aChildren );
 
         private:
             std::vector<CJsonNode *>    m_aElements;

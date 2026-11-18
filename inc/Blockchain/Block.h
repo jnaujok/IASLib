@@ -54,6 +54,11 @@ namespace IASLib
 
             static const uint32_t FORMAT_VERSION = 1;
             static const size_t HEADER_SIZE = 100;
+                // The highest difficulty mine() accepts: the nonce has 64 bits,
+                // so past 64 leading zero bits a block can be expected to have
+                // no nonce that works at all. (Up to 256 used to be accepted,
+                // and mine() searched forever.)
+            static const uint32_t MAX_DIFFICULTY = 64;
 
             DECLARE_OBJECT( CBlock, CObject );
 
@@ -93,8 +98,11 @@ namespace IASLib
 
                 // Searches nonces (from 0) for a hash with nDifficulty leading
                 // zero bits, and records the difficulty and hash. False, leaving
-                // the block unmined, if nMaxAttempts (0: no limit) run out or
-                // *pCancel becomes true. Runs on the calling thread.
+                // the block unmined, if nDifficulty is above MAX_DIFFICULTY, if
+                // nMaxAttempts (0: no limit) run out, if *pCancel becomes true,
+                // or if every nonce has been tried. Each extra bit doubles the
+                // expected work, so give nMaxAttempts or pCancel for high
+                // difficulties. Runs on the calling thread.
             bool                mine( uint32_t nDifficulty, uint64_t nMaxAttempts = 0, const std::atomic<bool> *pCancel = NULL );
             void                mineBlock( uint32_t nDifficulty ) { mine( nDifficulty ); }
             bool                isMined( void ) const { return m_bMined; }

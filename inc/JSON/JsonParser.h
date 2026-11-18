@@ -9,8 +9,14 @@
  *  Options relax this for hand-written files: comments (// and slash-star),
  * and a trailing comma after the last element or field. Duplicate field
  * names are allowed by default (the last one wins, in the place of the
- * first) and can be made an error. Nesting is limited (512 levels by
- * default), so hostile input cannot exhaust the stack.
+ * first) and can be made an error.
+ *
+ *  Limits: nesting is limited to 512 levels by default, and can be raised as
+ * far as memory allows, since the parser keeps its own stack rather than
+ * recursing (and the nodes' writing, copying, comparing and deleting do the
+ * same). The size of the input and the length of any one string can also be
+ * limited (by default they are not), so hostile input can be refused before
+ * it uses much memory. Input past a limit is an error like any other.
  *
  *      CJsonNode *pRoot = CJsonParser::parse( strText );   // NULL on error
  *
@@ -76,6 +82,15 @@ namespace IASLib
                 // Arrays and objects nested deeper than this are an error.
             void                    setMaxDepth( int nDepth ) { m_nMaxDepth = ( nDepth < 1 ) ? 1 : nDepth; }
             int                     getMaxDepth( void ) const { return m_nMaxDepth; }
+                // Input longer than this many bytes is an error (0, the
+                // default: no limit). A stream is read no further than that.
+            void                    setMaxInputSize( size_t nBytes ) { m_nMaxInputSize = nBytes; }
+            size_t                  getMaxInputSize( void ) const { return m_nMaxInputSize; }
+                // A string value or field name longer than this many bytes
+                // (once its escapes are decoded) is an error (0, the default:
+                // no limit).
+            void                    setMaxStringLength( size_t nBytes ) { m_nMaxStringLength = nBytes; }
+            size_t                  getMaxStringLength( void ) const { return m_nMaxStringLength; }
 
                 // The last error, as "line 3, column 14: expected ',' or '}'"
                 // (empty after a successful parse), and where it was: the line
@@ -93,6 +108,8 @@ namespace IASLib
             bool                    m_bAllowTrailingCommas;
             bool                    m_bRejectDuplicateKeys;
             int                     m_nMaxDepth;
+            size_t                  m_nMaxInputSize;
+            size_t                  m_nMaxStringLength;
 
             CString                 m_strError;
             CString                 m_strErrorMessage;
@@ -106,9 +123,9 @@ namespace IASLib
             size_t                  m_nPos;
             bool                    m_bFailed;
 
-            CJsonNode              *parseValue( int nDepth );
-            CJsonNode              *parseObject( int nDepth );
-            CJsonNode              *parseArray( int nDepth );
+            CJsonNode              *parseTree( void );
+            CJsonNode              *parseScalar( void );
+            bool                    parseFieldName( std::string &strKey, size_t &nKeyOffset );
             bool                    parseString( std::string &strValue );
             CJsonNode              *parseNumber( void );
             CJsonNode              *parseLiteral( void );

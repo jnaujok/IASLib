@@ -141,6 +141,35 @@ namespace IASLib
         return bInteger ? llValue : clampToLong( dValue );
     }
 
+    unsigned long long CTextNode::asUnsignedLong( unsigned long long ullDefault ) const
+    {
+            // Digits alone are read exactly, up to 2^64 - 1; anything else as
+            // the other conversions read it, with negative values as 0.
+        std::string strNumber = trimmed( m_strValue );
+        size_t nStart = ( ! strNumber.empty() && strNumber[0] == '+' ) ? 1 : 0;
+        if ( strNumber.size() > nStart && strNumber.find_first_not_of( "0123456789", nStart ) == std::string::npos )
+        {
+            char *pszEnd = NULL;
+            errno = 0;
+            unsigned long long ullValue = strtoull( strNumber.c_str() + nStart, &pszEnd, 10 );
+            if ( *pszEnd == '\0' && errno == 0 )
+                return ullValue;
+            return ULLONG_MAX;      // too large
+        }
+        bool bInteger = false;
+        long long llValue = 0;
+        double dValue = 0;
+        if ( ! textNumber( m_strValue, bInteger, llValue, dValue ) )
+            return ullDefault;
+        if ( bInteger )
+            return ( llValue < 0 ) ? 0 : (unsigned long long)llValue;
+        if ( dValue <= 0.0 )
+            return 0;
+        if ( dValue >= 18446744073709551616.0 )
+            return ULLONG_MAX;
+        return (unsigned long long)dValue;
+    }
+
     double CTextNode::asDouble( double dDefault ) const
     {
         bool bInteger = false;
@@ -204,7 +233,7 @@ namespace IASLib
 
         // ----- Missing -----
 
-    CMissingNode &CMissingNode::getInstance( void )
+    const CMissingNode &CMissingNode::getInstance( void )
     {
             // Created on first use. Its destructor does nothing that could
             // affect a late caller during shutdown.

@@ -25,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 namespace IASLib
 {
@@ -53,22 +54,22 @@ namespace IASLib
         return decodeBase64( textString(), aData );
     }
 
-    CJsonNode &CJsonNode::path( int nIndex ) const
+    const CJsonNode &CJsonNode::path( int nIndex ) const
     {
         const CJsonNode *pNode = get( nIndex );
-        return pNode ? *const_cast<CJsonNode *>( pNode ) : CMissingNode::getInstance();
+        return pNode ? *pNode : CMissingNode::getInstance();
     }
 
-    CJsonNode &CJsonNode::path( const char *pszField ) const
+    const CJsonNode &CJsonNode::path( const char *pszField ) const
     {
         const CJsonNode *pNode = get( pszField );
-        return pNode ? *const_cast<CJsonNode *>( pNode ) : CMissingNode::getInstance();
+        return pNode ? *pNode : CMissingNode::getInstance();
     }
 
-    CJsonNode &CJsonNode::path( const std::string &strField ) const
+    const CJsonNode &CJsonNode::path( const std::string &strField ) const
     {
         const CJsonNode *pNode = get( strField );
-        return pNode ? *const_cast<CJsonNode *>( pNode ) : CMissingNode::getInstance();
+        return pNode ? *pNode : CMissingNode::getInstance();
     }
 
     bool CJsonNode::hasNonNull( int nIndex ) const
@@ -92,7 +93,7 @@ namespace IASLib
         // RFC 6901: "" is the whole document; otherwise "/"-separated reference
         // tokens, with "~1" for "/" and "~0" for "~". An array index is digits
         // without leading zeros ("-", the element after the last, never exists).
-    CJsonNode &CJsonNode::at( const char *pszPointer ) const
+    const CJsonNode &CJsonNode::at( const char *pszPointer ) const
     {
         CJsonNode *pNode = const_cast<CJsonNode *>( this );
         if ( pszPointer == NULL )
@@ -145,9 +146,48 @@ namespace IASLib
         return *pNode;
     }
 
+        // Depth first, in order, with a stack of the containers being
+        // searched and the next child of each, so the search does not recurse.
+        // (It used to recurse, and could overflow the stack on a deep tree.)
     bool CJsonNode::collect( const std::string &strField, bool bParents, bool bFirst, std::vector<CJsonNode *> &aFound ) const
     {
-        (void)strField; (void)bParents; (void)bFirst; (void)aFound;
+        if ( ! isContainerNode() )
+            return false;
+        std::vector< std::pair<CJsonNode *, int> > aStack;
+        aStack.push_back( std::make_pair( const_cast<CJsonNode *>( this ), 0 ) );
+        while ( ! aStack.empty() )
+        {
+            CJsonNode *pNode = aStack.back().first;
+            int nIndex = aStack.back().second;
+            if ( nIndex >= pNode->size() )
+            {
+                aStack.pop_back();
+                continue;
+            }
+            aStack.back().second++;
+
+            CJsonNode *pChild = NULL;
+            if ( pNode->isObject() )
+            {
+                const CObjectNode *pObject = static_cast<const CObjectNode *>( pNode );
+                pChild = pObject->fieldValue( nIndex );
+                if ( pObject->fieldNameString( nIndex ) == strField )
+                {
+                        // Names are unique, so an object is listed once as a
+                        // parent. A matching field is not searched inside.
+                    aFound.push_back( bParents ? pNode : pChild );
+                    if ( bFirst )
+                        return true;
+                    continue;
+                }
+            }
+            else
+            {
+                pChild = pNode->element( nIndex );
+            }
+            if ( pChild != NULL && pChild->isContainerNode() )
+                aStack.push_back( std::make_pair( pChild, 0 ) );
+        }
         return false;
     }
 
@@ -158,9 +198,9 @@ namespace IASLib
         return aFound.empty() ? NULL : aFound[0];
     }
 
-    CJsonNode &CJsonNode::findPath( const char *pszField ) const
+    const CJsonNode &CJsonNode::findPath( const char *pszField ) const
     {
-        CJsonNode *pFound = findValue( pszField );
+        const CJsonNode *pFound = findValue( pszField );
         return pFound ? *pFound : CMissingNode::getInstance();
     }
 

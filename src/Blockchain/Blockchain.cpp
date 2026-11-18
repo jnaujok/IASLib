@@ -339,7 +339,7 @@ namespace IASLib
             return std::unique_ptr<CBlockchain>();
         }
         const CJsonNode &difficulty = node.path( "difficulty" );
-        if ( ! difficulty.isIntegralNumber() || difficulty.longValue() < 0 || difficulty.longValue() > 256 )
+        if ( ! difficulty.isIntegralNumber() || difficulty.longValue() < 0 || difficulty.longValue() > (long long)MAX_DIFFICULTY )
         {
             fail( pError, "the chain's \"difficulty\" is missing or out of range" );
             return std::unique_ptr<CBlockchain>();

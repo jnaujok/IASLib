@@ -1,7 +1,12 @@
 /**
  * JSON Parser Class Implementation
  *
- *  A recursive descent parser for JSON (RFC 8259). See JsonParser.h.
+ *  A parser for JSON (RFC 8259). See JsonParser.h.
+ *
+ *  Arrays and objects are parsed with a stack of the containers that are
+ * open, not by recursion, so the depth limit can be set as high as memory
+ * allows. (The parser used to recurse, and a raised limit let deep input
+ * overflow the stack.)
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 9/13/2020
@@ -44,6 +49,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace IASLib
 {
@@ -51,7 +58,7 @@ namespace IASLib
 
     CJsonParser::CJsonParser( void )
         : m_bAllowComments( false ), m_bAllowTrailingCommas( false ), m_bRejectDuplicateKeys( false ),
-          m_nMaxDepth( DEFAULT_MAX_DEPTH ), m_nErrorLine( 0 ), m_nErrorColumn( 0 ), m_nErrorOffset( 0 ),
+          m_nMaxDepth( DEFAULT_MAX_DEPTH ), m_nMaxInputSize( 0 ), m_nMaxStringLength( 0 ), m_nErrorLine( 0 ), m_nErrorColumn( 0 ), m_nErrorOffset( 0 ),
           m_pszText( NULL ), m_nLength( 0 ), m_nPos( 0 ), m_bFailed( false )
     {
     }
@@ -101,6 +108,9 @@ namespace IASLib
             if ( nRead <= 0 )
                 break;
             strText.append( achBuffer, (size_t)nRead );
+                // Past the limit: stop reading, and let readTree() report it.
+            if ( m_nMaxInputSize != 0 && strText.size() > m_nMaxInputSize )
+                break;
         }
         return readTree( strText );
     }
@@ -116,6 +126,12 @@ namespace IASLib
         m_nErrorLine = m_nErrorColumn = m_nErrorOffset = 0;
 
             // A UTF-8 byte order mark may be ignored (RFC 8259 section 8.1).
+        if ( m_nMaxInputSize != 0 && m_nLength > m_nMaxInputSize )
+        {
+            fail( "the input is larger than the limit of " + std::to_string( (unsigned long long)m_nMaxInputSize ) + " bytes", 0 );
+            return NULL;
+        }
+
         if ( m_nLength >= 3 && memcmp( m_pszText, "\xEF\xBB\xBF", 3 ) == 0 )
             m_nPos = 3;
 
@@ -126,7 +142,7 @@ namespace IASLib
             fail( "there is no JSON value", m_nPos );
             return NULL;
         }
-        CJsonNode *pRoot = parseValue( 1 );
+        CJsonNode *pRoot = parseTree();
         if ( pRoot == NULL )
             return NULL;
         if ( skipWhitespace() && m_nPos < m_nLength )
@@ -224,15 +240,11 @@ namespace IASLib
         return true;
     }
 
-    CJsonNode *CJsonParser::parseValue( int nDepth )
+    CJsonNode *CJsonParser::parseScalar( void )
     {
         int c = peek();
         switch ( c )
         {
-            case '{':
-                return parseObject( nDepth );
-            case '[':
-                return parseArray( nDepth );
             case '"':
             {
                 std::string strValue;
@@ -251,132 +263,158 @@ namespace IASLib
         }
     }
 
-    CJsonNode *CJsonParser::parseObject( int nDepth )
+        // A field name and the ':' after it, leaving the position at the
+        // value.
+    bool CJsonParser::parseFieldName( std::string &strKey, size_t &nKeyOffset )
     {
-        if ( nDepth > m_nMaxDepth )
-        {
-            fail( "arrays and objects are nested more than " + std::to_string( m_nMaxDepth ) + " deep", m_nPos );
-            return NULL;
-        }
-        m_nPos++;       // '{'
-        CObjectNode *pObject = new CObjectNode();
-        if ( ! skipWhitespace() )
-        {
-            delete pObject;
-            return NULL;
-        }
-        if ( peek() == '}' )
-        {
-            m_nPos++;
-            return pObject;
-        }
-
-        while ( true )
-        {
-            if ( peek() != '"' )
-            {
-                fail( "expected a field name (a string) but found " + describeNext(), m_nPos );
-                break;
-            }
-            size_t nKeyOffset = m_nPos;
-            std::string strKey;
-            if ( ! parseString( strKey ) || ! skipWhitespace() )
-                break;
-            if ( peek() != ':' )
-            {
-                fail( "expected ':' after the field name but found " + describeNext(), m_nPos );
-                break;
-            }
-            m_nPos++;
-            if ( ! skipWhitespace() )
-                break;
-            CJsonNode *pValue = parseValue( nDepth + 1 );
-            if ( pValue == NULL )
-                break;
-            if ( m_bRejectDuplicateKeys && pObject->has( strKey ) )
-            {
-                delete pValue;
-                fail( "the field name \"" + strKey + "\" is repeated", nKeyOffset );
-                break;
-            }
-            pObject->set( strKey, pValue );
-            if ( ! skipWhitespace() )
-                break;
-
-            int c = peek();
-            if ( c == '}' )
-            {
-                m_nPos++;
-                return pObject;
-            }
-            if ( c != ',' )
-            {
-                fail( "expected ',' or '}' but found " + describeNext(), m_nPos );
-                break;
-            }
-            m_nPos++;
-            if ( ! skipWhitespace() )
-                break;
-            if ( m_bAllowTrailingCommas && peek() == '}' )
-            {
-                m_nPos++;
-                return pObject;
-            }
-        }
-        delete pObject;
-        return NULL;
+        if ( peek() != '"' )
+            return fail( "expected a field name (a string) but found " + describeNext(), m_nPos );
+        nKeyOffset = m_nPos;
+        if ( ! parseString( strKey ) || ! skipWhitespace() )
+            return false;
+        if ( peek() != ':' )
+            return fail( "expected ':' after the field name but found " + describeNext(), m_nPos );
+        m_nPos++;
+        return skipWhitespace();
     }
 
-    CJsonNode *CJsonParser::parseArray( int nDepth )
+    namespace
     {
-        if ( nDepth > m_nMaxDepth )
+            // An array or object being parsed: the container, and for an
+            // object the name (and where it was) of the field whose value
+            // comes next.
+        struct CParseFrame
         {
-            fail( "arrays and objects are nested more than " + std::to_string( m_nMaxDepth ) + " deep", m_nPos );
-            return NULL;
-        }
-        m_nPos++;       // '['
-        CArrayNode *pArray = new CArrayNode();
-        if ( ! skipWhitespace() )
-        {
-            delete pArray;
-            return NULL;
-        }
-        if ( peek() == ']' )
-        {
-            m_nPos++;
-            return pArray;
-        }
+            CJsonNode          *pContainer;
+            bool                bObject;
+            std::string         strKey;
+            size_t              nKeyOffset;
+        };
+    }
+
+        // One value, which may be an array or object nested to any depth up
+        // to the limit. A container joins its parent once it is complete, so
+        // on an error each open container (holding the complete values read
+        // into it) is deleted.
+    CJsonNode *CJsonParser::parseTree( void )
+    {
+        std::vector<CParseFrame> aStack;
+        CJsonNode *pValue = NULL;
 
         while ( true )
         {
-            CJsonNode *pValue = parseValue( nDepth + 1 );
-            if ( pValue == NULL )
-                break;
-            pArray->add( pValue );
-            if ( ! skipWhitespace() )
-                break;
-
+                // A value is expected here.
             int c = peek();
-            if ( c == ']' )
+            if ( c == '{' || c == '[' )
             {
+                if ( (int)aStack.size() + 1 > m_nMaxDepth )
+                {
+                    fail( "arrays and objects are nested more than " + std::to_string( m_nMaxDepth ) + " deep", m_nPos );
+                    break;
+                }
+                bool bObject = ( c == '{' );
                 m_nPos++;
-                return pArray;
+                CJsonNode *pContainer = bObject ? (CJsonNode *)new CObjectNode() : (CJsonNode *)new CArrayNode();
+                if ( ! skipWhitespace() )
+                {
+                    delete pContainer;
+                    break;
+                }
+                if ( peek() == ( bObject ? '}' : ']' ) )
+                {
+                    m_nPos++;
+                    pValue = pContainer;
+                }
+                else
+                {
+                    CParseFrame frame;
+                    frame.pContainer = pContainer;
+                    frame.bObject = bObject;
+                    frame.nKeyOffset = 0;
+                    aStack.push_back( frame );
+                    if ( bObject && ! parseFieldName( aStack.back().strKey, aStack.back().nKeyOffset ) )
+                        break;
+                    continue;       // to the first value inside
+                }
             }
-            if ( c != ',' )
+            else
             {
-                fail( "expected ',' or ']' but found " + describeNext(), m_nPos );
+                pValue = parseScalar();
+                if ( pValue == NULL )
+                    break;
+            }
+
+                // A complete value: add it to the container it is in, and
+                // close each container that ends after it. bNext is set when
+                // another value is to be read.
+            bool bNext = false;
+            while ( true )
+            {
+                if ( aStack.empty() )
+                    return pValue;
+                CParseFrame &frame = aStack.back();
+                if ( frame.bObject )
+                {
+                    CObjectNode *pObject = static_cast<CObjectNode *>( frame.pContainer );
+                    if ( m_bRejectDuplicateKeys && pObject->has( frame.strKey ) )
+                    {
+                        fail( "the field name \"" + frame.strKey + "\" is repeated", frame.nKeyOffset );
+                        break;
+                    }
+                    pObject->set( frame.strKey, pValue );
+                }
+                else
+                {
+                    static_cast<CArrayNode *>( frame.pContainer )->add( pValue );
+                }
+                pValue = NULL;
+                if ( ! skipWhitespace() )
+                    break;
+
+                char chClose = frame.bObject ? '}' : ']';
+                int chNext = peek();
+                bool bClosed = false;
+                if ( chNext == chClose )
+                {
+                    m_nPos++;
+                    bClosed = true;
+                }
+                else if ( chNext != ',' )
+                {
+                    fail( std::string( "expected ',' or '" ) + chClose + "' but found " + describeNext(), m_nPos );
+                    break;
+                }
+                else
+                {
+                    m_nPos++;
+                    if ( ! skipWhitespace() )
+                        break;
+                    if ( m_bAllowTrailingCommas && peek() == chClose )
+                    {
+                        m_nPos++;
+                        bClosed = true;
+                    }
+                }
+
+                if ( bClosed )
+                {
+                    pValue = frame.pContainer;
+                    aStack.pop_back();
+                    continue;       // add the closed container to its parent
+                }
+                if ( frame.bObject && ! parseFieldName( frame.strKey, frame.nKeyOffset ) )
+                    break;
+                bNext = true;
                 break;
             }
-            m_nPos++;
-            if ( ! skipWhitespace() )
+            if ( ! bNext )
                 break;
-            if ( m_bAllowTrailingCommas && peek() == ']' )
-            {
-                m_nPos++;
-                return pArray;
-            }
         }
-        delete pArray;
+
+            // An error: delete what was read.
+        delete pValue;
+        for ( size_t n = 0; n < aStack.size(); n++ )
+            delete aStack[ n ].pContainer;
         return NULL;
     }
 
@@ -449,6 +487,8 @@ namespace IASLib
             if ( m_nPos >= m_nLength )
                 return fail( "the string is not closed", nStart );
             unsigned char c = pText[ m_nPos ];
+            if ( m_nMaxStringLength != 0 && strValue.size() > m_nMaxStringLength )
+                return fail( "the string is longer than the limit of " + std::to_string( (unsigned long long)m_nMaxStringLength ) + " bytes", nStart );
             if ( c == '"' )
             {
                 m_nPos++;

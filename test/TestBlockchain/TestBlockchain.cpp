@@ -254,6 +254,50 @@ static void testBlocks( void )
     CHECK( ! hard.mine( 64, 0, &cancel ) );
     CHECK( std::chrono::steady_clock::now() - start < std::chrono::seconds( 1 ) );
     CHECK( ! hard.mine( 257 ) );
+
+        // Difficulties past the nonce's 64 bits are refused at once rather
+        // than searched forever.
+    CHECK( CBlock::MAX_DIFFICULTY == 64 );
+    start = std::chrono::steady_clock::now();
+    CHECK( ! hard.mine( 256 ) && ! hard.mine( 65 ) && ! hard.isMined() );
+    CHECK( std::chrono::steady_clock::now() - start < std::chrono::seconds( 1 ) );
+
+#ifdef IASLIB_JSON_SUPPORT__
+        // Nonces use all 64 bits, and come back from JSON exactly.
+    const unsigned long long nonces[] = { 0ULL, 9223372036854775807ULL, 9223372036854775808ULL, 18446744073709551615ULL };
+    for ( size_t n = 0; n < sizeof( nonces ) / sizeof( nonces[0] ); n++ )
+    {
+        std::unique_ptr<CObjectNode> pJson( block.toJson() );
+        pJson->put( "nonce", nonces[ n ] );
+        std::string strText = pJson->toJson();
+        std::unique_ptr<CJsonNode> pParsed( CJsonParser::parse( strText ) );
+        std::string strError;
+        std::unique_ptr<CBlock> pBack = pParsed ? CBlock::FromJson( *pParsed, &strError ) : std::unique_ptr<CBlock>();
+        CHECK( pBack && pBack->getNonce() == nonces[ n ] );
+        if ( ! pBack )
+            printf( "  (nonce %llu: %s)\n", nonces[ n ], strError.c_str() );
+        std::unique_ptr<CObjectNode> pAgain( pBack ? pBack->toJson() : NULL );
+        CHECK( pAgain && pAgain->toJson() == strText );
+    }
+    {
+            // One past the 64-bit range is refused.
+        std::unique_ptr<CObjectNode> pJson( block.toJson() );
+        std::string strText = pJson->toJson();
+        size_t nAt = strText.find( "\"nonce\":" );
+        size_t nEnd = strText.find( ',', nAt );
+        strText.replace( nAt, nEnd - nAt, "\"nonce\":18446744073709551616" );
+        std::unique_ptr<CJsonNode> pParsed( CJsonParser::parse( strText ) );
+        std::string strError;
+        CHECK( pParsed && ! CBlock::FromJson( *pParsed, &strError ) && contains( strError, "nonce" ) );
+    }
+        // A mined block keeps its nonce through JSON.
+    {
+        std::unique_ptr<CObjectNode> pJson( block.toJson() );
+        std::unique_ptr<CJsonNode> pParsed( CJsonParser::parse( pJson->toJson() ) );
+        std::unique_ptr<CBlock> pBack = pParsed ? CBlock::FromJson( *pParsed ) : std::unique_ptr<CBlock>();
+        CHECK( pBack && pBack->getNonce() == block.getNonce() && pBack->validate() );
+    }
+#endif
 }
 
 /***********************************************************************
@@ -348,7 +392,7 @@ static void testChains( void )
     size_t nBad = 0;
     CHECK( ! chain.validate( 9, &strReason, &nBad ) && nBad == 0 && contains( strReason, "below the required 9" ) );
     chain.setDifficulty( 999 );
-    CHECK( chain.getDifficulty() == 256 );
+    CHECK( chain.getDifficulty() == CBlockchain::MAX_DIFFICULTY && CBlockchain::MAX_DIFFICULTY == 64 );
     chain.setDifficulty( 8 );
 
         // Tampering, each caught at the block it was done to (or the next).
@@ -461,6 +505,9 @@ static void testSaving( void )
         strError.clear();
         CHECK( ! CBlockchain::FromJsonText( bad[ n ], &strError ) && ! strError.empty() );
     }
+        // A difficulty no block could be mined at is refused.
+    CHECK( ! CBlockchain::FromJsonText( "{\"format\":\"IASLib blockchain\",\"version\":1,\"difficulty\":65,\"blocks\":[]}", &strError ) &&
+           contains( strError, "difficulty" ) );
     std::string strBadEntry = strJson;
     size_t nEntries = strBadEntry.find( "\"entries\": [" );
     strBadEntry.insert( strBadEntry.find( '"', nEntries + 12 ) + 1, "!!" );

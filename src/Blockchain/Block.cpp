@@ -189,7 +189,7 @@ namespace IASLib
 
     bool CBlock::mine( uint32_t nDifficulty, uint64_t nMaxAttempts, const std::atomic<bool> *pCancel )
     {
-        if ( nDifficulty > 256 )
+        if ( nDifficulty > MAX_DIFFICULTY )
             return false;
         m_nDifficulty = nDifficulty;
         m_bMined = false;
@@ -319,13 +319,12 @@ namespace IASLib
         bool readNumber( const CJsonNode &node, const char *pszField, unsigned long long nMax, unsigned long long &nValue, std::string *pError )
         {
             const CJsonNode &field = node.path( pszField );
-            if ( ! field.isIntegralNumber() || ! field.canConvertToLong() || field.longValue() < 0 ||
-                 (unsigned long long)field.longValue() > nMax )
+            if ( ! field.isIntegralNumber() || ! field.canConvertToUnsignedLong() || field.unsignedLongValue() > nMax )
             {
                 fail( pError, std::string( "the block's \"" ) + pszField + "\" is missing or out of range" );
                 return false;
             }
-            nValue = (unsigned long long)field.longValue();
+            nValue = field.unsignedLongValue();
             return true;
         }
 
@@ -380,7 +379,9 @@ namespace IASLib
         if ( ! readNumber( node, "difficulty", 256, nValue, pError ) )
             return std::unique_ptr<CBlock>();
         pBlock->m_nDifficulty = (uint32_t)nValue;
-        if ( ! readNumber( node, "nonce", nMaxSigned, nValue, pError ) )
+            // Any 64-bit nonce. (Nonces past 2^63 - 1 used to be refused: the
+            // JSON reader held them as doubles.)
+        if ( ! readNumber( node, "nonce", ~0ULL, nValue, pError ) )
             return std::unique_ptr<CBlock>();
         pBlock->m_nNonce = nValue;
         if ( ! readHash( node, "previousHash", pBlock->m_previousHash, pError ) ||
