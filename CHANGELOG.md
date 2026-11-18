@@ -124,4 +124,5 @@ A large update: the library now builds and passes its tests on Linux (GCC and Cl
   - One workflow builds and tests on Linux (GCC and Clang), macOS (Apple Clang) and Windows (MSVC), for every push to `master` and `claude/` branches and every pull request.
   - Failed builds list their errors grouped by file, and hung tests time out.
   - It replaces two broken workflows: one used a retired GitHub action, and the other was copied from another project.
+  - Pushing a `v*` tag creates a GitHub release, with that version's changelog section as its notes.
 - **Sanitizers:** the suites run clean under AddressSanitizer/UndefinedBehaviorSanitizer, ThreadSanitizer and Valgrind.
