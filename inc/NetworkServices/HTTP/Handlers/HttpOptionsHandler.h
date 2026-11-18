@@ -1,4 +1,7 @@
 /**
+ * @file HttpOptionsHandler.h
+ * @brief The default OPTIONS handler (CHttpOptionsHandler).
+ *
  * HTTP Options Handler class
  *
  * This class handles OPTIONS requests for the HTTP server.
@@ -16,16 +19,24 @@
 
 namespace IASLib
 {
+    /// The default OPTIONS handler.
+    ///
+    /// Answers 200 OK with an Allow header listing the methods of the server's own factories.
     class CHttpOptionsHandler : public CHttpHandler
     {
         IASLIB_DEFINE_HTTP_HANDLER( CHttpOptionsHandler, "OPTIONS" );
         public:
             DEFINE_OBJECT( CHttpOptionsHandler );
 
+                /// Creates a handler for one request (or, with empty values, a
+                /// prototype to register).
             CHttpOptionsHandler( CString uri, CString version );
 
+                /// Destroys the handler.
             virtual ~CHttpOptionsHandler( void );
 
+                /// Answers 200 OK with an Allow header listing the methods of the server's own factories.
+                /// @return true.
             virtual bool process( CHttpRequest *request, CHttpResponse *response );
     };
 }

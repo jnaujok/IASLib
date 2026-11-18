@@ -1,4 +1,7 @@
 /**
+ * @file SipClient.h
+ * @brief A placeholder for a SIP client (CSipClient); not implemented.
+ *
  *  SIP Client Class
  *
  *      This class provides an interface for connecting as a 
@@ -29,11 +32,24 @@
 
 namespace IASLib
 {
+    /// A SIP client that would send one request to a SIP server and return
+    /// the response.
+    ///
+    /// @warning This class is not implemented: its constructor and destructor
+    ///          are declared but not defined (SipClient.cpp is empty), and it
+    ///          does not override executeRequest(), so it is abstract. It
+    ///          cannot be used yet.
     class CSipClient : public CGenericClient
     {
         public:
                             DEFINE_OBJECT( CSipClient );
+                            /// Would store the server's address (not defined).
+                            /// @param strRemoteHost The server's host name or address.
+                            /// @param nPort         The port (5060 by default).
+                            /// @param bUseSSL       Whether to use TLS.
+                            /// @param bUseUDP       Whether to use UDP instead of TCP.
                             CSipClient( const char *strRemoteHost, int nPort=5060, bool bUseSSL = false, bool bUseUDP = false );
+                            /// Destructor (not defined).
             virtual        ~CSipClient( void );
     };
 } // namespace IASLib

@@ -1,4 +1,7 @@
 /**
+ * @file SipRegisterHandler.h
+ * @brief The default REGISTER handler (CSipRegisterHandler).
+ *
  * SIP Register Handler class
  *
  * This server has no registrar or credential store, so the default
@@ -21,19 +24,27 @@
 
 namespace IASLib
 {
+    /// The default REGISTER handler.
+    ///
+    /// Answers a REGISTER without credentials with 401 and a Digest challenge (the server's realm and a fresh nonce), and one with an Authorization header with 403, as there are no users to check against.
     class CSipRegisterHandler : public CSipHandler
     {
         IASLIB_SET_SIP_HANDLER( CSipRegisterHandler, "REGISTER" );
         public:
             DEFINE_OBJECT( CSipRegisterHandler );
 
+                /// Creates a handler for one request (or, with empty values, a
+                /// prototype to register).
             CSipRegisterHandler( CString uri, CString version );
 
+                /// Destroys the handler.
             virtual ~CSipRegisterHandler( void );
 
+                /// Answers a REGISTER without credentials with 401 and a Digest challenge (the server's realm and a fresh nonce), and one with an Authorization header with 403, as there are no users to check against.
+                /// @return true.
             virtual bool process( CSipRequest *request, CSipResponse *response );
 
-                // A random 128-bit nonce, as 32 hexadecimal digits.
+                /// A random 128-bit nonce, as 32 hexadecimal digits.
             static CString generateNonce( void );
     };
 } // namespace IASLib

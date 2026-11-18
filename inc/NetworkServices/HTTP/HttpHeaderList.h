@@ -1,4 +1,7 @@
 /**
+ * @file HttpHeaderList.h
+ * @brief The header fields of an HTTP message (CHttpHeaderList).
+ *
  *  HTTP Header List Class
  *
  *      This class provides a list of headers and is used by HTTP clients
@@ -25,16 +28,26 @@
 
 namespace IASLib
 {
+    /// The header fields of an HTTP request or response.
+    ///
+    /// It uses the generic CHeaderList rules (case-insensitive names, order
+    /// kept, injection-safe setters) and stores each header as a CHttpHeader.
     class CHttpHeaderList : public CHeaderList
     {
         public:
+                                /// Parses header lines from the stream, up to and
+                                /// including the blank line that ends them (see
+                                /// CHeaderList::parse()).
                                 CHttpHeaderList( CStream &oInputStream );
+                                /// Creates an empty list.
                                 CHttpHeaderList( void );
+                                /// Deletes the headers.
             virtual            ~CHttpHeaderList( void );
 
                                 DEFINE_OBJECT( CHttpHeaderList );
 
         protected:
+                /// Creates a CHttpHeader for a new header.
             virtual CHeader    *newHeader( const CString &name );
     }; // Class CHttpHeaderList
 }  // Namespace IASLib

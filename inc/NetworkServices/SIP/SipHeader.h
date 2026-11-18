@@ -1,4 +1,7 @@
 /**
+ * @file SipHeader.h
+ * @brief One SIP header field (CSipHeader).
+ *
  *  SIP Header Class
  *
  *      This class supports an interface for accessing, sending, and 
@@ -26,22 +29,29 @@
 
 namespace IASLib
 {
+    /// One SIP header field: a name and its values.
+    ///
+    /// It adds nothing to CHeader beyond its constructors; CSipHeaderList
+    /// stores its headers as CSipHeader objects.
     class CSipHeader : public CHeader
     {
         public:
-                                /// Used to set a header from a name and a value
+                                /// Used to set a header from a name and a value.
+                                /// A value holding CR, LF or NUL is not stored
+                                /// (see CHeader::addValue()).
                             CSipHeader( const char *strName, const char *strValue );
-                                /// Builds an HTTP Header with only the name for adding values to later
+                                /// Builds a SIP Header with only the name for adding values to later.
                             CSipHeader( const char *strName )  : CHeader( strName ) {}
-                                /// Builds an HTTP Header with only the name for adding values to later
+                                /// Same, from a CString name.
                             CSipHeader( const CString &strName ) : CHeader( strName ) {}
-                                /// Copy Constructor
+                                /// Copy Constructor.
                             CSipHeader( const CSipHeader &oSource );
-                                /// Destructor
+                                /// Destructor.
             virtual        ~CSipHeader( void );
 
                             DEFINE_OBJECT( CSipHeader )
 
+                                /// Copies the name and values of another header.
             CSipHeader    &operator =( const CSipHeader &oSource );
     };
 }   // namespace IASLib
