@@ -1,3 +1,9 @@
+/**
+ * @file DirectoryEntry.h
+ * @brief CDirectoryEntry, one entry of a CDirectory listing.
+ *
+ * The original header comment follows.
+ */
 /*
  *  Directory Entry Class
  *
@@ -21,17 +27,27 @@
 
 namespace IASLib
 {
+    /// One entry of a directory listing (CDirectory), with its size, date and type.
+    ///
+    /// The fields are read once, when the entry is made. If the entry's
+    /// status cannot be read, the size and date are left unset.
     class CDirectoryEntry : public CObject
     {
         public:
-            CString     m_strFileName;
-            CString     m_strEntryName;
-            CString     m_strExtension;
-            CDate       m_dttLastModified;
-            long        m_lSize;
-            bool        m_bIsDir;
+            CString     m_strFileName;      ///< The entry's name, without the directory.
+            CString     m_strEntryName;     ///< The full path: directory, "/", name.
+            CString     m_strExtension;     ///< For a file, what follows the last "." in the name; otherwise "".
+            CDate       m_dttLastModified;  ///< When it was last modified (the current time if lightweight).
+            long        m_lSize;            ///< A file's size in bytes (0 for a directory, or if lightweight).
+            bool        m_bIsDir;           ///< Whether it is a directory (always false if lightweight).
 
+                /// Reads an entry's details.
+                /// @param strDir  The directory it is in.
+                /// @param strFileName  The entry's name.
+                /// @param bLightweight  Skip reading the status: the size is 0,
+                ///                      the date is now and it counts as a file.
                         CDirectoryEntry( const char *strDir, const char *strFileName, bool bLightweight = false );
+                /// Destroys the entry.
             virtual    ~CDirectoryEntry( void );
 
                         DEFINE_OBJECT( CDirectoryEntry )

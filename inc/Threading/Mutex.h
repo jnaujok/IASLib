@@ -1,3 +1,9 @@
+/**
+ * @file Mutex.h
+ * @brief CMutex, a recursive mutex, and CMutexLock, which holds one for a scope.
+ *
+ * The original header comment follows.
+ */
 /*
  * Mutex Class
  *
@@ -35,57 +41,92 @@
 #include <atomic>
 
 #ifndef IASLIB_MULTI_THREADED__
+        /// The platform's mutex type (an int when the library is single-threaded).
     #define MUTEX_T int
 #else
     #ifdef IASLIB_PTHREAD__
         #include <pthread.h>
+            /// The platform's mutex type (pthread_mutex_t with POSIX threads).
         #define MUTEX_T pthread_mutex_t
     #endif
 
     #ifdef IASLIB_WIN32__
         #include "../BaseTypes/Platform.h"
+            /// The platform's mutex type (a CRITICAL_SECTION on Windows).
         #define MUTEX_T CRITICAL_SECTION
     #endif
 #endif
 
 namespace IASLib
 {
+    /// A recursive mutex that hides the platform's own.
+    ///
+    /// The mutex is recursive on every platform: the thread that holds it
+    /// can lock it again, and it is released when that thread has unlocked
+    /// it as many times as it locked it (a POSIX recursive mutex, or a
+    /// critical section on Windows). In a single-threaded build it only
+    /// counts.
+    ///
+    /// Because CObject uses it, CMutex is not derived from CObject, so it
+    /// cannot be passed where a CObject is expected. It is not copyable.
+    /// Prefer CMutexLock to pairing Lock() and Unlock() by hand.
+    ///
+    /// @code
+    /// CMutex mutexData;
+    /// mutexData.Lock();
+    /// // ... use the shared data ...
+    /// mutexData.Unlock();
+    /// @endcode
     class CMutex
     {
         protected:
-            MUTEX_T             m_Mutex;
-            std::atomic<int>    m_nLocked;      // how deeply the owner holds it
+            MUTEX_T             m_Mutex;        ///< The platform's mutex.
+            std::atomic<int>    m_nLocked;      ///< How deeply the owner holds it.
 
         public:
+                /// Creates an unlocked mutex.
                                 CMutex( void );
+                /// Creates a mutex, locked by the calling thread if @p bLocked is set.
+                /// @param bLocked  Lock it at once.
                                 CMutex( bool bLocked );
+                /// Destroys the mutex, which must not be held.
             virtual            ~CMutex( void );
 
+                /// Locks the mutex, waiting while another thread holds it.
             void                Lock( void );
-                // Locks only if no other thread holds the mutex, returning
-                // whether it did.
+                /// Locks only if no other thread holds the mutex, returning
+                /// whether it did.
+                /// @return true if the calling thread now holds the mutex.
             bool                TryLock( void );
+                /// Unlocks the mutex once; the calling thread must hold it.
             void                Unlock( void );
-                // Whether some thread holds the mutex (only a hint: another
-                // thread may lock or unlock it straight after).
+                /// Whether some thread holds the mutex (only a hint: another
+                /// thread may lock or unlock it straight after).
             bool                IsLocked( void ) const;
 
         private:
+                /// Sets up the platform mutex (both constructors call it).
             void                Init( void );
-                                CMutex( const CMutex & );
-            CMutex             &operator =( const CMutex & );
+                                CMutex( const CMutex & );      ///< Not copyable.
+            CMutex             &operator =( const CMutex & );  ///< Not copyable.
     };
-        // Locks a mutex for as long as it exists:
-        //      { CMutexLock oLock( m_mutex ); ... }
+        /// Locks a mutex for as long as it exists.
+        ///
+        /// @code
+        /// { CMutexLock oLock( m_mutex ); ... }
+        /// @endcode
     class CMutexLock
     {
-            CMutex             &m_mutex;
+            CMutex             &m_mutex;    ///< The mutex held.
         public:
+                /// Locks @p mutex.
+                /// @param mutex  The mutex to hold; it must outlive this object.
             explicit            CMutexLock( CMutex &mutex ) : m_mutex( mutex ) { m_mutex.Lock(); }
+                /// Unlocks the mutex.
                                ~CMutexLock( void ) { m_mutex.Unlock(); }
         private:
-                                CMutexLock( const CMutexLock & );
-            CMutexLock         &operator =( const CMutexLock & );
+                                CMutexLock( const CMutexLock & );      ///< Not copyable.
+            CMutexLock         &operator =( const CMutexLock & );      ///< Not copyable.
     };
 } // End of Namespace IASLib
 
