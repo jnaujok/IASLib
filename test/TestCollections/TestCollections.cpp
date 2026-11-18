@@ -103,7 +103,8 @@ static void testTArray( void )
         CHECK( a.Length() == 1000 && a[0] == 0 && a[999] == 999 );
         CHECK( a.Prepend( -1 ) == 0 && a[0] == -1 && a[1] == 0 );
         CHECK( a.Insert( 500, 42 ) == 500 && a[500] == 42 );
-        CHECK( a.Insert( 99999, 7 ) == a.Length() - 1 && a.Last() == 7 );
+        size_t nAt = a.Insert( 99999, 7 );
+        CHECK( nAt == a.Length() - 1 && a.Last() == 7 );
         CHECK( a.Remove( 500 ) == 42 );
         CHECK( a.Get( 99999, -5 ) == -5 );
         CHECK( a.Find( 10 ) == 11 );
@@ -111,7 +112,8 @@ static void testTArray( void )
         CHECK( a.Contains( 999 ) );
         CHECK( a.RemoveValue( 999 ) && ! a.Contains( 999 ) );
         CHECK( a.Set( 0, 100 ) == 0 && a[0] == 100 );
-        CHECK( a.Set( 99999, 5 ) == a.Length() - 1 );            // past the end: appended
+        nAt = a.Set( 99999, 5 );                                  // past the end: appended
+        CHECK( nAt == a.Length() - 1 );
         CHECK_THROWS( a[ a.Length() ] );
         CHECK_THROWS( a.Remove( a.Length() ) );
         CHECK_THROWS( a.Swap( 0, a.Length() ) );
@@ -261,7 +263,8 @@ static void testTSortedArray( void )
     size_t nBefore = s.Length();
     size_t nAt = s.PushUnique( s[10] );
     CHECK( s.Length() == nBefore && s[nAt] == s[10] );
-    CHECK( s.PushUnique( 100000 ) == s.Length() - 1 );
+    size_t nNew = s.PushUnique( 100000 );
+    CHECK( nNew == s.Length() - 1 );
     CHECK( s.RemoveValue( 100000 ) && ! s.Contains( 100000 ) );
 
         // Equal values keep the order they came in.
@@ -671,7 +674,8 @@ void testClassicCollections( void )
             // Set() past the end appends (it used to also write past the
             // end of the buffer).
         CTracked *pExtra = new CTracked( 5000 );
-        CHECK( a.Set( 99999, pExtra ) == a.GetLength() - 1 && a.Find( pExtra ) == a.GetLength() - 1 );
+        size_t nSetAt = a.Set( 99999, pExtra );
+        CHECK( nSetAt == a.GetLength() - 1 && a.Find( pExtra ) == a.GetLength() - 1 );
         CTracked *pOld = (CTracked *)a.Get( 1 );
         CTracked *pNew = new CTracked( 7777 );
         CHECK( a.Set( 1, pNew ) == 1 && a.Get( 1 ) == pNew );
