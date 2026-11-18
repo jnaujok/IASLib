@@ -1,5 +1,6 @@
-/*
- * Thread Exception Class
+/**
+ * @file
+ * @brief Thread Exception Class.
  *
  *      This class is used for throwing whenever an exception occurs in
  * the a thread related class. Thread exceptions include cancelling or stopping
@@ -22,21 +23,25 @@
 
 namespace IASLib
 {
+    /// Thrown by the thread classes, for example on stopping a thread that
+    /// has already finished.
     class CThreadException : public CException
     {
         public:
+                        /// Makes an exception with a message (NORMAL severity).
                         CThreadException( const char *strMessage );
-            virtual    ~CThreadException( void );
+            virtual    ~CThreadException( void );   ///< Destructor.
 
                         DECLARE_OBJECT( CThreadException,CException );
 
-            virtual void        Throw( void ) { throw *this; }
+            virtual void        Throw( void ) { throw *this; }   ///< Throws a copy of this exception, as this class.
 
-            virtual void        Rethrow( void ) { throw *this; }
+            virtual void        Rethrow( void ) { throw *this; }   ///< Same as Throw(); used by IASLIB_RETHROW.
 
 
     };
 
+/// Throws a CThreadException with message @p x, recording the file and line.
 #define IASLIB_THROW_THREAD_EXCEPTION(x) {CThreadException oE(x);oE.FileLine(__FILE__,__LINE__);oE.Throw();}
 
 } // namespace IASLib

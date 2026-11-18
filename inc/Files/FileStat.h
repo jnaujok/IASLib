@@ -1,5 +1,6 @@
-/*
- * File Status Class
+/**
+ * @file
+ * @brief File Status Class.
  *
  *      This class wraps the status function found in Unix. This 
  * function can be used to detemine information about a file 
@@ -25,39 +26,51 @@
 
 namespace IASLib
 {
-        // What the file system says about a path, without opening it. The
-        // constructor throws a CFileException (errno) if there is no such
-        // path.
+        /// What the file system says about a path, without opening it. The
+        /// constructor throws a CFileException (errno) if there is no such
+        /// path.
+        ///
+        /// @code
+        /// CFileStat oStat( "notes.txt" );
+        /// if ( oStat.IsFile() )
+        ///     printf( "%lld bytes\n", (long long)oStat.GetSizeBig() );
+        /// @endcode
     class CFileStat : public CObject
     {
         protected:
-            CString         m_strFileName;
-            bool            m_bIsFile;
-            bool            m_bIsDir;
-            CDate           m_dttLastAccess;
-            CDate           m_dttLastModified;
-            CDate           m_dttLastChanged;
-            int64_t         m_lFileSize;
+            CString         m_strFileName;      ///< The path asked about.
+            bool            m_bIsFile;          ///< A regular file.
+            bool            m_bIsDir;           ///< A directory.
+            CDate           m_dttLastAccess;    ///< Last access time.
+            CDate           m_dttLastModified;  ///< Last modification time.
+            CDate           m_dttLastChanged;   ///< Status change (Windows: creation) time.
+            int64_t         m_lFileSize;        ///< Size in bytes (0 if not a regular file).
 
         public:
+                            /// Reads the status of @p strFileName.
+                            /// @throws CFileException (with errno) if there is no such path.
+                            /// @note It used to test the type with "mode & S_IFDIR",
+                            /// which is also true of sockets and block devices, trim
+                            /// spaces from the name, and keep the size in a long.
                             CFileStat( const char *strFileName );
-            virtual        ~CFileStat( void );
+            virtual        ~CFileStat( void );      ///< Destructor.
 
                             DEFINE_OBJECT( CFileStat );
 
-            bool            IsFile( void ) const { return m_bIsFile; }
-            bool            IsDir( void ) const { return m_bIsDir; }
+            bool            IsFile( void ) const { return m_bIsFile; }      ///< Whether the path is a regular file.
+            bool            IsDir( void ) const { return m_bIsDir; }        ///< Whether the path is a directory.
 
-            CDate           GetLastAccess( void ) const { return m_dttLastAccess; }
-            CDate           GetLastModified( void ) const { return m_dttLastModified; }
-                // The status change time (on Windows, the creation time).
+            CDate           GetLastAccess( void ) const { return m_dttLastAccess; }       ///< The last access time.
+            CDate           GetLastModified( void ) const { return m_dttLastModified; }   ///< The last modification time.
+                /// The status change time (on Windows, the creation time).
             CDate           GetLastChanged( void ) const { return m_dttLastChanged; }
 
-                // The size of a file in bytes (0 for a directory); GetSize()
-                // is -1 when that does not fit in a long.
+                /// The size of a file in bytes (0 for a directory or anything
+                /// else that is not a regular file).
             int64_t         GetSizeBig( void ) const { return m_lFileSize; }
+                /// Same, as a long: -1 when that does not fit in a long.
             long            GetSize( void ) const;
-            const CString  &GetFileName( void ) const { return m_strFileName; }
+            const CString  &GetFileName( void ) const { return m_strFileName; }    ///< The path asked about.
     };
 } // namespace IASLib
 
