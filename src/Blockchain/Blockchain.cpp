@@ -278,8 +278,15 @@ namespace IASLib
             fail( pError, "unknown blockchain format version" );
             return std::unique_ptr<CBlockchain>();
         }
+        uint64_t nDifficulty = getU( pData + 8, 4 );
+        if ( nDifficulty > MAX_DIFFICULTY )
+        {
+                // As FromJson() does (it was clamped without a word).
+            fail( pError, "the difficulty is too high" );
+            return std::unique_ptr<CBlockchain>();
+        }
         std::unique_ptr<CBlockchain> pChain( new CBlockchain( CEmpty() ) );
-        pChain->setDifficulty( (uint32_t)getU( pData + 8, 4 ) );
+        pChain->setDifficulty( (uint32_t)nDifficulty );
         uint64_t nBlocks = getU( pData + 12, 8 );
 
         size_t nPos = nHeader;

@@ -110,6 +110,13 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - Every exception class overrides `Rethrow()`, so `IASLIB_RETHROW` keeps the class (it threw a plain `CException`).
   - `CException::ErrnoToText()` gives the system's text (a fixed table from one Unix was wrong elsewhere). `CFileException` uses it for numbers it has no message for.
   - `CWindowsSystemException` puts the system's text in the exception's message, and copes with `FormatMessage()` failing.
+- **JSON:**
+  - `JsonNodeType` values have a `JSON_` prefix (`JSON_ARRAY`, `JSON_BINARY`, `JSON_BOOLEAN`, `JSON_MISSING`, `JSON_NULL` (was `NULLVAL`), `JSON_NUMBER`, `JSON_OBJECT`, `JSON_STRING`): the bare names clashed with the Windows headers. Outside Windows the old names stay as aliases unless `IASLIB_JSON_NO_LEGACY_NAMES__` is defined.
+  - `CJsonNode::path()`, `at()` and `findPath()` return `const CJsonNode &`, and `CMissingNode::getInstance()` a `const` reference, so the shared missing node cannot be changed through them. Use `get()` (NULL when absent) to change a node.
+  - Integers from 2^63 to 2^64-1 are `isUnsignedLong()`; `isBigInteger()` now means too large for 64 bits.
+  - Arrays and objects store a missing node they are given as a JSON null.
+  - `CCollectiveNode` has a pure virtual `detachChildren()`; `CJsonNode::collect()` is no longer virtual.
+- **Blockchain:** difficulty is capped at `MAX_DIFFICULTY` (64): `CBlock::mine()` returns false above it, `setDifficulty()` and the constructor clamp to it, and `FromJson()` and `Deserialize()` refuse a higher one. (256 could never be mined.)
 - **Threading:** on Windows, `CThread::Kill()` ends the thread at its next sleep or semaphore wait (an APC) instead of `TerminateThread()`, which could stop it holding the heap lock and hang the process. It returns -1 if the thread has not reached one within two seconds.
 - **Memory manager:** with `IASLIB_MEMORY_MANAGER__` or `IASLIB_MEMORY_DEBUGGING__`, CObject classes are allocated through `CMemoryManager`. The fencepost allocator is now `CMemoryDebugHeap`, which reports one line per damaged fence (it printed one per byte) and reports through `CMemoryManager::SetErrorHandler()`. The memory manager also applies without RTTI.
 
@@ -228,6 +235,7 @@ The base types and collections, reviewed one by one and cleaned up, and template
 - **Configuration:** `CProfile::WriteInt()` (declared, never written), `DeleteEntry()`, `DeleteSection()`, `HasEntry()`, `GetSectionNames()`, `GetEntryNames()` and `Reload()`; `CSettings::HasSetting()`.
 - **DynamicLibraries:** `CDynamicLibrary::IsLoaded()`, `GetPath()`, `GetError()`, `FindFunction()` (NULL instead of throwing) and `PlatformName()`.
 - **Exceptions:** `CFileException::GetErrorNumber()`.
+- **JSON:** `CJsonParser::setMaxInputSize()` and `setMaxStringLength()` (off by default); unsigned 64-bit values: `isUnsignedLong()`, `canConvertToUnsignedLong()`, `unsignedLongValue()` and `asUnsignedLong()`.
 - **Tests:** `TestUtilities` (Configuration, DynamicLibraries, Encryption and Exceptions).
 - **Tests:** `TestBaseTypes` and `TestCollections`.
 
@@ -423,6 +431,8 @@ The base types and collections, reviewed one by one and cleaned up, and template
 - **Security:** external entities (XXE) are refused, and entity expansion ("billion laughs") is capped.
 - **Exceptions:**
   - The `IASLIB_THROW_*` macros threw a shared `static` exception, which two threads could change at once.
+  - JSON: deep trees no longer overflow the stack. The parser keeps its own stack, and writing, cloning, `equals()`, finding and destruction walk the tree without recursion, so a raised `setMaxDepth()` works (100,000 levels are tested); the default of 512 still rejects deeper input cleanly.
+  - JSON: the writer emits `null` for a missing child (it wrote `[,1]` and `{"a":}`). Removing a field shifts only the fields after it (the whole name index was rebuilt). Integers from 2^63 to 2^64-1 are exact (they were doubles), so Blockchain nonces round-trip across the full 64-bit range.
   - `CCollectionException` named itself `"CCollectionExcetption"`, and `CXMLException` `"CXMLExcetption"`.
   - `CStringException` registered `CObject` as its parent class; its and `CXMLException`'s number constructors left "Unknown Exception" on the call stack.
   - `CFileException`'s `EOVERFLOW` message was behind a misspelt `IASLIB_SUN_` and never compiled.
