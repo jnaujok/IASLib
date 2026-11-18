@@ -1,4 +1,7 @@
-/*
+/**
+ *  @file
+ *  @brief COutParam, one output parameter of a stored procedure.
+ *
  *  Database Class
  *
  *  Base class to store output parameters from stored procedures.
@@ -21,18 +24,23 @@
 
 namespace IASLib
 {
+        /// One output parameter of a stored procedure: a name and its value as text.
     class COutParam : public CObject
     {
         protected:
-            CString             m_strParamName;
-            CString             m_strParamValue;
+            CString             m_strParamName;     ///< The parameter's name.
+            CString             m_strParamValue;    ///< Its value.
         public:
+                                /// Creates a parameter (both strings are copied).
                                 COutParam( const char *strName, const char *strValue ) { m_strParamName = strName; m_strParamValue = strValue; }
+                                /// Destroys the parameter.
             virtual            ~COutParam( void ) {}
 
                                 DECLARE_OBJECT( COutParam, CObject )
 
+            /// The parameter's name.
             virtual const char *GetName( void ) { return (const char *)m_strParamName; }
+            /// The parameter's value.
             virtual const char *GetValue( void ) { return (const char *)m_strParamValue; }
     };
 } // namespace IASLib

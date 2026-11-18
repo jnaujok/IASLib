@@ -1,4 +1,5 @@
-/*
+/**
+ *  @file
  *  Result Set Class
  *
  *  This class stores the result of a stored procedure on those systems 
@@ -23,10 +24,15 @@
 
 namespace IASLib
 {
+        /// The rows a stored procedure returned, on databases that return them (Sybase).
+        ///
+        /// Owned by the CStoredProc it came from.
     class CResultSet : public CBaseResult
     {
         public:
+                                /// Creates an empty result set.
                                 CResultSet( void ) { }
+                                /// Destroys the result set.
             virtual            ~CResultSet( void ) { }
 
                                 DECLARE_OBJECT( CResultSet, CBaseResult )

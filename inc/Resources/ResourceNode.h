@@ -1,4 +1,5 @@
 /**
+ *  @file
  *  Resource Node
  *
  *      The base of the nodes in a view of a resource archive's contents:
@@ -21,10 +22,13 @@
 
 namespace IASLib
 {
+        /// A node in a view of an archive: a folder or a resource.
     class CResourceNode : public CObject
     {
         public:
+            /// Destroys the node.
             virtual            ~CResourceNode( void ) {}
+            /// True for a folder (CResourceDirectoryNode), false for a resource (CResourceFileNode).
             virtual bool        IsDirectory( void ) const = 0;
     };
 }

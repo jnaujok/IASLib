@@ -1,4 +1,5 @@
-/*
+/**
+ *  @file
  *  COracleResultSet
  *
  *  This class defines a placeholder class for Oracle Result sets, as 
@@ -27,18 +28,26 @@ extern "C"
 
 namespace IASLib
 {
+        /// The rows left on an Oracle cursor after a stored procedure call.
+        ///
+        /// Oracle does not return result sets from stored procedures, so
+        /// this is normally empty. Owned by its COracleStoredProc.
     class COracleResultSet : public CResultSet
     {
         protected:
-            Cda_Def            *m_pCDA;
-            ub2                *m_apnTypes;
+            Cda_Def            *m_pCDA;         ///< The cursor data area (not owned).
+            ub2                *m_apnTypes;     ///< Each column's OCI data type.
 
         public:
+                                /// Reads any rows from the cursor (check IsValid()).
                                 COracleResultSet( Cda_Def *pCDA );
+                                /// Frees the rows.
             virtual            ~COracleResultSet( void );
 
                                 DEFINE_OBJECT( COracleResultSet )
 
+            /// Frees the rows.
+            /// @return 0.
             virtual int         Close( void );
     };
 } // namespace IASLib
