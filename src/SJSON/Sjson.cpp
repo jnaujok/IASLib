@@ -563,11 +563,10 @@ namespace IASLib
         CSjsonBitWriter out;
         out.writeBits( nSenderId & 0xFFFF, 16 );
         std::vector< std::pair<unsigned long long, std::string> > aTags, aValues;
-        std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapDictionaries.find( nSenderId );
-        if ( it == m_mapDictionaries.end() && ! m_bIncludeSenderId )
-                // Our packets carry no sender id, so the peer asks under
-                // whatever id it gave this link: answer with our own.
-            it = m_mapDictionaries.find( m_nSenderId );
+            // Our packets carry no sender id, so the peer asks under whatever
+            // id it gave this link (perhaps the id we give the peer's own
+            // packets): then always answer with our own dictionary.
+        std::map<unsigned, CSjsonDictionary *>::iterator it = m_mapDictionaries.find( m_bIncludeSenderId ? nSenderId : m_nSenderId );
         if ( it != m_mapDictionaries.end() )
         {
             aTags = it->second->entriesAfter( nLastTag );

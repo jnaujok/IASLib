@@ -483,6 +483,25 @@ static void testOptionalSender( void )
     CHECK( listener.loadDictionary( update.data(), update.size() ) );
     std::unique_ptr<CJsonNode> pBack( listener.decode( packet.data(), packet.size(), 55 ) );
     CHECK( pBack && json( pBack.get() ) == json( pDoc.get() ) );
+
+        // Both peers omit ids and call each other 0: each NAK still gets the
+        // answering side's own names, not the names it learnt from the peer.
+    CSjson left( 1 ), right( 2 );
+    left.setIncludeSenderId( false );
+    right.setIncludeSenderId( false );
+    CObjectNode theirs, mine;
+    theirs.put( "theirs", 1 );
+    mine.put( "mine", 2 );
+    CHECK( right.encode( theirs, packet ) );
+    update = right.nakDictionary( 0, 0, 0 );
+    left.loadDictionary( update.data(), update.size() );
+    pBack.reset( left.decode( packet.data(), packet.size(), 0 ) );
+    CHECK( pBack && json( pBack.get() ) == json( &theirs ) );
+    CHECK( left.encode( mine, packet ) );
+    update = left.nakDictionary( 0, 0, 0 );
+    right.loadDictionary( update.data(), update.size() );
+    pBack.reset( right.decode( packet.data(), packet.size(), 0 ) );
+    CHECK( pBack && json( pBack.get() ) == json( &mine ) );
 }
 
     // One direction of an in-memory pipe.
