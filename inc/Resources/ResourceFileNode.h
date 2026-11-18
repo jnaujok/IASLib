@@ -33,7 +33,7 @@ namespace IASLib
 			const CResourceIndexEntry  &GetEntry( void ) const { return m_entry; }
 			const CString              &GetName( void ) const { return m_entry.m_strResourceName; }
 			uint64_t                    GetLength( void ) const { return m_entry.m_nLength; }
-			uint32_t                    GetCRC( void ) const { return m_entry.m_nCRC; }
+			const CSha256Digest        &GetDigest( void ) const { return m_entry.m_digest; }
 			short                       GetResource( void ) const { return m_entry.m_nResource; }
 			bool                        IsCompressed( void ) const { return m_entry.m_nCompression != RESFILE_COMPRESSION_NONE; }
 	};

@@ -70,17 +70,6 @@ static std::string dataOf( const CResource &oResource )
     return std::string( (const char *)oResource.GetData(), oResource.GetLength() );
 }
 
-static void testCRC( void )
-{
-    section( "CRC-32" );
-        // The standard check value.
-    CHECK( CResourceFile::CRC32( "123456789", 9 ) == 0xCBF43926U );
-    CHECK( CResourceFile::CRC32( NULL, 0 ) == 0 );
-        // In pieces.
-    uint32_t nPart = CResourceFile::CRC32( "1234", 4 );
-    CHECK( CResourceFile::CRC32( "56789", 5, nPart ) == 0xCBF43926U );
-}
-
 static void testResource( void )
 {
     section( "CResource" );
@@ -124,7 +113,7 @@ static void testArchive( void )
         CResourceFile archive( strPath, CResourceFile::CREATE );
         CHECK( archive.IsOpen() );
         CHECK( archive.GetCount() == 0 );
-        CHECK( fileLength( strPath ) == (long)CResourceFile::HEADER_SIZE + 4 );
+        CHECK( fileLength( strPath ) == (long)CResourceFile::HEADER_SIZE + 32 );     // and an empty index: its digest
 
         CHECK( archive.Put( makeResource( 1, 1, "greeting", "hello, world", 10 ) ) );
         CHECK( archive.Put( makeResource( 1, 2, "empty", "" ) ) );
@@ -158,7 +147,7 @@ static void testArchive( void )
         CHECK( dataOf( out ) == "hello, world" );
         CHECK( out.GetName() == "greeting" && out.GetModifiedBy() == "tester" && out.GetResourceType() == 10 );
         CResourceIndexEntry entry;
-        CHECK( archive.GetEntry( 1, 1, entry ) && entry.m_nLength == 12 && entry.m_nCRC == CResourceFile::CRC32( "hello, world", 12 ) );
+        CHECK( archive.GetEntry( 1, 1, entry ) && entry.m_nLength == 12 && entry.m_digest == CSHA256::Digest( "hello, world", 12 ) );
         CHECK( entry.m_dttLastModified.GetEpochDay() == out.GetLastModified().GetEpochDay() );
         CHECK( archive.Read( -5, 9, out ) && dataOf( out ) == "neg" );
 
@@ -170,6 +159,7 @@ static void testArchive( void )
         CHECK( folder1.GetDirectorySize() == 12 );
         CHECK( folder1.Get( 0 ).GetName() == "greeting" && folder1.Get( 1 ).GetName() == "empty" );
         CHECK( ! folder1.Get( 0 ).IsDirectory() && ! folder1.Get( 0 ).IsCompressed() );
+        CHECK( CSHA256::ToHex( folder1.Get( 0 ).GetDigest() ).size() == 64 );
         CHECK( archive.GetDirectory( 77 ).GetCount() == 0 );
         CHECK( archive.GetEntries().size() == 4 );
 
@@ -196,7 +186,7 @@ static void testArchive( void )
         CHECK( archive.IsOpen() && archive.IsReadOnly() );
         CHECK( archive.GetCount() == 4 );
             // Only the index the last Put() replaced.
-        CHECK( archive.GetWastedBytes() > 0 && archive.GetWastedBytes() < 200 );
+        CHECK( archive.GetWastedBytes() > 0 && archive.GetWastedBytes() < 1000 );
         CResource out;
         CHECK( archive.Read( 3, 3, out ) && dataOf( out ) == "compact" );
         CHECK( ! archive.Put( makeResource( 4, 4, "x", "y" ) ) );
@@ -335,6 +325,10 @@ static void testCache( void )
         // Use counts.
     CResourceIndexEntry entry;
     CHECK( archive.GetEntry( 1, 0, entry ) && entry.m_nUsage == 2 );
+        // The TCache's statistics.
+    CHECK( archive.GetCacheMisses() >= 10 && archive.GetCacheHits() == 0 );
+    CHECK( archive.Get( 1, 9 ) );
+    CHECK( archive.GetCacheHits() == 1 );
 
     archive.SetCacheLimit( 0 );
     CHECK( archive.GetCachedCount() == 0 && archive.GetCacheBytes() == 0 );
@@ -390,7 +384,6 @@ static void testThreads( void )
 
 int main( void )
 {
-    testCRC();
     testResource();
     testArchive();
     testDamage();

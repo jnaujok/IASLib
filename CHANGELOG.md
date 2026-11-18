@@ -160,14 +160,14 @@ The base types and collections, reviewed one by one and cleaned up, and template
   - `CMemoryDebugHeap`: fenceposts, double and foreign frees, spoiling freed memory, and optional leak tracking by type, file and line, with `ReportLeaks()` and `CheckAll()`.
   - `IASLIB_NEW`, a `new` that records the file and line.
   - `TestMemory`, and a CI job for the memory manager without the debugging heap.
-- **Resource archive** (it was an empty skeleton):
+- **Resource manager**, for games and other programs with many resources to load (it was an empty skeleton). It is built on the library's own pieces: CFile for the file, the streams' big-endian numbers for its format, `CSHA256` digests, `TCache` for caching, `CDataBlock` for data, and `CMutex`.
   - `CResourceFile` keeps resources in one file, found by folder and resource tags or by name, and is thread-safe.
-  - Data and index are CRC-checked. A crash part-way through a write leaves the archive as it was at the last `Flush()`.
+  - Data and index are checked with SHA-256 digests. A crash part-way through a write leaves the archive as it was at the last `Flush()`.
   - Auto-flush, or batched writes with `Flush()`. `Compact()` reclaims space left by replaced or removed resources.
-  - An LRU cache with a byte limit hands out `shared_ptr`s, so an evicted resource stays valid for whoever holds it.
+  - The cache is a `TCache` kept to a byte limit, with hit and miss counts. It hands out `shared_ptr`s, so an evicted resource stays valid for whoever holds it.
+  - On Windows an archive is limited to 2 GB, since CFile seeks with a `long`.
   - `CResource` holds the data, name, type, and when and by whom it was changed. It loads from and saves to files, with `Load()`/`Save()` against an archive.
   - `CResourceDirectoryNode` and `CResourceFileNode` give a folder view.
-  - `CResourceFile::CRC32()`.
   - `TestResources`.
 - **Stats and status:**
   - `CHistogram::GetCount()` and `GetCategoryCount()`.

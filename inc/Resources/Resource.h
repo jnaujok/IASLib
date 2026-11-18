@@ -1,7 +1,8 @@
 /**
  *  Resource
  *
- *      One resource: a block of data with a folder tag and a resource tag
+ *      One resource of a resource-heavy program (a game's textures,
+ * sounds, levels...): a block of data with a folder tag and a resource tag
  * (together its ID), a name, a type number for the program's own use, and
  * when and by whom it was last changed. Resources are kept in a
  * CResourceFile archive: Load() reads one, Save() writes one.
@@ -19,10 +20,10 @@
 #define IASLIB_RESOURCE_H__
 
 #include <stdint.h>
-#include <vector>
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/String_.h"
 #include "../BaseTypes/Date.h"
+#include "../BaseTypes/DataBlock.h"
 #include "ResourceIndex.h"
 
 namespace IASLib
@@ -38,7 +39,7 @@ namespace IASLib
             CDate                   m_dttLastModified;
             CString                 m_strModifiedBy;
             int                     m_nType;
-            std::vector<unsigned char> m_aData;
+            CDataBlock              m_data;
 
         public:
                                     DEFINE_OBJECT(CResource);
@@ -77,9 +78,10 @@ namespace IASLib
             void                    SetResourceType( int nType ) { m_nType = nType; }
 
                 // The data (GetData() is NULL when there is none).
-            const unsigned char    *GetData( void ) const { return m_aData.empty() ? NULL : &m_aData[0]; }
-            size_t                  GetLength( void ) const { return m_aData.size(); }
-            virtual long            getLength() { return (long)m_aData.size(); }
+            const unsigned char    *GetData( void ) const { return ( m_data.GetSize() ) ? (const unsigned char *)m_data : NULL; }
+            size_t                  GetLength( void ) const { return m_data.GetSize(); }
+            const CDataBlock       &GetDataBlock( void ) const { return m_data; }
+            virtual long            getLength() { return (long)m_data.GetSize(); }
                 // Replaces the data (and marks it changed now).
             void                    SetData( const void *pData, size_t nLength );
                 // Replaces the data with a file's contents; false if it cannot

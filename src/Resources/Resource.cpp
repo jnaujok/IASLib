@@ -15,7 +15,7 @@
 #include "Resource.h"
 #include "ResourceFile.h"
 
-#include <stdio.h>
+#include "../../inc/Files/File.h"
 #include <string.h>
 
 namespace IASLib
@@ -24,7 +24,7 @@ namespace IASLib
     IMPLEMENT_OBJECT( CResourceIndexEntry, CObject );
 
     CResourceIndexEntry::CResourceIndexEntry( void )
-        : m_nFolder( 0 ), m_nResource( 0 ), m_nType( 0 ), m_nOffset( 0 ), m_nLength( 0 ), m_nCRC( 0 ),
+        : m_nFolder( 0 ), m_nResource( 0 ), m_nType( 0 ), m_nOffset( 0 ), m_nLength( 0 ), m_digest(),
           m_nCompression( RESFILE_COMPRESSION_NONE ), m_nUsage( 0 )
     {
     }
@@ -48,7 +48,7 @@ namespace IASLib
         m_strModifiedBy = oSource.m_strModifiedBy;
         m_nOffset = oSource.m_nOffset;
         m_nLength = oSource.m_nLength;
-        m_nCRC = oSource.m_nCRC;
+        m_digest = oSource.m_digest;
         m_nCompression = oSource.m_nCompression;
         m_nUsage = oSource.m_nUsage;
         return *this;
@@ -84,7 +84,7 @@ namespace IASLib
         m_dttLastModified = oSource.m_dttLastModified;
         m_strModifiedBy = oSource.m_strModifiedBy;
         m_nType = oSource.m_nType;
-        m_aData = oSource.m_aData;
+        m_data = oSource.m_data;
         return *this;
     }
 
@@ -104,41 +104,56 @@ namespace IASLib
 
     void CResource::SetData( const void *pData, size_t nLength )
     {
-        if ( pData == NULL || nLength == 0 )
-            m_aData.clear();
-        else
-            m_aData.assign( (const unsigned char *)pData, (const unsigned char *)pData + nLength );
+        if ( pData == NULL )
+            nLength = 0;
+        m_data.ChangeSize( nLength, false );
+        if ( nLength )
+            m_data.Copy( pData, nLength );
         m_dttLastModified.SetToCurrent();
     }
 
+        // Through CFile, like the archive.
     bool CResource::LoadData( const char *strFilename )
     {
-        FILE *pFile = ( strFilename ) ? fopen( strFilename, "rb" ) : NULL;
-        if ( pFile == NULL )
+        if ( strFilename == NULL )
             return false;
-
-        std::vector<unsigned char> aData;
-        unsigned char abyBuffer[ 8192 ];
-        size_t nRead;
-        while ( ( nRead = fread( abyBuffer, 1, sizeof( abyBuffer ), pFile ) ) > 0 )
-            aData.insert( aData.end(), abyBuffer, abyBuffer + nRead );
-        bool bOk = ( ferror( pFile ) == 0 );
-        fclose( pFile );
-        if ( ! bOk )
+        try
+        {
+            CFile oFile( strFilename, CFile::READ | CFile::BINARY );
+            if ( ! oFile.IsOpen() )
+                return false;
+            long lSize = oFile.Seek( 0, CFile::END );
+            if ( lSize < 0 || oFile.Seek( 0, CFile::BEGIN ) != 0 )
+                return false;
+            CDataBlock data( (size_t)lSize );
+            if ( lSize > 0 && oFile.Read( (char *)data, (int)lSize ) != (int)lSize )
+                return false;
+            m_data = data;
+            m_dttLastModified.SetToCurrent();
+            return true;
+        }
+        catch ( ... )
+        {
             return false;
-
-        m_aData.swap( aData );
-        m_dttLastModified.SetToCurrent();
-        return true;
+        }
     }
 
     bool CResource::SaveData( const char *strFilename ) const
     {
-        FILE *pFile = ( strFilename ) ? fopen( strFilename, "wb" ) : NULL;
-        if ( pFile == NULL )
+        if ( strFilename == NULL )
             return false;
-        bool bOk = m_aData.empty() || fwrite( &m_aData[0], 1, m_aData.size(), pFile ) == m_aData.size();
-        bOk = ( fclose( pFile ) == 0 ) && bOk;
-        return bOk;
+        try
+        {
+            CFile oFile( strFilename, CFile::WRITE | CFile::BINARY );
+            if ( ! oFile.IsOpen() )
+                return false;
+            bool bOk = ( m_data.GetSize() == 0 ) ||
+                       oFile.Write( (const char *)m_data, (int)m_data.GetSize() ) == (int)m_data.GetSize();
+            return oFile.Close() && bOk;
+        }
+        catch ( ... )
+        {
+            return false;
+        }
     }
 } // namespace IASLib

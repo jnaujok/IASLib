@@ -4,7 +4,7 @@
  *      What a resource archive's index records about one resource: its
  * folder and resource tags (together its ID), name, type, when and by whom
  * it was last changed, and where its data is in the file, with the data's
- * length and CRC-32.
+ * length and SHA-256 digest.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 2007
@@ -22,6 +22,7 @@
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/String_.h"
 #include "../BaseTypes/Date.h"
+#include "../Encryption/Sha256.h"
 
 namespace IASLib
 {
@@ -41,7 +42,7 @@ namespace IASLib
             CString     m_strModifiedBy;
             uint64_t    m_nOffset;          // of the data in the file
             uint64_t    m_nLength;          // of the data
-            uint32_t    m_nCRC;             // CRC-32 of the data
+            CSha256Digest m_digest;         // SHA-256 of the data
             int         m_nCompression;
             long        m_nUsage;           // reads since the archive was opened
 

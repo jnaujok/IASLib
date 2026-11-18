@@ -1,7 +1,8 @@
 /**
  *  Resource File
  *
- *      See ResourceFile.h. The layout (numbers big-endian):
+ *      See ResourceFile.h. The layout (numbers big-endian, as CStream's
+ * PutUInt32() and the rest write them):
  *
  *      header (32 bytes)
  *          "IASRES\r\n"        magic (the CR LF catches text-mode copies)
@@ -11,11 +12,11 @@
  *          uint64              length of the index
  *      data                    each resource's bytes, anywhere after the header
  *      index                   for each resource:
- *          uint32 id, int32 type, uint32 compression, uint32 CRC-32,
- *          int64 epoch day, int32 milliseconds of the day,
+ *          uint32 id, uint32 type, uint32 compression, 32 bytes SHA-256,
+ *          uint64 epoch day, uint32 milliseconds of the day,
  *          uint64 offset, uint64 length,
  *          uint16 + bytes name, uint16 + bytes modified-by
- *                              then uint32 CRC-32 of all of the above
+ *                              then 32 bytes: SHA-256 of all of the above
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 2007
@@ -27,13 +28,13 @@
  */
 
 #include "ResourceFile.h"
+#include "../../inc/Streams/StringStream.h"
+#include "../../inc/Exceptions/StreamException.h"
 
+#include <limits.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
-#include <string>
-#ifdef IASLIB_WIN32__
-#include "Platform.h"
-#endif
 
 namespace IASLib
 {
@@ -41,153 +42,188 @@ namespace IASLib
 
     namespace
     {
-        const unsigned char s_abyMagic[ 8 ] = { 'I', 'A', 'S', 'R', 'E', 'S', '\r', '\n' };
-        const size_t DEFAULT_CACHE_LIMIT = 4 * 1024 * 1024;
+        const char s_achMagic[ 8 ] = { 'I', 'A', 'S', 'R', 'E', 'S', '\r', '\n' };
+        const size_t DEFAULT_CACHE_LIMIT = 16 * 1024 * 1024;
         const size_t COPY_CHUNK = 64 * 1024;
+        const size_t DIGEST_SIZE = sizeof( CSha256Digest );
 
-        bool seekTo( FILE *pFile, uint64_t nOffset )
-        {
-#ifdef IASLIB_WIN32__
-            return _fseeki64( pFile, (__int64)nOffset, SEEK_SET ) == 0;
-#else
-            return fseeko( pFile, (off_t)nOffset, SEEK_SET ) == 0;
-#endif
-        }
+            // CFile works in longs and ints.
+        bool fitsLong( uint64_t n ) { return n <= (uint64_t)LONG_MAX; }
 
-        bool fileSize( FILE *pFile, uint64_t &nSize )
+        bool readAt( CFile &oFile, uint64_t nOffset, void *pBuffer, size_t nLength )
         {
-#ifdef IASLIB_WIN32__
-            if ( _fseeki64( pFile, 0, SEEK_END ) != 0 )
+            if ( ! fitsLong( nOffset ) || oFile.Seek( (long)nOffset, CFile::BEGIN ) != (long)nOffset )
                 return false;
-            __int64 nAt = _ftelli64( pFile );
-#else
-            if ( fseeko( pFile, 0, SEEK_END ) != 0 )
-                return false;
-            off_t nAt = ftello( pFile );
-#endif
-            if ( nAt < 0 )
-                return false;
-            nSize = (uint64_t)nAt;
+            char *p = (char *)pBuffer;
+            while ( nLength > 0 )
+            {
+                int nChunk = ( nLength > (size_t)INT_MAX ) ? INT_MAX : (int)nLength;
+                if ( oFile.Read( p, nChunk ) != nChunk )
+                    return false;
+                p += nChunk;
+                nLength -= (size_t)nChunk;
+            }
             return true;
         }
 
-        bool readAt( FILE *pFile, uint64_t nOffset, void *pBuffer, size_t nLength )
+        bool writeAt( CFile &oFile, uint64_t nOffset, const void *pBuffer, size_t nLength )
         {
-            return seekTo( pFile, nOffset ) && ( nLength == 0 || fread( pBuffer, 1, nLength, pFile ) == nLength );
+            if ( ! fitsLong( nOffset ) || ! fitsLong( nOffset + nLength ) ||
+                 oFile.Seek( (long)nOffset, CFile::BEGIN ) != (long)nOffset )
+                return false;
+            const char *p = (const char *)pBuffer;
+            while ( nLength > 0 )
+            {
+                int nChunk = ( nLength > (size_t)INT_MAX ) ? INT_MAX : (int)nLength;
+                if ( oFile.Write( p, nChunk ) != nChunk )
+                    return false;
+                p += nChunk;
+                nLength -= (size_t)nChunk;
+            }
+            return true;
         }
 
-        bool writeAt( FILE *pFile, uint64_t nOffset, const void *pBuffer, size_t nLength )
+            // Opens with CFile, which throws when it cannot.
+        CFile *openFile( const char *strPath, int nMode )
         {
-            return seekTo( pFile, nOffset ) && ( nLength == 0 || fwrite( pBuffer, 1, nLength, pFile ) == nLength );
+            try
+            {
+                CFile *pFile = new CFile( strPath, nMode );
+                if ( pFile->IsOpen() )
+                    return pFile;
+                delete pFile;
+            }
+            catch ( ... )
+            {
+            }
+            return NULL;
         }
 
-            // Big-endian encoding into a byte vector, and decoding from one.
-        struct CWriter
+        bool fileExists( const char *strPath )
         {
-            std::vector<unsigned char> aBytes;
-            void u8( unsigned v ) { aBytes.push_back( (unsigned char)v ); }
-            void u16( unsigned v ) { u8( v >> 8 ); u8( v ); }
-            void u32( uint32_t v ) { u16( v >> 16 ); u16( v & 0xFFFF ); }
-            void u64( uint64_t v ) { u32( (uint32_t)( v >> 32 ) ); u32( (uint32_t)v ); }
-            void text( const CString &str )
-            {
-                size_t n = str.GetLength();
-                if ( n > 0xFFFF )
-                    n = 0xFFFF;
-                u16( (unsigned)n );
-                aBytes.insert( aBytes.end(), (const unsigned char *)(const char *)str, (const unsigned char *)(const char *)str + n );
-            }
-        };
+            CFile *pFile = openFile( strPath, CFile::READ | CFile::BINARY );
+            delete pFile;
+            return pFile != NULL;
+        }
 
-        struct CReader
+            // A new empty file (CFile has no "w+" mode), opened for reading
+            // and writing.
+        CFile *createFile( const char *strPath )
         {
-            const unsigned char *p;
-            size_t nLeft;
-            bool bOk;
-            CReader( const unsigned char *pData, size_t n ) : p( pData ), nLeft( n ), bOk( true ) {}
-            bool take( size_t n ) { if ( ! bOk || nLeft < n ) { bOk = false; return false; } return true; }
-            unsigned u8( void ) { if ( ! take( 1 ) ) return 0; nLeft--; return *p++; }
-            unsigned u16( void ) { unsigned a = u8(); return ( a << 8 ) | u8(); }
-            uint32_t u32( void ) { uint32_t a = u16(); return ( a << 16 ) | u16(); }
-            uint64_t u64( void ) { uint64_t a = u32(); return ( a << 32 ) | u32(); }
-            CString text( void )
-            {
-                size_t n = u16();
-                if ( ! take( n ) )
-                    return CString( "" );
-                CString str( (const char *)p, n );
-                p += n;
-                nLeft -= n;
-                return str;
-            }
-        };
+            CFile *pFile = openFile( strPath, CFile::WRITE | CFile::BINARY );
+            if ( pFile == NULL )
+                return NULL;
+            pFile->Close();
+            delete pFile;
+            return openFile( strPath, CFile::READ | CFile::WRITE | CFile::BINARY );
+        }
 
-        std::vector<unsigned char> encodeIndex( const std::map<uint32_t, CResourceIndexEntry> &mapIndex )
+        void putText( CStringStream &oOut, const CString &str )
         {
-            CWriter w;
+            size_t n = str.GetLength();
+            if ( n > 0xFFFF )
+                n = 0xFFFF;
+            oOut.PutUInt16( (uint16_t)n );
+            oOut.PutBuffer( (const char *)str, (int)n );
+        }
+
+        CString getText( CStringStream &oIn )
+        {
+            size_t n = oIn.GetUInt16();
+            std::string strText( n, '\0' );
+            if ( n )
+                oIn.GetExact( &strText[0], (int)n );
+            return CString( strText.data(), n );
+        }
+
+        std::string encodeIndex( const std::map<uint32_t, CResourceIndexEntry> &mapIndex )
+        {
+            CStringStream oOut;
             for ( std::map<uint32_t, CResourceIndexEntry>::const_iterator it = mapIndex.begin(); it != mapIndex.end(); ++it )
             {
                 const CResourceIndexEntry &e = it->second;
-                w.u32( e.GetID() );
-                w.u32( (uint32_t)e.m_nType );
-                w.u32( (uint32_t)e.m_nCompression );
-                w.u32( e.m_nCRC );
-                w.u64( (uint64_t)(int64_t)e.m_dttLastModified.GetEpochDay() );
+                oOut.PutUInt32( e.GetID() );
+                oOut.PutUInt32( (uint32_t)e.m_nType );
+                oOut.PutUInt32( (uint32_t)e.m_nCompression );
+                oOut.PutBuffer( (const char *)e.m_digest.data(), (int)DIGEST_SIZE );
+                oOut.PutUInt64( (uint64_t)(int64_t)e.m_dttLastModified.GetEpochDay() );
                 long lMillis = (long)e.m_dttLastModified.GetSOD() * 1000 + e.m_dttLastModified.GetMillisecond();
-                w.u32( (uint32_t)lMillis );
-                w.u64( e.m_nOffset );
-                w.u64( e.m_nLength );
-                w.text( e.m_strResourceName );
-                w.text( e.m_strModifiedBy );
+                oOut.PutUInt32( (uint32_t)lMillis );
+                oOut.PutUInt64( e.m_nOffset );
+                oOut.PutUInt64( e.m_nLength );
+                putText( oOut, e.m_strResourceName );
+                putText( oOut, e.m_strModifiedBy );
             }
-            w.u32( CResourceFile::CRC32( w.aBytes.empty() ? NULL : &w.aBytes[0], w.aBytes.size() ) );
-            return w.aBytes;
+            std::string strIndex = oOut.GetOutput();
+            CSha256Digest digest = CSHA256::Digest( strIndex );
+            strIndex.append( (const char *)digest.data(), DIGEST_SIZE );
+            return strIndex;
         }
 
-        std::vector<unsigned char> encodeHeader( size_t nCount, uint64_t nIndexOffset, uint64_t nIndexLength )
+        std::string encodeHeader( size_t nCount, uint64_t nIndexOffset, uint64_t nIndexLength )
         {
-            CWriter w;
-            w.aBytes.assign( s_abyMagic, s_abyMagic + sizeof( s_abyMagic ) );
-            w.u32( CResourceFile::FORMAT_VERSION );
-            w.u32( (uint32_t)nCount );
-            w.u64( nIndexOffset );
-            w.u64( nIndexLength );
-            return w.aBytes;
+            CStringStream oOut;
+            oOut.PutBuffer( s_achMagic, (int)sizeof( s_achMagic ) );
+            oOut.PutUInt32( CResourceFile::FORMAT_VERSION );
+            oOut.PutUInt32( (uint32_t)nCount );
+            oOut.PutUInt64( nIndexOffset );
+            oOut.PutUInt64( nIndexLength );
+            return oOut.GetOutput();
         }
 
-        bool replaceFile( const char *strFrom, const char *strTo )
+        CSha256Digest digestOf( const CResource &oResource )
         {
-#ifdef IASLIB_WIN32__
-            return MoveFileExA( strFrom, strTo, MOVEFILE_REPLACE_EXISTING ) != 0;
-#else
-            return rename( strFrom, strTo ) == 0;
-#endif
+            return CSHA256::Digest( oResource.GetData(), oResource.GetLength() );
         }
     }
 
-    uint32_t CResourceFile::CRC32( const void *pData, size_t nLength, uint32_t nCRC )
+    CResourceCache::CResourceCache( size_t nByteLimit )
+        : TCache< uint32_t, std::shared_ptr<const CResource> >( (size_t)1 << 20 ), m_nBytes( 0 ), m_nByteLimit( nByteLimit )
     {
-        static uint32_t s_anTable[ 256 ];
-        static bool s_bTable = ( [](){
-            for ( uint32_t n = 0; n < 256; n++ )
-            {
-                uint32_t c = n;
-                for ( int k = 0; k < 8; k++ )
-                    c = ( c & 1 ) ? 0xEDB88320U ^ ( c >> 1 ) : ( c >> 1 );
-                s_anTable[n] = c;
-            }
-            return true;
-        } )();
-        (void)s_bTable;
-
-        const unsigned char *p = (const unsigned char *)pData;
-        nCRC = ~nCRC;
-        for ( size_t n = 0; n < nLength; n++ )
-            nCRC = s_anTable[ ( nCRC ^ p[n] ) & 0xFF ] ^ ( nCRC >> 8 );
-        return ~nCRC;
+        SetEvictionHandler( [this]( const uint32_t &, std::shared_ptr<const CResource> &pResource ) {
+            if ( pResource )
+                m_nBytes -= pResource->GetLength();
+        } );
     }
 
-    CResourceFile::CResourceFile( void )
+    void CResourceCache::Trim( void )
+    {
+        while ( GetCount() > 0 && m_nBytes > m_nByteLimit )
+            EvictOldest();
+    }
+
+    void CResourceCache::Add( const std::shared_ptr<const CResource> &pResource )
+    {
+        uint32_t nID = pResource->GetID();
+        Erase( nID );
+        if ( pResource->GetLength() > m_nByteLimit )
+            return;                 // too big to keep
+        Put( nID, pResource );
+        m_nBytes += pResource->GetLength();
+        Trim();
+    }
+
+        // (TCache's Remove() and Clear() do not call the eviction handler.)
+    void CResourceCache::Erase( uint32_t nID )
+    {
+        std::shared_ptr<const CResource> pOld;
+        if ( Remove( nID, pOld ) && pOld )
+            m_nBytes -= pOld->GetLength();
+    }
+
+    void CResourceCache::EraseAll( void )
+    {
+        Clear();
+        m_nBytes = 0;
+    }
+
+    void CResourceCache::SetByteLimit( size_t nBytes )
+    {
+        m_nByteLimit = nBytes;
+        Trim();
+    }
+
+    CResourceFile::CResourceFile( void ) : m_cache( DEFAULT_CACHE_LIMIT )
     {
         m_pFile = NULL;
         m_nMode = READ_ONLY;
@@ -196,11 +232,9 @@ namespace IASLib
         m_nWasted = 0;
         m_bDirty = false;
         m_bAutoFlush = true;
-        m_nCacheBytes = 0;
-        m_nCacheLimit = DEFAULT_CACHE_LIMIT;
     }
 
-    CResourceFile::CResourceFile( const char *strPath, OpenMode nMode )
+    CResourceFile::CResourceFile( const char *strPath, OpenMode nMode ) : m_cache( DEFAULT_CACHE_LIMIT )
     {
         m_pFile = NULL;
         m_nMode = READ_ONLY;
@@ -209,8 +243,6 @@ namespace IASLib
         m_nWasted = 0;
         m_bDirty = false;
         m_bAutoFlush = true;
-        m_nCacheBytes = 0;
-        m_nCacheLimit = DEFAULT_CACHE_LIMIT;
         Open( strPath, nMode );
     }
 
@@ -233,12 +265,13 @@ namespace IASLib
     void CResourceFile::CloseFile( void )
     {
         if ( m_pFile )
-            fclose( m_pFile );
+        {
+            m_pFile->Close();
+            delete m_pFile;
+        }
         m_pFile = NULL;
         m_mapIndex.clear();
-        m_listLRU.clear();
-        m_mapResources.clear();
-        m_nCacheBytes = 0;
+        m_cache.EraseAll();
         m_nAppendAt = HEADER_SIZE;
         m_nIndexLength = 0;
         m_nWasted = 0;
@@ -247,7 +280,7 @@ namespace IASLib
 
     bool CResourceFile::Open( const char *strPath, OpenMode nMode )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         Close();
         m_strLastError = "";
         if ( strPath == NULL || *strPath == '\0' )
@@ -259,25 +292,21 @@ namespace IASLib
         bool bNew = false;
         if ( nMode == READ_ONLY )
         {
-            m_pFile = fopen( strPath, "rb" );
+            m_pFile = openFile( strPath, CFile::READ | CFile::BINARY );
         }
         else if ( nMode == CREATE )
         {
-            m_pFile = fopen( strPath, "w+b" );
+            m_pFile = createFile( strPath );
             bNew = true;
         }
         else
         {
-            m_pFile = fopen( strPath, "r+b" );
+            m_pFile = openFile( strPath, CFile::READ | CFile::WRITE | CFile::BINARY );
             if ( m_pFile == NULL )
             {
-                FILE *pExisting = fopen( strPath, "rb" );
-                if ( pExisting )
-                {
-                    fclose( pExisting );
+                if ( fileExists( strPath ) )
                     return Fail( "%s cannot be opened for writing", strPath );
-                }
-                m_pFile = fopen( strPath, "w+b" );
+                m_pFile = createFile( strPath );
                 bNew = true;
             }
         }
@@ -291,7 +320,9 @@ namespace IASLib
             m_bDirty = true;
             if ( ! Flush() )
             {
+                CString strError = m_strLastError;
                 CloseFile();
+                m_strLastError = strError;
                 return false;
             }
             return true;
@@ -309,63 +340,73 @@ namespace IASLib
 
     bool CResourceFile::ReadIndex( void )
     {
-        uint64_t nFileSize = 0;
-        if ( ! fileSize( m_pFile, nFileSize ) || nFileSize < HEADER_SIZE )
+        long lSize = m_pFile->Seek( 0, CFile::END );
+        if ( lSize < (long)HEADER_SIZE )
             return Fail( "%s is not a resource archive (too short)", (const char *)m_strPath );
+        uint64_t nFileSize = (uint64_t)lSize;
 
-        unsigned char abyHeader[ HEADER_SIZE ];
-        if ( ! readAt( m_pFile, 0, abyHeader, HEADER_SIZE ) )
+        char achHeader[ HEADER_SIZE ];
+        if ( ! readAt( *m_pFile, 0, achHeader, HEADER_SIZE ) )
             return Fail( "%s cannot be read", (const char *)m_strPath );
-        if ( memcmp( abyHeader, s_abyMagic, sizeof( s_abyMagic ) ) != 0 )
+        if ( memcmp( achHeader, s_achMagic, sizeof( s_achMagic ) ) != 0 )
             return Fail( "%s is not a resource archive", (const char *)m_strPath );
 
-        CReader header( abyHeader + sizeof( s_abyMagic ), HEADER_SIZE - sizeof( s_abyMagic ) );
-        uint32_t nVersion = header.u32();
-        uint32_t nCount = header.u32();
-        uint64_t nIndexOffset = header.u64();
-        uint64_t nIndexLength = header.u64();
+        uint32_t nVersion, nCount;
+        uint64_t nIndexOffset, nIndexLength;
+        {
+            CStringStream oHeader( achHeader + sizeof( s_achMagic ), HEADER_SIZE - sizeof( s_achMagic ) );
+            nVersion = oHeader.GetUInt32();
+            nCount = oHeader.GetUInt32();
+            nIndexOffset = oHeader.GetUInt64();
+            nIndexLength = oHeader.GetUInt64();
+        }
         if ( nVersion == 0 || nVersion > FORMAT_VERSION )
             return Fail( "%s is archive format %u, which this library cannot read", (const char *)m_strPath, (unsigned)nVersion );
-        if ( nIndexOffset < HEADER_SIZE || nIndexLength < 4 || nIndexOffset > nFileSize || nIndexLength > nFileSize - nIndexOffset ||
-             nIndexLength > (uint64_t)(size_t)-1 )
+        if ( nIndexOffset < HEADER_SIZE || nIndexLength < DIGEST_SIZE || nIndexOffset > nFileSize ||
+             nIndexLength > nFileSize - nIndexOffset )
             return Fail( "%s has a damaged header", (const char *)m_strPath );
 
-        std::vector<unsigned char> aIndex( (size_t)nIndexLength );
-        if ( ! readAt( m_pFile, nIndexOffset, &aIndex[0], aIndex.size() ) )
+        std::string strIndex( (size_t)nIndexLength, '\0' );
+        if ( ! readAt( *m_pFile, nIndexOffset, &strIndex[0], strIndex.size() ) )
             return Fail( "%s: the index cannot be read", (const char *)m_strPath );
 
-        size_t nBody = aIndex.size() - 4;
-        CReader crc( &aIndex[ nBody ], 4 );
-        if ( crc.u32() != CRC32( &aIndex[0], nBody ) )
-            return Fail( "%s: the index is damaged (CRC)", (const char *)m_strPath );
+        size_t nBody = strIndex.size() - DIGEST_SIZE;
+        CSha256Digest digest = CSHA256::Digest( strIndex.data(), nBody );
+        if ( memcmp( digest.data(), strIndex.data() + nBody, DIGEST_SIZE ) != 0 )
+            return Fail( "%s: the index is damaged (digest)", (const char *)m_strPath );
 
-        CReader r( &aIndex[0], nBody );
         uint64_t nLive = 0;
-        for ( uint32_t n = 0; n < nCount; n++ )
+        try
         {
-            CResourceIndexEntry e;
-            uint32_t nID = r.u32();
-            e.m_nFolder = (short)(unsigned short)( nID >> 16 );
-            e.m_nResource = (short)(unsigned short)( nID & 0xFFFF );
-            e.m_nType = (int)r.u32();
-            e.m_nCompression = (int)r.u32();
-            e.m_nCRC = r.u32();
-            long lEpochDay = (long)(int64_t)r.u64();
-            long lMillis = (long)r.u32();
-            e.m_dttLastModified = CDate( lEpochDay, lMillis );
-            e.m_nOffset = r.u64();
-            e.m_nLength = r.u64();
-            e.m_strResourceName = r.text();
-            e.m_strModifiedBy = r.text();
-            if ( ! r.bOk )
-                return Fail( "%s: the index is damaged (short)", (const char *)m_strPath );
-            if ( e.m_nOffset < HEADER_SIZE || e.m_nOffset > nFileSize || e.m_nLength > nFileSize - e.m_nOffset )
-                return Fail( "%s: resource %d/%d lies outside the file", (const char *)m_strPath, (int)e.m_nFolder, (int)e.m_nResource );
-            nLive += e.m_nLength;
-            m_mapIndex[ nID ] = e;
+            CStringStream oIndex( strIndex.data(), nBody );
+            for ( uint32_t n = 0; n < nCount; n++ )
+            {
+                CResourceIndexEntry e;
+                uint32_t nID = oIndex.GetUInt32();
+                e.m_nFolder = (short)(unsigned short)( nID >> 16 );
+                e.m_nResource = (short)(unsigned short)( nID & 0xFFFF );
+                e.m_nType = (int)oIndex.GetUInt32();
+                e.m_nCompression = (int)oIndex.GetUInt32();
+                oIndex.GetExact( (char *)e.m_digest.data(), (int)DIGEST_SIZE );
+                long lEpochDay = (long)(int64_t)oIndex.GetUInt64();
+                long lMillis = (long)oIndex.GetUInt32();
+                e.m_dttLastModified = CDate( lEpochDay, lMillis );
+                e.m_nOffset = oIndex.GetUInt64();
+                e.m_nLength = oIndex.GetUInt64();
+                e.m_strResourceName = getText( oIndex );
+                e.m_strModifiedBy = getText( oIndex );
+                if ( e.m_nOffset < HEADER_SIZE || e.m_nOffset > nFileSize || e.m_nLength > nFileSize - e.m_nOffset )
+                    return Fail( "%s: resource %d/%d lies outside the file", (const char *)m_strPath, (int)e.m_nFolder, (int)e.m_nResource );
+                nLive += e.m_nLength;
+                m_mapIndex[ nID ] = e;
+            }
+            if ( oIndex.bytesRemaining() != 0 )
+                return Fail( "%s: the index is damaged (long)", (const char *)m_strPath );
         }
-        if ( r.nLeft != 0 )
-            return Fail( "%s: the index is damaged (long)", (const char *)m_strPath );
+        catch ( CStreamException & )
+        {
+            return Fail( "%s: the index is damaged (short)", (const char *)m_strPath );
+        }
 
         m_nIndexLength = nIndexLength;
         m_nAppendAt = nFileSize;
@@ -375,23 +416,23 @@ namespace IASLib
         return true;
     }
 
-    bool CResourceFile::WriteIndexAndHeader( FILE *pFile, const std::map<uint32_t, CResourceIndexEntry> &mapIndex,
+    bool CResourceFile::WriteIndexAndHeader( CFile &oFile, const std::map<uint32_t, CResourceIndexEntry> &mapIndex,
                                              uint64_t nIndexOffset, uint64_t &nIndexLength )
     {
-        std::vector<unsigned char> aIndex = encodeIndex( mapIndex );
+        std::string strIndex = encodeIndex( mapIndex );
             // The index first, then the header that points to it.
-        if ( ! writeAt( pFile, nIndexOffset, &aIndex[0], aIndex.size() ) || fflush( pFile ) != 0 )
+        if ( ! writeAt( oFile, nIndexOffset, strIndex.data(), strIndex.size() ) || ! oFile.Flush() )
             return Fail( "%s: the index cannot be written", (const char *)m_strPath );
-        std::vector<unsigned char> aHeader = encodeHeader( mapIndex.size(), nIndexOffset, aIndex.size() );
-        if ( ! writeAt( pFile, 0, &aHeader[0], aHeader.size() ) || fflush( pFile ) != 0 )
+        std::string strHeader = encodeHeader( mapIndex.size(), nIndexOffset, strIndex.size() );
+        if ( ! writeAt( oFile, 0, strHeader.data(), strHeader.size() ) || ! oFile.Flush() )
             return Fail( "%s: the header cannot be written", (const char *)m_strPath );
-        nIndexLength = aIndex.size();
+        nIndexLength = strIndex.size();
         return true;
     }
 
     bool CResourceFile::Flush( void )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         if ( m_pFile == NULL )
             return Fail( "not open" );
         if ( ! m_bDirty )
@@ -401,7 +442,7 @@ namespace IASLib
 
         uint64_t nOldIndex = m_nIndexLength;
         uint64_t nNewLength = 0;
-        if ( ! WriteIndexAndHeader( m_pFile, m_mapIndex, m_nAppendAt, nNewLength ) )
+        if ( ! WriteIndexAndHeader( *m_pFile, m_mapIndex, m_nAppendAt, nNewLength ) )
             return false;
         m_nWasted += nOldIndex;                 // the index it replaces
         m_nIndexLength = nNewLength;
@@ -412,7 +453,7 @@ namespace IASLib
 
     bool CResourceFile::Close( void )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         if ( m_pFile == NULL )
             return true;
         bool bOk = ( ! m_bDirty || m_nMode == READ_ONLY ) ? true : Flush();
@@ -422,37 +463,37 @@ namespace IASLib
 
     bool CResourceFile::IsOpen( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         return m_pFile != NULL;
     }
 
     CString CResourceFile::GetLastError( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         return m_strLastError;
     }
 
     CString CResourceFile::GetPath( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         return m_strPath;
     }
 
     size_t CResourceFile::GetCount( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         return m_mapIndex.size();
     }
 
     bool CResourceFile::Exists( short nFolder, short nResource ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         return m_mapIndex.find( CResourceIndexEntry::MakeID( nFolder, nResource ) ) != m_mapIndex.end();
     }
 
     bool CResourceFile::FindByName( const char *strName, short &nFolder, short &nResource ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         if ( strName == NULL )
             return false;
         for ( std::map<uint32_t, CResourceIndexEntry>::const_iterator it = m_mapIndex.begin(); it != m_mapIndex.end(); ++it )
@@ -469,7 +510,7 @@ namespace IASLib
 
     bool CResourceFile::GetEntry( short nFolder, short nResource, CResourceIndexEntry &oEntry ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         std::map<uint32_t, CResourceIndexEntry>::const_iterator it = m_mapIndex.find( CResourceIndexEntry::MakeID( nFolder, nResource ) );
         if ( it == m_mapIndex.end() )
             return false;
@@ -479,7 +520,7 @@ namespace IASLib
 
     std::vector<CResourceIndexEntry> CResourceFile::GetEntries( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         std::vector<CResourceIndexEntry> aEntries;
         for ( std::map<uint32_t, CResourceIndexEntry>::const_iterator it = m_mapIndex.begin(); it != m_mapIndex.end(); ++it )
             aEntries.push_back( it->second );
@@ -488,7 +529,7 @@ namespace IASLib
 
     std::vector<short> CResourceFile::GetFolders( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         std::vector<short> aFolders;
         for ( std::map<uint32_t, CResourceIndexEntry>::const_iterator it = m_mapIndex.begin(); it != m_mapIndex.end(); ++it )
         {
@@ -500,7 +541,7 @@ namespace IASLib
 
     CResourceDirectoryNode CResourceFile::GetDirectory( short nFolder ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         CResourceDirectoryNode oDirectory( nFolder );
         uint32_t nFirst = CResourceIndexEntry::MakeID( nFolder, 0 );
         for ( std::map<uint32_t, CResourceIndexEntry>::const_iterator it = m_mapIndex.lower_bound( nFirst );
@@ -511,48 +552,20 @@ namespace IASLib
         return oDirectory;
     }
 
-    void CResourceFile::CacheErase( uint32_t nID )
-    {
-        std::map<uint32_t, CCached>::iterator it = m_mapResources.find( nID );
-        if ( it == m_mapResources.end() )
-            return;
-        m_nCacheBytes -= it->second.pResource->GetLength();
-        m_listLRU.erase( it->second.itLRU );
-        m_mapResources.erase( it );
-    }
-
-    void CResourceFile::CacheInsert( const std::shared_ptr<const CResource> &pResource )
-    {
-        uint32_t nID = pResource->GetID();
-        CacheErase( nID );
-        size_t nSize = pResource->GetLength();
-        if ( nSize > m_nCacheLimit )
-            return;
-        while ( ! m_listLRU.empty() && m_nCacheBytes + nSize > m_nCacheLimit )
-            CacheErase( m_listLRU.back() );
-        m_listLRU.push_front( nID );
-        CCached cached;
-        cached.pResource = pResource;
-        cached.itLRU = m_listLRU.begin();
-        m_mapResources[ nID ] = cached;
-        m_nCacheBytes += nSize;
-    }
-
     std::shared_ptr<const CResource> CResourceFile::Get( short nFolder, short nResource )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         uint32_t nID = CResourceIndexEntry::MakeID( nFolder, nResource );
         std::map<uint32_t, CResourceIndexEntry>::iterator itEntry = m_mapIndex.find( nID );
         if ( m_pFile == NULL || itEntry == m_mapIndex.end() )
             return std::shared_ptr<const CResource>();
         CResourceIndexEntry &e = itEntry->second;
 
-        std::map<uint32_t, CCached>::iterator itCached = m_mapResources.find( nID );
-        if ( itCached != m_mapResources.end() )
+        std::shared_ptr<const CResource> *pCached = m_cache.Get( nID );
+        if ( pCached != NULL )
         {
-            m_listLRU.splice( m_listLRU.begin(), m_listLRU, itCached->second.itLRU );
             e.m_nUsage++;
-            return itCached->second.pResource;
+            return *pCached;
         }
 
         if ( e.m_nCompression != RESFILE_COMPRESSION_NONE )
@@ -566,26 +579,27 @@ namespace IASLib
             return std::shared_ptr<const CResource>();
         }
 
-        std::vector<unsigned char> aData( (size_t)e.m_nLength );
-        if ( ! readAt( m_pFile, e.m_nOffset, aData.empty() ? NULL : &aData[0], aData.size() ) )
+        CDataBlock data( (size_t)e.m_nLength );
+        if ( ! readAt( *m_pFile, e.m_nOffset, (unsigned char *)data, data.GetSize() ) )
         {
             Fail( "resource %d/%d cannot be read", (int)nFolder, (int)nResource );
             return std::shared_ptr<const CResource>();
         }
-        if ( CRC32( aData.empty() ? NULL : &aData[0], aData.size() ) != e.m_nCRC )
+        CSha256Digest digest = CSHA256::Digest( (const unsigned char *)data, data.GetSize() );
+        if ( digest != e.m_digest )
         {
-            Fail( "resource %d/%d is damaged (CRC)", (int)nFolder, (int)nResource );
+            Fail( "resource %d/%d is damaged (digest)", (int)nFolder, (int)nResource );
             return std::shared_ptr<const CResource>();
         }
 
         std::shared_ptr<CResource> pResource( new CResource( nFolder, nResource ) );
-        pResource->SetData( aData.empty() ? NULL : &aData[0], aData.size() );
+        pResource->SetData( (const unsigned char *)data, data.GetSize() );
         pResource->SetName( e.m_strResourceName );
         pResource->SetModifiedBy( e.m_strModifiedBy );
         pResource->SetResourceType( e.m_nType );
         pResource->SetLastModified( e.m_dttLastModified );
         e.m_nUsage++;
-        CacheInsert( pResource );
+        m_cache.Add( pResource );
         return pResource;
     }
 
@@ -600,7 +614,7 @@ namespace IASLib
 
     bool CResourceFile::Put( const CResource &oResource )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         if ( m_pFile == NULL )
             return Fail( "not open" );
         if ( m_nMode == READ_ONLY )
@@ -609,7 +623,7 @@ namespace IASLib
             // After the end of the file: nothing the header points to is
             // touched until Flush().
         uint64_t nOffset = m_nAppendAt;
-        if ( ! writeAt( m_pFile, nOffset, oResource.GetData(), oResource.GetLength() ) )
+        if ( ! writeAt( *m_pFile, nOffset, oResource.GetData(), oResource.GetLength() ) )
             return Fail( "resource %d/%d cannot be written", (int)oResource.GetFolder(), (int)oResource.GetResource() );
 
         uint32_t nID = oResource.GetID();
@@ -626,19 +640,19 @@ namespace IASLib
         e.m_strModifiedBy = oResource.GetModifiedBy();
         e.m_nOffset = nOffset;
         e.m_nLength = oResource.GetLength();
-        e.m_nCRC = CRC32( oResource.GetData(), oResource.GetLength() );
+        e.m_digest = digestOf( oResource );
         e.m_nCompression = RESFILE_COMPRESSION_NONE;
         m_mapIndex[ nID ] = e;
         m_nAppendAt += oResource.GetLength();
         m_bDirty = true;
 
-        CacheInsert( std::shared_ptr<const CResource>( new CResource( oResource ) ) );
+        m_cache.Add( std::shared_ptr<const CResource>( new CResource( oResource ) ) );
         return ( m_bAutoFlush ) ? Flush() : true;
     }
 
     bool CResourceFile::Remove( short nFolder, short nResource )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         if ( m_pFile == NULL )
             return Fail( "not open" );
         if ( m_nMode == READ_ONLY )
@@ -649,26 +663,26 @@ namespace IASLib
             return false;
         m_nWasted += it->second.m_nLength;
         m_mapIndex.erase( it );
-        CacheErase( nID );
+        m_cache.Erase( nID );
         m_bDirty = true;
         return ( m_bAutoFlush ) ? Flush() : true;
     }
 
     void CResourceFile::SetAutoFlush( bool bAutoFlush )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         m_bAutoFlush = bAutoFlush;
     }
 
     uint64_t CResourceFile::GetWastedBytes( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         return m_nWasted;
     }
 
     bool CResourceFile::Compact( void )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
+        CMutexLock lock( m_mutex );
         if ( m_pFile == NULL )
             return Fail( "not open" );
         if ( m_nMode == READ_ONLY )
@@ -679,13 +693,13 @@ namespace IASLib
             // Everything live into a new file beside this one, then the new
             // file replaces it. Until then this file is untouched.
         std::string strTemp = std::string( (const char *)m_strPath ) + ".compact";
-        FILE *pNew = fopen( strTemp.c_str(), "w+b" );
+        CFile *pNew = createFile( strTemp.c_str() );
         if ( pNew == NULL )
             return Fail( "%s cannot be created", strTemp.c_str() );
 
         std::map<uint32_t, CResourceIndexEntry> mapNew = m_mapIndex;
         uint64_t nAt = HEADER_SIZE;
-        std::vector<unsigned char> aBuffer( COPY_CHUNK );
+        CDataBlock buffer( COPY_CHUNK );
         bool bOk = true;
         for ( std::map<uint32_t, CResourceIndexEntry>::iterator it = mapNew.begin(); bOk && it != mapNew.end(); ++it )
         {
@@ -693,31 +707,48 @@ namespace IASLib
             while ( bOk && nDone < it->second.m_nLength )
             {
                 size_t nChunk = (size_t)( ( it->second.m_nLength - nDone < COPY_CHUNK ) ? it->second.m_nLength - nDone : COPY_CHUNK );
-                bOk = readAt( m_pFile, it->second.m_nOffset + nDone, &aBuffer[0], nChunk ) &&
-                      writeAt( pNew, nAt + nDone, &aBuffer[0], nChunk );
+                bOk = readAt( *m_pFile, it->second.m_nOffset + nDone, (unsigned char *)buffer, nChunk ) &&
+                      writeAt( *pNew, nAt + nDone, (unsigned char *)buffer, nChunk );
                 nDone += nChunk;
             }
             it->second.m_nOffset = nAt;
             nAt += it->second.m_nLength;
         }
         uint64_t nIndexLength = 0;
-        bOk = bOk && WriteIndexAndHeader( pNew, mapNew, nAt, nIndexLength );
-        bOk = ( fclose( pNew ) == 0 ) && bOk;
-        if ( ! bOk )
+        bOk = bOk && WriteIndexAndHeader( *pNew, mapNew, nAt, nIndexLength );
+        bOk = pNew->Close() && bOk;
+        delete pNew;
+
+        bool bReplaced = false;
+        if ( bOk )
         {
-            remove( strTemp.c_str() );
+            m_pFile->Close();
+            delete m_pFile;
+            m_pFile = NULL;
+            try
+            {
+#ifdef IASLIB_WIN32__
+                    // Windows will not rename over an existing file.
+                CFile::Delete( m_strPath );
+#endif
+                bReplaced = CFile::Rename( strTemp.c_str(), m_strPath );
+            }
+            catch ( ... )
+            {
+                bReplaced = false;
+            }
+            m_pFile = openFile( m_strPath, CFile::READ | CFile::WRITE | CFile::BINARY );
+        }
+        if ( ! bReplaced )
+        {
+            try { CFile::Delete( strTemp.c_str() ); } catch ( ... ) {}
+            if ( m_pFile == NULL )
+            {
+                CloseFile();
+                return Fail( "%s: compacting failed, and the archive could not be reopened", (const char *)m_strPath );
+            }
             return Fail( "%s: compacting failed; the archive is unchanged", (const char *)m_strPath );
         }
-
-        fclose( m_pFile );
-        m_pFile = NULL;
-        if ( ! replaceFile( strTemp.c_str(), m_strPath ) )
-        {
-            m_pFile = fopen( m_strPath, "r+b" );
-            remove( strTemp.c_str() );
-            return Fail( "%s could not be replaced; the archive is unchanged", (const char *)m_strPath );
-        }
-        m_pFile = fopen( m_strPath, "r+b" );
         if ( m_pFile == NULL )
         {
             CloseFile();
@@ -737,21 +768,31 @@ namespace IASLib
 
     void CResourceFile::SetCacheLimit( size_t nBytes )
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
-        m_nCacheLimit = nBytes;
-        while ( ! m_listLRU.empty() && m_nCacheBytes > m_nCacheLimit )
-            CacheErase( m_listLRU.back() );
+        CMutexLock lock( m_mutex );
+        m_cache.SetByteLimit( nBytes );
     }
 
     size_t CResourceFile::GetCacheBytes( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
-        return m_nCacheBytes;
+        CMutexLock lock( m_mutex );
+        return m_cache.GetBytes();
     }
 
     size_t CResourceFile::GetCachedCount( void ) const
     {
-        std::lock_guard<std::recursive_mutex> lock( m_mutex );
-        return m_mapResources.size();
+        CMutexLock lock( m_mutex );
+        return m_cache.GetCount();
+    }
+
+    uint64_t CResourceFile::GetCacheHits( void ) const
+    {
+        CMutexLock lock( m_mutex );
+        return m_cache.GetHits();
+    }
+
+    uint64_t CResourceFile::GetCacheMisses( void ) const
+    {
+        CMutexLock lock( m_mutex );
+        return m_cache.GetMisses();
     }
 } // namespace IASLib

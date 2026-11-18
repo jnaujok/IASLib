@@ -1,20 +1,23 @@
 /**
  *  Resource File
  *
- *      An archive of resources (CResource) in one file. Resources are
- * found by their folder and resource tags, or by name.
+ *      An archive of resources (CResource) in one file, for a game or
+ * another program with many resources to load. Resources are found by
+ * their folder and resource tags, or by name.
  *
  *      The file is a header, the resources' data, and an index at the
- * end; numbers are big-endian, and the data and the index each carry a
- * CRC-32. Writing never overwrites anything the header points to: new data
- * goes after the end of the file, and Flush() writes a new index after it
- * and then the header, so a crash part-way leaves the archive as it was at
- * the last Flush(). Data that has been replaced or removed, and old
- * indexes, are wasted space until Compact() rewrites the file.
+ * end, written with CFile and the streams' big-endian numbers; the data
+ * and the index each carry a SHA-256 digest (CSHA256). Writing never
+ * overwrites anything the header points to: new data goes after the end of
+ * the file, and Flush() writes a new index after it and then the header,
+ * so a crash part-way leaves the archive as it was at the last Flush().
+ * Data that has been replaced or removed, and old indexes, are wasted
+ * space until Compact() rewrites the file. (CFile seeks with a long, so on
+ * Windows an archive is limited to 2 GB.)
  *
  *      With auto-flush (the default) every Put() and Remove() is flushed.
- * Read resources are cached, least recently used first out, up to a byte
- * limit. Thread-safe.
+ * Read resources are kept in a TCache, least recently used first out, up
+ * to a limit in bytes. Thread-safe.
  *
  *	Author: Jeffrey R. Naujok
  *	Created: 2007
@@ -28,21 +31,43 @@
 #ifndef IASLIB_RESOURCEFILE_H__
 #define IASLIB_RESOURCEFILE_H__
 
-#include <stdio.h>
 #include <stdint.h>
-#include <list>
 #include <map>
 #include <memory>
-#include <mutex>
+#include <string>
 #include <vector>
 #include "../BaseTypes/Object.h"
 #include "../BaseTypes/String_.h"
+#include "../Files/File.h"
+#include "../Templates/TCache.h"
+#include "../Threading/Mutex.h"
 #include "Resource.h"
 #include "ResourceIndex.h"
 #include "ResourceDirectory.h"
 
 namespace IASLib
 {
+        // The archive's cache: a TCache that also keeps to a byte limit.
+    class CResourceCache : public TCache< uint32_t, std::shared_ptr<const CResource> >
+    {
+        protected:
+            size_t          m_nBytes;
+            size_t          m_nByteLimit;
+
+        public:
+                            CResourceCache( size_t nByteLimit );
+
+            void            Add( const std::shared_ptr<const CResource> &pResource );
+                // Remove() and Clear() that keep the byte count.
+            void            Erase( uint32_t nID );
+            void            EraseAll( void );
+            void            SetByteLimit( size_t nBytes );
+            size_t          GetBytes( void ) const { return m_nBytes; }
+
+        private:
+            void            Trim( void );
+    };
+
     class CResourceFile : public CObject
     {
         public:
@@ -57,7 +82,7 @@ namespace IASLib
             static const size_t HEADER_SIZE = 32;
 
         protected:
-            FILE           *m_pFile;
+            CFile          *m_pFile;
             CString         m_strPath;
             OpenMode        m_nMode;
             CString         m_strLastError;
@@ -67,20 +92,8 @@ namespace IASLib
             uint64_t        m_nWasted;
             bool            m_bDirty;
             bool            m_bAutoFlush;
-
-                // The cache: resources by ID, most recently used at the front.
-            typedef std::list<uint32_t> ResourceList;
-            struct CCached
-            {
-                std::shared_ptr<const CResource> pResource;
-                ResourceList::iterator itLRU;
-            };
-            ResourceList    m_listLRU;
-            std::map<uint32_t, CCached> m_mapResources;
-            size_t          m_nCacheBytes;
-            size_t          m_nCacheLimit;
-
-            mutable std::recursive_mutex m_mutex;
+            CResourceCache  m_cache;
+            mutable CMutex  m_mutex;
 
         public:
                             CResourceFile( void );
@@ -129,17 +142,14 @@ namespace IASLib
             void            SetCacheLimit( size_t nBytes );
             size_t          GetCacheBytes( void ) const;
             size_t          GetCachedCount( void ) const;
-
-                // The CRC-32 (as zlib and PNG compute it) of some bytes.
-            static uint32_t CRC32( const void *pData, size_t nLength, uint32_t nCRC = 0 );
+            uint64_t        GetCacheHits( void ) const;
+            uint64_t        GetCacheMisses( void ) const;
 
         private:
             bool            Fail( const char *strFormat, ... );
             bool            ReadIndex( void );
-            bool            WriteIndexAndHeader( FILE *pFile, const std::map<uint32_t, CResourceIndexEntry> &mapIndex,
+            bool            WriteIndexAndHeader( CFile &oFile, const std::map<uint32_t, CResourceIndexEntry> &mapIndex,
                                                  uint64_t nIndexOffset, uint64_t &nIndexLength );
-            void            CacheInsert( const std::shared_ptr<const CResource> &pResource );
-            void            CacheErase( uint32_t nID );
             void            CloseFile( void );
 
                             CResourceFile( const CResourceFile & );
